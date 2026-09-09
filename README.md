@@ -2,31 +2,33 @@
 
 Uganda boda shopping concierge — customers post shopping lists; verified riders buy and deliver.
 
-## Stack (staging)
+## Stack (staging, free-tier)
 
-- **Monorepo** under `xristo7/tuma-concierge`
-- **Apps:** `apps/customer`, `apps/rider` (Next.js → Cloudflare)
-- **API:** `workers/api` (Cloudflare Worker)
-- **DB:** Neon Postgres (staging)
-- **Storage:** R2 bucket `tuma-staging`
+- **Monorepo** `xristo7/tuma-concierge`
+- **Apps:** `apps/customer`, `apps/rider` (Next.js App Router → **Render** Node 22 Web Services, `output: standalone`)
+- **API:** owned by Backend/Ship (`tuma-api-staging` on Render; leave `workers/api` alone for now)
+- **DB:** Turso (`tuma-staging`)
+- **Shared:** `packages/shared` (`@tuma/shared`)
+
+See **[FRONTEND.md](./FRONTEND.md)** for pnpm filters, standalone start paths, and Render notes.
 
 ## Layout
 
 ```
-apps/customer/   # customer web / PWA
-apps/rider/      # rider web / PWA
-workers/api/     # API Worker
-packages/shared/ # shared types & clients
+apps/customer/   # customer web / PWA shell
+apps/rider/      # rider web / PWA shell
+workers/api/     # legacy CF worker scaffold — leave alone
+packages/shared/ # OrderStage, PaymentRail, API client stub
 infra/           # env matrix, deploy notes
 ```
 
 ## Environments
 
-| Env | Workers | Neon | R2 |
-|-----|---------|------|----|
-| staging | `tuma-api-staging`, `tuma-customer-staging`, `tuma-rider-staging` | staging branch | `tuma-staging` |
-| production | *blocked until Sharon OK* | *blocked* | *blocked* |
+| Env | Services | DB |
+|-----|----------|-----|
+| staging | `tuma-api-staging`, `tuma-customer-staging`, `tuma-rider-staging` (Render) | Turso `tuma-staging` |
+| production | *blocked until Sharon OK* | *blocked* |
 
 ## Secrets
 
-Never commit `.env` or secrets. Use Wrangler secrets / GitHub Actions secrets. See `infra/ENV.md`.
+Never commit `.env` or secrets. Use Render env / GitHub Actions secrets. See `infra/ENV.md`.

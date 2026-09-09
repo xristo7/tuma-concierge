@@ -1,0 +1,33 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# next
+.next
+out
+.vercel
+.open-next
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# debug / OS
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+*.pem
+
+# typescript
+*.tsbuildinfo
+
+# turbo (if added later)
+.turbo
+
+# ide
+.idea
+.vscode
