@@ -1,0 +1,15 @@
+{
+  "name": "tuma-concierge",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev:customer": "pnpm --filter customer dev",
+    "dev:rider": "pnpm --filter rider dev",
+    "build:customer": "pnpm --filter customer build",
+    "build:rider": "pnpm --filter rider build",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
