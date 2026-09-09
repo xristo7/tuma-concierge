@@ -1,0 +1,38 @@
+# Render Blueprint — free staging (Ship-owned)
+# https://render.com/docs/blueprint-spec
+#
+# Apply after merge (or Blueprint sync from this branch).
+# Does not create paid plans. API service omitted until Backend Node entrypoint is ready.
+
+services:
+  - type: web
+    name: tuma-customer-staging
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter customer build && mkdir -p apps/customer/.next/standalone/apps/customer/.next && cp -r apps/customer/public apps/customer/.next/standalone/apps/customer/ && cp -r apps/customer/.next/static apps/customer/.next/standalone/apps/customer/.next/
+    startCommand: node apps/customer/.next/standalone/apps/customer/server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+
+  - type: web
+    name: tuma-rider-staging
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter rider build && mkdir -p apps/rider/.next/standalone/apps/rider/.next && cp -r apps/rider/public apps/rider/.next/standalone/apps/rider/ && cp -r apps/rider/.next/static apps/rider/.next/standalone/apps/rider/.next/
+    startCommand: node apps/rider/.next/standalone/apps/rider/server.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
