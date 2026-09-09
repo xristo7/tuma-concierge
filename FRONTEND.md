@@ -87,3 +87,13 @@ packages/shared # OrderStage, PaymentRail, createApiClient stub (@tuma/shared)
 ```
 
 `workers/` / API left alone — FE only.
+
+## Brand
+
+See **`BRAND.md`** for palette, surface tokens, and asset source paths.
+
+- CSS vars + `.card` in each app `app/globals.css` (from `tuma-brand/SURFACE-TOKENS.md`)
+- Tailwind colors: `cream`, `gold`, `ink`/`black`, `green`
+- Lockup + sibling app icons (SVG only) under `apps/*/public/brand/`
+- Lucide map: `packages/shared/docs/LUCIDE-MAP.md`
+- PNG cascade remains in `tuma-brand/exports/` (copy later; not committed here)
