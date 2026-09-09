@@ -1,11 +1,22 @@
-# Staging create checklist
+# Staging (free-first)
+
+**Stack:** Render (host) + Turso (DB). Cloudflare Workers/R2 paused (R2 billing wall).
+
+## Live
 
 - [x] Private repo `xristo7/tuma-concierge`
-- [ ] Workers: `tuma-api-staging`, `tuma-customer-staging`, `tuma-rider-staging` (pending Cloudflare Bindings / Wrangler auth)
-- [x] Neon staging provisioned via neon.new (claim to keep beyond ~72h)
-- [ ] R2 `tuma-staging` (needs Cloudflare Bindings auth)
-- [ ] Wire Workers Builds / GH Actions
+- [ ] Turso DB `tuma-staging` (free) — MCP connect in progress
+- [ ] Render `tuma-api-staging` (web service)
+- [ ] Render `tuma-customer-staging`
+- [ ] Render `tuma-rider-staging`
+- [ ] GH Actions deploy stubs (Render + Turso secrets; never commit values)
 
-Production domains, MoMo live, paid TURN: **blocked** until Sharon OK.
+## Blocked / wait
 
-Claim Neon: use the claim URL Ship shared in chat (do not commit connection strings).
+- Paid Render, CF R2/Workers paid, Neon paid, MoMo live, paid TURN, production
+
+## Env (names only)
+
+- `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`
+- `NEXT_PUBLIC_API_URL` / `API_URL` → Render API URL
+- MoMo / maps / TURN / push — see `infra/ENV.md`
