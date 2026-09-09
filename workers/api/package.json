@@ -1,0 +1,14 @@
+{
+  "name": "tuma-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy:staging": "wrangler deploy --name tuma-api-staging",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250910.0",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.34.0"
+  }
+}
