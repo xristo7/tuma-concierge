@@ -1,6 +1,9 @@
-# tuma-api (bootstrap)
+# tuma-api (bootstrap + Home stubs)
 
-Minimal Hono API for Render free staging. Health/bootstrap only — no auth, orders, or MoMo yet.
+Hono API for Render free staging.
+
+- Health: `GET /health`
+- Home stubs: see [docs/HOME_STUBS.md](./docs/HOME_STUBS.md) — **no MoMo/escrow**
 
 ## Local
 
@@ -8,22 +11,17 @@ Minimal Hono API for Render free staging. Health/bootstrap only — no auth, ord
 pnpm install
 pnpm --filter api dev
 # GET http://localhost:10000/health
+# GET http://localhost:10000/v1/home
 ```
 
 ## Render (`tuma-api-staging`)
 
 | | |
 |--|--|
-| **Root** | repo root |
 | **Build** | `corepack enable && pnpm install && pnpm --filter api build` |
 | **Start** | `node apps/api/dist/index.js` |
 | **Health** | `GET /health` |
-| **Port** | Render `PORT` (app defaults to `10000` if unset) |
 
-### Env (names only)
-
-- `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — reserved; not wired in bootstrap
-- `CORS_ORIGINS` — comma-separated; defaults include customer/rider staging URLs
-- `NODE_VERSION=22`
+Env (names only): `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `CORS_ORIGINS`, `PORT`, `NODE_VERSION=22`.
 
 Do not commit secrets.

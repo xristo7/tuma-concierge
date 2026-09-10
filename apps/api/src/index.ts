@@ -1,6 +1,13 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import {
+  createListDraft,
+  getActiveOrder,
+  getHome,
+  getRecentLists,
+  type CreateListDraftBody,
+} from "./stubs/home.js";
 
 const app = new Hono();
 
@@ -33,6 +40,7 @@ app.get("/", (c) =>
     message: "bootstrap",
     health: "/health",
     v1: "/v1",
+    home: "/v1/home",
   }),
 );
 
@@ -47,11 +55,39 @@ app.get("/health", (c) =>
 app.get("/v1", (c) =>
   c.json({
     name: "tuma-api",
-    version: "0.0.1",
-    status: "bootstrap",
-    note: "Feature routes held until product answers",
+    version: "0.0.2",
+    status: "home-stubs",
+    note: "Home stubs only — no MoMo/escrow/matching yet",
+    endpoints: [
+      "GET /v1/home",
+      "GET /v1/orders/active",
+      "GET /v1/lists/recent",
+      "POST /v1/lists",
+    ],
   }),
 );
+
+/** Customer Home aggregate (greeting + active order + recent lists). */
+app.get("/v1/home", (c) => c.json(getHome()));
+
+app.get("/v1/orders/active", (c) => c.json(getActiveOrder()));
+
+app.get("/v1/lists/recent", (c) => {
+  const limit = Number(c.req.query("limit") ?? "10");
+  return c.json(getRecentLists(Number.isFinite(limit) ? limit : 10));
+});
+
+/** Create a draft shopping list for "+ New list". */
+app.post("/v1/lists", async (c) => {
+  let body: CreateListDraftBody = {};
+  try {
+    body = (await c.req.json()) as CreateListDraftBody;
+  } catch {
+    body = {};
+  }
+  const created = createListDraft(body ?? {});
+  return c.json(created, 201);
+});
 
 const port = Number(process.env.PORT) || 10000;
 
