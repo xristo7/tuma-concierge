@@ -5,8 +5,10 @@
   "scripts": {
     "dev:customer": "pnpm --filter customer dev",
     "dev:rider": "pnpm --filter rider dev",
+    "dev:api": "pnpm --filter api dev",
     "build:customer": "pnpm --filter customer build",
     "build:rider": "pnpm --filter rider build",
+    "build:api": "pnpm --filter api build",
     "lint": "pnpm -r lint"
   },
   "engines": {
