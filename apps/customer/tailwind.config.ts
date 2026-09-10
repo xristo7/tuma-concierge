@@ -9,9 +9,9 @@ const config: Config = {
     extend: {
       colors: {
         cream: {
-          DEFAULT: "#F7F3EE",
-          50: "#F7F3EE",
-          100: "#EDE6DC",
+          DEFAULT: "#FDFBF7",
+          50: "#FDFBF7",
+          100: "#F7F3EE",
         },
         gold: {
           DEFAULT: "#C9A227",
