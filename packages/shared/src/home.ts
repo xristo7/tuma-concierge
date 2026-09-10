@@ -1,25 +1,32 @@
 /** Customer Home stub DTOs — keep in sync with apps/api/src/stubs/home.ts */
 
-export type ListStatus = "DRAFT" | "ACTIVE" | "DELIVERED" | "CANCELLED";
+export type ListStatus = "draft" | "active" | "delivered" | "cancelled";
 
 export type HomeListSummary = {
+  id: string;
   listId: string;
   title: string;
   status: ListStatus;
   itemCount: number;
   updatedAt: string;
+  updatedLabel: string;
 };
 
 export type ActiveOrderSummary = {
+  id: string;
   orderId: string;
   listId: string;
   title: string;
+  riderName: string | null;
+  status: string;
+  itemCount: number;
+  etaMinutes: number | null;
+  destinationArea: string | null;
+  pinReady: boolean;
   stage: string;
   stageLabel: string;
   progressPct: number;
-  etaMinutes: number | null;
   pinHint: string | null;
-  riderDisplayName: string | null;
   paymentRail: "escrow" | "float" | null;
 };
 
@@ -38,9 +45,10 @@ export type CreateListDraftBody = {
 
 export type CreateListDraftResponse = {
   stub: true;
+  id: string;
   listId: string;
   title: string;
-  status: "DRAFT";
+  status: "draft";
   itemCount: number;
   createdAt: string;
   nextPath: string;

@@ -1,13 +1,11 @@
 # Customer Home API stubs
 
-In-memory stubs for Home click-throughs. **No auth, MoMo, escrow, matching, or Turso writes.**
+In-memory stubs for Home click-throughs. **No auth, MoMo, escrow, matching, or Turso writes.**  
 All responses include `"stub": true`.
 
-Base: `https://tuma-api-staging.onrender.com` (or local `:10000`).
+Base: `https://tuma-api-staging.onrender.com` (after PR merge + redeploy) or local `:10000`.
 
 ## `GET /v1/home`
-
-Aggregate for Customer Home.
 
 ```json
 {
@@ -15,35 +13,51 @@ Aggregate for Customer Home.
   "greetingName": "Sharon",
   "locationLabel": "Kampala · within 5 km",
   "activeOrder": {
+    "id": "ord_demo",
     "orderId": "ord_demo",
     "listId": "list_active",
     "title": "Nakasero market run",
+    "riderName": "Juma",
+    "status": "En route",
+    "itemCount": 6,
+    "etaMinutes": 12,
+    "destinationArea": "Kololo",
+    "pinReady": true,
     "stage": "Deliver",
     "stageLabel": "En route",
     "progressPct": 75,
-    "etaMinutes": 12,
     "pinHint": "••42",
-    "riderDisplayName": "Juma",
     "paymentRail": "escrow"
   },
   "recentLists": [
     {
+      "id": "list_weekend",
       "listId": "list_weekend",
       "title": "Weekend groceries",
-      "status": "DRAFT",
+      "status": "draft",
       "itemCount": 8,
-      "updatedAt": "2026-09-10T08:00:00.000Z"
+      "updatedAt": "2026-09-10T08:00:00.000Z",
+      "updatedLabel": "Today"
+    },
+    {
+      "id": "list_office",
+      "listId": "list_office",
+      "title": "Office snacks",
+      "status": "delivered",
+      "itemCount": 5,
+      "updatedAt": "2026-09-08T14:30:00.000Z",
+      "updatedLabel": "2 days ago"
     }
   ]
 }
 ```
 
-`activeOrder` may be `null`. `stage` uses UX canonical names (`Create`…`Settle`).
+`activeOrder` may be `null`.
 
 ## `GET /v1/orders/active`
 
 ```json
-{ "stub": true, "activeOrder": { /* same shape or null */ } }
+{ "stub": true, "activeOrder": { /* ActiveOrderSummary | null */ } }
 ```
 
 ## `GET /v1/lists/recent?limit=10`
@@ -54,31 +68,23 @@ Aggregate for Customer Home.
 
 ## `POST /v1/lists`
 
-Body (all optional):
-
 ```json
-{
-  "title": "Weekend groceries",
-  "items": [{ "name": "Milk", "quantity": 2, "note": "fresh" }]
-}
-```
+// request
+{ "title": "Weekend groceries", "items": [{ "name": "Milk", "quantity": 2 }] }
 
-Response `201`:
-
-```json
+// 201
 {
   "stub": true,
+  "id": "list_xxxx",
   "listId": "list_xxxx",
   "title": "Weekend groceries",
-  "status": "DRAFT",
+  "status": "draft",
   "itemCount": 1,
   "createdAt": "…",
   "nextPath": "/orders/list_xxxx/create"
 }
 ```
 
-FE can navigate to `nextPath` after create. Draft also appears in subsequent `recent` / `home` calls (process memory only — resets on deploy).
-
 ## Shared client
 
-`@tuma/shared` `createApiClient` exposes `getHome`, `getActiveOrder`, `getRecentLists`, `createListDraft`.
+`@tuma/shared` — `createApiClient({ baseUrl }).getHome()`, `.getActiveOrder()`, `.getRecentLists()`, `.createListDraft()`.
