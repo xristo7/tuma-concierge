@@ -9,7 +9,7 @@
   --color-black: #0A0A0A;
   --color-ink: #0A0A0A;
   --color-green: #1B7A4E;
-  --color-cream: #F7F3EE;
+  --color-cream: #FDFBF7;
   /* Surface tokens (SURFACE-TOKENS.md) */
   --radius-card: 24px;
   --border-faint: rgba(10, 10, 10, 0.08);
@@ -37,6 +37,15 @@ body {
 .card:hover {
   box-shadow: var(--shadow-card-hover);
   transform: translateY(-2px);
+}
+
+/* Dense home list / glance cards — soft shadow, no hover lift */
+.home-card {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-faint);
+  box-shadow: var(--shadow-card);
+  padding: var(--pad-card);
+  background: #ffffff;
 }
 
 .card-on-dark {
