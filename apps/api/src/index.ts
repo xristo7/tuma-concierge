@@ -1,13 +1,10 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import {
-  createListDraft,
-  getActiveOrder,
-  getHome,
-  getRecentLists,
-  type CreateListDraftBody,
-} from "./stubs/home.js";
+import { authRoutes } from "./auth/routes.js";
+import { orderRoutes } from "./orders/routes.js";
+import { paymentRoutes } from "./payments/routes.js";
+import { riderRoutes } from "./riders/routes.js";
 
 const app = new Hono();
 
@@ -40,7 +37,6 @@ app.get("/", (c) =>
     message: "bootstrap",
     health: "/health",
     v1: "/v1",
-    home: "/v1/home",
   }),
 );
 
@@ -55,39 +51,44 @@ app.get("/health", (c) =>
 app.get("/v1", (c) =>
   c.json({
     name: "tuma-api",
-    version: "0.0.2",
-    status: "home-stubs",
-    note: "Home stubs only — no MoMo/escrow/matching yet",
+    version: "0.1.0",
+    status: "live",
+    note: "Auth, orders, matching, MoMo escrow (sandbox-ready), chat, rider verification",
     endpoints: [
-      "GET /v1/home",
-      "GET /v1/orders/active",
-      "GET /v1/lists/recent",
+      "POST /v1/auth/register",
+      "POST /v1/auth/login",
+      "GET /v1/auth/me",
       "POST /v1/lists",
+      "GET /v1/lists/recent",
+      "GET /v1/lists/:id",
+      "POST /v1/orders",
+      "GET /v1/orders/active",
+      "GET /v1/orders/:id",
+      "POST /v1/orders/:id/match",
+      "POST /v1/orders/:id/fund",
+      "POST /v1/orders/:id/substitutions",
+      "POST /v1/orders/:id/substitutions/:subId/decision",
+      "POST /v1/orders/:id/deliver",
+      "POST /v1/orders/:id/handover",
+      "POST /v1/orders/:id/settle",
+      "GET /v1/orders/:id/chat",
+      "POST /v1/orders/:id/chat",
+      "GET /v1/payments/:id/refresh",
+      "POST /v1/payments/momo/callback",
+      "POST /v1/riders/apply",
+      "POST /v1/riders/status",
+      "GET /v1/riders/me",
+      "GET /v1/riders/me/orders",
+      "GET /v1/admin/riders",
+      "POST /v1/admin/riders/:userId/verify",
     ],
   }),
 );
 
-/** Customer Home aggregate (greeting + active order + recent lists). */
-app.get("/v1/home", (c) => c.json(getHome()));
-
-app.get("/v1/orders/active", (c) => c.json(getActiveOrder()));
-
-app.get("/v1/lists/recent", (c) => {
-  const limit = Number(c.req.query("limit") ?? "10");
-  return c.json(getRecentLists(Number.isFinite(limit) ? limit : 10));
-});
-
-/** Create a draft shopping list for "+ New list". */
-app.post("/v1/lists", async (c) => {
-  let body: CreateListDraftBody = {};
-  try {
-    body = (await c.req.json()) as CreateListDraftBody;
-  } catch {
-    body = {};
-  }
-  const created = createListDraft(body ?? {});
-  return c.json(created, 201);
-});
+app.route("/v1/auth", authRoutes);
+app.route("/v1", orderRoutes);
+app.route("/v1", paymentRoutes);
+app.route("/v1", riderRoutes);
 
 const port = Number(process.env.PORT) || 10000;
 

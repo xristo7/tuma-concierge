@@ -1,31 +1,55 @@
 import type {
-  ActiveOrderSummary,
-  CreateListDraftBody,
-  CreateListDraftResponse,
-  HomeListSummary,
-  HomePayload,
-} from "./home";
+  AuthUser,
+  ChatMessage,
+  CreateListBody,
+  CreateListResponse,
+  ListSummary,
+  OrderDetail,
+  OrderRow,
+  Payment,
+  Rider,
+} from "./domain";
 
 export type CreateApiClientOptions = {
   baseUrl: string;
   /** Optional fetch override (tests). */
   fetchImpl?: typeof fetch;
+  /** Bearer token for authenticated requests. */
+  getToken?: () => string | null | undefined;
 };
 
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    throw new Error(`API ${res.status}: ${res.statusText}`);
+    const body = await res.json().catch(() => ({}));
+    throw new Error(
+      `API ${res.status}: ${(body as { message?: string; error?: string }).message ?? (body as { error?: string }).error ?? res.statusText}`,
+    );
   }
   return (await res.json()) as T;
 }
 
-/**
- * API client for tuma-api (apps/api on Render).
- * Home methods hit live stubs; older placeholders remain until feature APIs land.
- */
-export function createApiClient({ baseUrl, fetchImpl }: CreateApiClientOptions) {
+/** API client for tuma-api (apps/api on Render). */
+export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClientOptions) {
   const root = baseUrl.replace(/\/$/, "");
   const f = fetchImpl ?? fetch;
+
+  function authHeaders(): Record<string, string> {
+    const token = getToken?.();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    return json<T>(
+      await f(`${root}${path}`, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeaders(),
+          ...(init?.headers ?? {}),
+        },
+      }),
+    );
+  }
 
   return {
     baseUrl: root,
@@ -34,41 +58,126 @@ export function createApiClient({ baseUrl, fetchImpl }: CreateApiClientOptions) 
       return json(await f(`${root}/health`));
     },
 
-    async getHome(): Promise<HomePayload> {
-      return json(await f(`${root}/v1/home`));
+    // Auth
+    async register(input: { phone: string; name: string; password: string; role?: "customer" | "rider" }) {
+      return request<{ token: string; user: AuthUser }>("/v1/auth/register", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async login(input: { phone: string; password: string }) {
+      return request<{ token: string; user: AuthUser }>("/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async me() {
+      return request<{ user: AuthUser }>("/v1/auth/me");
     },
 
-    async getActiveOrder(): Promise<{
-      stub: true;
-      activeOrder: ActiveOrderSummary | null;
-    }> {
-      return json(await f(`${root}/v1/orders/active`));
+    // Lists
+    async createList(body: CreateListBody = {}) {
+      return request<CreateListResponse>("/v1/lists", { method: "POST", body: JSON.stringify(body) });
+    },
+    async getRecentLists(limit = 10) {
+      return request<{ lists: ListSummary[] }>(`/v1/lists/recent?limit=${limit}`);
     },
 
-    async getRecentLists(limit = 10): Promise<{ stub: true; lists: HomeListSummary[] }> {
-      return json(await f(`${root}/v1/lists/recent?limit=${limit}`));
+    // Orders
+    async createOrder(input: {
+      listId: string;
+      destinationArea?: string;
+      destinationAddress?: string;
+      paymentRail?: "escrow" | "float";
+      estimatedTotal?: number;
+    }) {
+      return request<{ order: OrderRow }>("/v1/orders", { method: "POST", body: JSON.stringify(input) });
     },
-
-    async createListDraft(body: CreateListDraftBody = {}): Promise<CreateListDraftResponse> {
-      return json(
-        await f(`${root}/v1/lists`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
+    async getActiveOrder() {
+      return request<{ activeOrder: OrderRow | null }>("/v1/orders/active");
+    },
+    async getOrder(orderId: string) {
+      return request<OrderDetail>(`/v1/orders/${orderId}`);
+    },
+    async matchOrder(orderId: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/match`, { method: "POST" });
+    },
+    async fundOrder(orderId: string, input: { msisdn?: string } = {}) {
+      return request<{ order: OrderRow; payment?: { id: string; status: string } }>(
+        `/v1/orders/${orderId}/fund`,
+        { method: "POST", body: JSON.stringify(input) },
       );
     },
-
-    async getOrder(_orderId: string): Promise<null> {
-      return null;
+    async proposeSubstitution(
+      orderId: string,
+      input: { itemId?: string; originalName: string; substituteName: string; priceDelta?: number },
+    ) {
+      return request<{ substitution: string }>(`/v1/orders/${orderId}/substitutions`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async decideSubstitution(orderId: string, subId: string, approve: boolean) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/substitutions/${subId}/decision`, {
+        method: "POST",
+        body: JSON.stringify({ approve }),
+      });
+    },
+    async deliverOrder(orderId: string, etaMinutes?: number) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/deliver`, {
+        method: "POST",
+        body: JSON.stringify({ etaMinutes }),
+      });
+    },
+    async handoverOrder(orderId: string, pin: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/handover`, {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      });
+    },
+    async settleOrder(orderId: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/settle`, { method: "POST" });
     },
 
-    async listOrders(): Promise<unknown[]> {
-      return [];
+    // Chat
+    async getChat(orderId: string) {
+      return request<{ messages: ChatMessage[] }>(`/v1/orders/${orderId}/chat`);
+    },
+    async sendChat(orderId: string, body: string) {
+      return request<{ id: string }>(`/v1/orders/${orderId}/chat`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
     },
 
-    async listJobs(): Promise<unknown[]> {
-      return [];
+    // Payments
+    async refreshPayment(paymentId: string) {
+      return request<{ payment: Payment }>(`/v1/payments/${paymentId}/refresh`);
+    },
+
+    // Riders
+    async applyAsRider(input: { area?: string; vehicleInfo?: string; momoMsisdn?: string }) {
+      return request<{ rider: Rider }>("/v1/riders/apply", { method: "POST", body: JSON.stringify(input) });
+    },
+    async setRiderOnline(online: boolean) {
+      return request<{ rider: Rider }>("/v1/riders/status", { method: "POST", body: JSON.stringify({ online }) });
+    },
+    async myRiderProfile() {
+      return request<{ rider: Rider | null }>("/v1/riders/me");
+    },
+    async myRiderOrders() {
+      return request<{ orders: OrderRow[] }>("/v1/riders/me/orders");
+    },
+
+    // Admin
+    async adminListRiders() {
+      return request<{ riders: Rider[] }>("/v1/admin/riders");
+    },
+    async adminVerifyRider(userId: string, verified: boolean) {
+      return request<{ rider: Rider }>(`/v1/admin/riders/${userId}/verify`, {
+        method: "POST",
+        body: JSON.stringify({ verified }),
+      });
     },
   };
 }

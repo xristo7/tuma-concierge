@@ -83,10 +83,12 @@ If Root Directory is `apps/customer`, start path is relative to that app:
 ```
 apps/customer   # Home · Orders · Chat · Account + /orders/[id]/<stage>
 apps/rider      # Jobs · Active · Wallet · Account + /jobs/[id]/<stage>
-packages/shared # OrderStage, PaymentRail, createApiClient stub (@tuma/shared)
+packages/shared # OrderStage, PaymentRail, createApiClient (@tuma/shared) — now backed by a real API
 ```
 
-`workers/` / API left alone — FE only.
+`workers/` legacy CF scaffold — left alone. `apps/api` now has a real backend (auth, orders,
+matching, MoMo escrow, chat) — see `apps/api/README.md`. Neither app calls it yet; screens
+still render static/mock data pending FE wiring.
 
 ## Brand
 

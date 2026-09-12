@@ -18,7 +18,7 @@ See **[FRONTEND.md](./FRONTEND.md)** for pnpm filters, standalone start paths, a
 apps/customer/   # customer web / PWA shell
 apps/rider/      # rider web / PWA shell
 workers/api/     # legacy CF worker scaffold — leave alone
-packages/shared/ # OrderStage, PaymentRail, API client stub
+packages/shared/ # OrderStage, PaymentRail, API client for the real backend
 infra/           # env matrix, deploy notes
 ```
 

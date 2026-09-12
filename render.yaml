@@ -12,7 +12,7 @@ services:
     region: oregon
     branch: main
     autoDeploy: true
-    buildCommand: corepack enable && pnpm install && pnpm --filter api build
+    buildCommand: corepack enable && pnpm install && pnpm --filter api build && pnpm --filter api migrate
     startCommand: node apps/api/dist/index.js
     healthCheckPath: /health
     envVars:
@@ -22,8 +22,18 @@ services:
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
+      - key: JWT_SECRET
+        sync: false
       - key: CORS_ORIGINS
         value: "https://tuma-customer-staging.onrender.com,https://tuma-rider-staging.onrender.com"
+      - key: MOMO_TARGET_ENV
+        value: "sandbox"
+      - key: MOMO_SUBSCRIPTION_KEY
+        sync: false
+      - key: MOMO_API_USER
+        sync: false
+      - key: MOMO_API_KEY
+        sync: false
 
   - type: web
     name: tuma-customer-staging

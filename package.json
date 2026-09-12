@@ -9,6 +9,8 @@
     "build:customer": "pnpm --filter customer build",
     "build:rider": "pnpm --filter rider build",
     "build:api": "pnpm --filter api build",
+    "migrate:api": "pnpm --filter api migrate",
+    "seed:api": "pnpm --filter api seed",
     "lint": "pnpm -r lint"
   },
   "engines": {

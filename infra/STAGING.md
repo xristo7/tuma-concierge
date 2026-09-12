@@ -22,8 +22,9 @@
 
 ## Blocked / wait
 
-- Paid Render, CF R2/Workers paid, Neon paid, MoMo live, paid TURN, production
-- Full API feature routes until Sharon product answers
+- Paid Render, CF R2/Workers paid, Neon paid, paid TURN, production
+- MoMo *live* mode — sandbox integration is done (auth, orders, matching, escrow, chat, rider
+  verification all real); going live needs MTN merchant approval + real credentials in Render
 
 ## Env (names only)
 
