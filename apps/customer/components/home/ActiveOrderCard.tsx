@@ -1,24 +1,41 @@
+"use client";
+
+import type { OrderRow } from "@tuma/shared";
 import { MapPin } from "lucide-react";
 import Link from "next/link";
-
-/** Mock active order — replace with live data later. */
-const ACTIVE = {
-  title: "Nakasero market run",
-  status: "En route",
-  meta: "Denis · boda · 8 items",
-  progress: 0.75,
-  eta: "~12 min",
-  footer: "Heading to Kololo · PIN ready at door",
-  href: "/orders/demo",
-} as const;
+import { useEffect, useState } from "react";
+import { api } from "../../lib/api";
+import { orderTitle, stageLabel, stageProgressPct } from "../../lib/order-display";
 
 export function ActiveOrderCard() {
+  const [order, setOrder] = useState<OrderRow | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getActiveOrder()
+      .then((res) => {
+        if (!cancelled) setOrder(res.activeOrder);
+      })
+      .catch(() => {
+        if (!cancelled) setOrder(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (order === undefined) return null;
+  if (order === null) return null;
+
+  const progress = stageProgressPct(order.stage) / 100;
+
   return (
     <section className="space-y-3">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-base font-bold text-ink">Active order</h2>
         <Link
-          href={ACTIVE.href}
+          href={`/orders/${order.id}`}
           className="text-sm font-medium text-ink-500 hover:text-ink"
         >
           Track
@@ -26,50 +43,39 @@ export function ActiveOrderCard() {
       </div>
 
       <Link
-        href={ACTIVE.href}
+        href={`/orders/${order.id}`}
         className="home-card block overflow-hidden !border-l-0 !p-0"
       >
         <div className="flex">
-          <span
-            className="w-1.5 shrink-0 bg-green"
-            aria-hidden
-          />
+          <span className="w-1.5 shrink-0 bg-green" aria-hidden />
           <div className="min-w-0 flex-1 space-y-3 px-4 py-4">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="text-[15px] font-bold leading-snug text-ink">
-                {ACTIVE.title}
-              </h3>
+              <h3 className="text-[15px] font-bold leading-snug text-ink">{orderTitle(order)}</h3>
               <span className="shrink-0 rounded-full bg-green/15 px-2.5 py-0.5 text-xs font-semibold text-green">
-                {ACTIVE.status}
+                {stageLabel(order.stage)}
               </span>
             </div>
-            <p className="text-sm text-ink-500">{ACTIVE.meta}</p>
             <div className="flex items-center gap-3">
               <div
                 className="h-2 flex-1 overflow-hidden rounded-full bg-cream"
                 role="progressbar"
-                aria-valuenow={Math.round(ACTIVE.progress * 100)}
+                aria-valuenow={Math.round(progress * 100)}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                aria-label="Delivery progress"
+                aria-label="Order progress"
               >
-                <div
-                  className="h-full rounded-full bg-green"
-                  style={{ width: `${ACTIVE.progress * 100}%` }}
-                />
+                <div className="h-full rounded-full bg-green" style={{ width: `${progress * 100}%` }} />
               </div>
-              <span className="shrink-0 text-sm font-bold text-green">
-                {ACTIVE.eta}
-              </span>
+              {order.eta_minutes != null && (
+                <span className="shrink-0 text-sm font-bold text-green">~{order.eta_minutes} min</span>
+              )}
             </div>
-            <p className="flex items-center gap-1.5 text-sm text-ink-500">
-              <MapPin
-                className="h-3.5 w-3.5 shrink-0 text-green"
-                strokeWidth={2.25}
-                aria-hidden
-              />
-              <span>{ACTIVE.footer}</span>
-            </p>
+            {order.destination_area && (
+              <p className="flex items-center gap-1.5 text-sm text-ink-500">
+                <MapPin className="h-3.5 w-3.5 shrink-0 text-green" strokeWidth={2.25} aria-hidden />
+                <span>Heading to {order.destination_area}</span>
+              </p>
+            )}
           </div>
         </div>
       </Link>

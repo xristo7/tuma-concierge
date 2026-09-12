@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "customer",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "pnpm@9.15.0", "--filter", "customer", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "rider",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "pnpm@9.15.0", "--filter", "rider", "dev"],
+      "port": 3001
+    }
+  ]
+}

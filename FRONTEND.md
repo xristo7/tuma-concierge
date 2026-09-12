@@ -1,12 +1,13 @@
-# Tuma Concierge — Frontend scaffold
+# Tuma Concierge — Frontend
 
-Minimal pnpm monorepo: `apps/customer`, `apps/rider`, `packages/shared` (`@tuma/shared`).  
-Shells + stage placeholders only — **no MoMo, maps, VoIP, or KYC real flows**.
+pnpm monorepo: `apps/customer`, `apps/rider`, `packages/shared` (`@tuma/shared`).
+Full order lifecycle wired to the real API (auth, orders, matching, MoMo escrow, chat, rider
+verification). Still missing: maps/live location and VoIP/call support.
 
-**Hosting (Ship-locked):** Render free **Node 22** Web Services  
-`tuma-customer-staging` / `tuma-rider-staging` — **not** Cloudflare Pages / OpenNext.  
-`next.config`: `output: "standalone"`. FE talks to API via `NEXT_PUBLIC_API_URL` (Turso/API is backend-side).  
-**Do not commit `render.yaml` here** — Ship owns final deploy config after this scaffold lands.
+**Hosting:** Render free **Node 22** Web Services
+`tuma-customer-staging` / `tuma-rider-staging` — **not** Cloudflare Pages / OpenNext.
+`next.config`: `output: "standalone"`. FE talks to API via `NEXT_PUBLIC_API_URL` (Turso/API is backend-side).
+Deploy config lives in the root `render.yaml` (all three services, `autoDeploy: true` on `main`).
 
 ## Local
 
@@ -87,8 +88,11 @@ packages/shared # OrderStage, PaymentRail, createApiClient (@tuma/shared) — no
 ```
 
 `workers/` legacy CF scaffold — left alone. `apps/api` now has a real backend (auth, orders,
-matching, MoMo escrow, chat) — see `apps/api/README.md`. Neither app calls it yet; screens
-still render static/mock data pending FE wiring.
+matching, MoMo escrow, chat) — see `apps/api/README.md`. Both apps are wired to it: phone/password
+auth, the full order lifecycle (customer: build list → fund → approve substitutions → confirm
+handover → settle; rider: propose substitutions → start delivery → settle), live chat, and rider
+verification status. State syncs via polling (no websockets) — see `lib/api.ts` / `lib/auth-context.tsx`
+in each app.
 
 ## Brand
 

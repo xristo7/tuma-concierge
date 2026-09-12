@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { BottomNav } from "../components/BottomNav";
-import { BrandHeader } from "../components/BrandHeader";
+import { AppShell } from "../components/AppShell";
+import { AuthProvider } from "../lib/auth-context";
 
 export const metadata: Metadata = {
   title: "Tuma Rider",
-  description: "Tuma Concierge — rider app (scaffold)",
+  description: "Tuma Concierge — rider app",
   icons: {
     icon: "/brand/app-icon.svg",
   },
@@ -19,9 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-dvh bg-cream text-ink">
-        <BrandHeader />
-        <main className="mx-auto min-h-dvh max-w-lg pb-20">{children}</main>
-        <BottomNav />
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

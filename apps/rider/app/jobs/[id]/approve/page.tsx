@@ -1,11 +1,8 @@
+import { redirect } from "next/navigation";
+
 type Props = { params: Promise<{ id: string }> };
 
 export default async function ApproveStagePage({ params }: Props) {
   const { id } = await params;
-  return (
-    <div className="p-4">
-      <h1 className="text-xl font-semibold">Approve</h1>
-      <p className="mt-2 text-sm text-zinc-600">Job {id} — stage placeholder.</p>
-    </div>
-  );
+  redirect(`/jobs/${id}`);
 }
