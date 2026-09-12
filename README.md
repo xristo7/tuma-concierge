@@ -7,7 +7,7 @@ Uganda boda shopping concierge — customers post shopping lists; verified rider
 - **Monorepo** `xristo7/tuma-concierge`
 - **Apps:** `apps/customer`, `apps/rider` (Next.js App Router → **Cloudflare Workers** via OpenNext)
 - **API:** `apps/api` (Hono → **Cloudflare Worker**); `workers/api` is an unrelated legacy scaffold — leave alone
-- **DB:** Turso (`tuma-staging`), reached over HTTP from the Worker
+- **DB:** Cloudflare D1 (`tuma-api`), bound natively to the API Worker. Turso backs local dev only.
 - **Shared:** `packages/shared` (`@tuma/shared`)
 
 See **[infra/CLOUDFLARE.md](./infra/CLOUDFLARE.md)** for deploy commands, required secrets, and
@@ -30,7 +30,7 @@ infra/           # env matrix, deploy notes
 
 | Env | Services | DB |
 |-----|----------|-----|
-| staging | `tuma-api`, `tuma-customer`, `tuma-rider` (Cloudflare Workers) | Turso `tuma-staging` |
+| staging | `tuma-api`, `tuma-customer`, `tuma-rider` (Cloudflare Workers) | D1 `tuma-api` |
 | production | *blocked until Sharon OK* | *blocked* |
 
 ## Secrets

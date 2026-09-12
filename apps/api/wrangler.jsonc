@@ -3,6 +3,13 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-09-12",
   "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tuma-api",
+      "database_id": "26926e12-d2f4-4b40-8b1b-019f6c169e10"
+    }
+  ],
   "vars": {
     "ENVIRONMENT": "staging",
     "CORS_ORIGINS": "https://tuma-customer.doxalight-inc.workers.dev,https://tuma-rider.doxalight-inc.workers.dev,http://localhost:3000,http://localhost:3001",

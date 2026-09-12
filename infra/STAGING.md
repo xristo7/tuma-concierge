@@ -1,9 +1,9 @@
 # Staging (free-first)
 
-**Stack:** Cloudflare Workers (host, all three services) + Turso (DB). Previously Render —
-kept as reference/rollback (`render.yaml`), no longer the active deploy target. The earlier
-"R2 billing wall" pause turned out to be specific to R2; Workers + assets deploy fine on the
-free tier and are what we actually use now — no R2 involved.
+**Stack:** Cloudflare Workers (host, all three services) + Cloudflare D1 (DB). Previously
+Render + Turso — kept as reference/rollback (`render.yaml`), no longer the active deploy
+target. The earlier "R2 billing wall" pause turned out to be specific to R2; Workers + D1 +
+assets deploy fine on the free tier and are what we actually use now — no R2 involved.
 
 See **[CLOUDFLARE.md](./CLOUDFLARE.md)** for full deploy instructions, required secrets, and
 known gotchas (sharp bundling, `NEXT_PRIVATE_MINIMAL_MODE`, Node 22 requirement).
@@ -11,23 +11,28 @@ known gotchas (sharp bundling, `NEXT_PRIVATE_MINIMAL_MODE`, Node 22 requirement)
 ## Live
 
 - [x] Private repo `xristo7/tuma-concierge`
-- [x] Turso DB `tuma-staging` (free) — `0001_init` applied (19 tables)
+- [x] D1 database `tuma-api` (free) — this app's schema, bound natively to the Worker
 - [x] `tuma-api` — real backend (auth, orders, matching, MoMo escrow, chat, rider
-      verification) — https://tuma-api.doxalight-inc.workers.dev (`GET /health`)
+      verification) — https://tuma-api.doxalight-inc.workers.dev (`GET /health`) — verified
+      working end to end (register/login/orders) against D1
 - [x] `tuma-customer` — https://tuma-customer.doxalight-inc.workers.dev
 - [x] `tuma-rider` — https://tuma-rider.doxalight-inc.workers.dev
-- [ ] `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` secrets on the `tuma-api` Worker (carry over
-      from the old Render service — see CLOUDFLARE.md). Until set, DB-backed endpoints
-      return a clean 500; `/health` is unaffected.
 - [ ] GH Actions deploy workflow (currently manual `wrangler deploy`)
+
+Note: the old Turso `tuma-staging` database (from earlier scaffolding, "19 tables") has an
+unrelated schema — its `users` table doesn't even have an `id` column matching what this
+app expects. Left untouched; this app now uses its own dedicated D1 database instead. Turso
+still backs local dev only (`apps/api/src/db/client.ts` falls back to
+`TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` when no D1 binding is present — point that at a
+`turso dev` instance, not the old staging DB).
 
 ## API
 
 - Path: `apps/api` (not `workers/api`, which is an unrelated legacy scaffold)
 - Deploy: `pnpm --filter api deploy` (`wrangler deploy`)
 - Health: `GET /health`
-- Secrets (via `wrangler secret put`): `JWT_SECRET` (set), `TURSO_DATABASE_URL`,
-  `TURSO_AUTH_TOKEN` (not yet set), MoMo sandbox creds (optional)
+- Secrets (via `wrangler secret put`): `JWT_SECRET` (set), MoMo sandbox creds (optional)
+- DB: D1 binding `env.DB` → `tuma-api` (see `apps/api/wrangler.jsonc`)
 
 ## Blocked / wait
 
@@ -37,6 +42,6 @@ known gotchas (sharp bundling, `NEXT_PRIVATE_MINIMAL_MODE`, Node 22 requirement)
 
 ## Env (names only)
 
-- `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`
 - `NEXT_PUBLIC_API_URL` — baked in at build time via each app's `.env.production`
+- `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` — local dev fallback only, not used in staging
 - MoMo / maps / TURN / push — see `infra/ENV.md`

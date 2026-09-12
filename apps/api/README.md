@@ -1,8 +1,10 @@
 # tuma-api
 
 Hono API for Tuma Concierge. Real order lifecycle, auth, rider matching, MoMo
-escrow, and chat — backed by Turso (libsql) over HTTP, so the same code runs
-in Node (local dev) and as a Cloudflare Worker (`src/worker.ts`) unchanged.
+escrow, and chat. Runs as a Cloudflare Worker (`src/worker.ts`) backed by D1
+(`env.DB`, native binding, no HTTP hop) — and unchanged as a Node process
+(`src/index.ts`) for local dev, backed by Turso (libsql over HTTP) since a D1
+binding only exists inside a Worker. See `src/db/client.ts`.
 
 ## Local
 
@@ -14,8 +16,10 @@ pnpm --filter api seed       # demo customer/rider/admin (password: password123)
 pnpm --filter api dev        # http://localhost:10000
 ```
 
-No local-file DB fallback — always talks to a real Turso database. For local dev without
-touching staging, run `turso dev` and point `TURSO_DATABASE_URL` at it.
+For `TURSO_DATABASE_URL`, run `turso dev` and point at that — **not** any pre-existing
+Turso database, in case it carries an unrelated schema (this bit us once in staging: a
+same-named `users` table from earlier scaffolding, no `id` column). Local dev has no
+D1 access, so it always uses this Turso fallback regardless of what staging uses.
 
 ## Endpoints
 
@@ -61,9 +65,9 @@ To test against the free sandbox:
 pnpm --filter api deploy   # wrangler deploy
 ```
 
-Secrets via `wrangler secret put <NAME>`: `JWT_SECRET`, `TURSO_DATABASE_URL`,
-`TURSO_AUTH_TOKEN`, MoMo credentials. Non-secret vars live in `wrangler.jsonc`. See
-`infra/CLOUDFLARE.md` for the full picture (including known bundling gotchas) and
-`infra/ENV.md` for the env name matrix.
+DB is the `DB` D1 binding declared in `wrangler.jsonc` (database `tuma-api`) — no DB secrets
+needed in production. Secrets via `wrangler secret put <NAME>`: `JWT_SECRET` (set), MoMo
+credentials (optional). See `infra/CLOUDFLARE.md` for the full picture (including known
+bundling gotchas) and `infra/ENV.md` for the env name matrix.
 
 Do not commit secrets. `render.yaml` / the old Render service are kept for reference only.

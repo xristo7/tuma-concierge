@@ -34,10 +34,11 @@ NEXT_PUBLIC_API_URL=http://localhost:10000
 staging instead.)
 
 The API (`apps/api`) is a real backend now — auth, orders lifecycle, matching, MoMo escrow, chat,
-rider verification — backed by Turso (libsql) over HTTP, no local-file fallback. Copy
-`apps/api/.env.example` to `.env.local` and set `JWT_SECRET` and `TURSO_DATABASE_URL` /
-`TURSO_AUTH_TOKEN` (a `turso dev` instance works for local-only testing). Full env names for
-every stage are in `infra/ENV.md` — never commit real values.
+rider verification. Staging runs on Cloudflare D1 (native Worker binding); local dev falls back
+to Turso since D1 bindings only exist inside a Worker. Copy `apps/api/.env.example` to
+`.env.local` and set `JWT_SECRET` and `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` — point those at
+a `turso dev` instance, not a shared staging DB (see `infra/STAGING.md` for why). Full env names
+for every stage are in `infra/ENV.md` — never commit real values.
 
 ## 3. Local dev
 
@@ -93,7 +94,7 @@ pnpm build:customer
 pnpm build:rider
 ```
 
-## 5. Deploy (Cloudflare Workers + Turso)
+## 5. Deploy (Cloudflare Workers + D1)
 
 All three services deploy as Cloudflare Workers. Needs Node ≥ 22 for `wrangler` v4 (see
 `infra/CLOUDFLARE.md` for the full picture, required secrets, and known gotchas).
@@ -109,9 +110,10 @@ Currently live:
 - `tuma-customer` → https://tuma-customer.doxalight-inc.workers.dev
 - `tuma-rider` → https://tuma-rider.doxalight-inc.workers.dev
 
-Database: Turso `tuma-staging` (free tier) — `0001_init` applied, 19 tables. The `tuma-api`
-Worker still needs `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` set via `wrangler secret put`
-(carry over the values from the old Render service) before DB-backed endpoints work.
+Database: Cloudflare D1 (`tuma-api`), bound natively to the Worker as `env.DB` — schema
+applied, verified working end to end (auth, orders). Not the old Turso `tuma-staging` DB,
+which turned out to have an unrelated schema from earlier scaffolding — see
+`infra/STAGING.md`. Turso only backs local dev now (see `apps/api/README.md`).
 
 Blocked / not yet live: MoMo live mode, paid TURN, production environment (waiting on
 product sign-off). `render.yaml` / the Render services are kept for reference/rollback only
