@@ -76,7 +76,7 @@ export function isMomoConfigured(): boolean {
 }
 
 async function getAccessToken(product: Product): Promise<string> {
-  const credentials = Buffer.from(`${apiUser()}:${apiKey()}`).toString("base64");
+  const credentials = btoa(`${apiUser()}:${apiKey()}`);
   const res = await fetch(`${baseUrl()}/${product}/token/`, {
     method: "POST",
     headers: {

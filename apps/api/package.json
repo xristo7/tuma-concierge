@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx --env-file-if-exists=.env.local watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/db/seed.ts"
+    "migrate": "tsx --env-file-if-exists=.env.local src/db/migrate.ts",
+    "seed": "tsx --env-file-if-exists=.env.local src/db/seed.ts",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.1",
@@ -23,6 +25,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "wrangler": "^4.131.1"
   }
 }

@@ -5,10 +5,7 @@ const encoder = new TextEncoder();
 function secretKey() {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("JWT_SECRET is not set");
-    }
-    return encoder.encode("dev-only-insecure-secret-do-not-use-in-production");
+    throw new Error("JWT_SECRET is not set. Copy .env.example to .env.local (or set the Worker var/secret).");
   }
   return encoder.encode(secret);
 }

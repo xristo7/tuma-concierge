@@ -8,6 +8,9 @@ out
 .vercel
 .open-next
 
+# cloudflare
+.wrangler
+
 # build output
 dist
 

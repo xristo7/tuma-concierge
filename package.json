@@ -15,5 +15,10 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": "link:./tools/stubs/sharp"
+    }
   }
 }

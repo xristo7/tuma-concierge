@@ -1,0 +1,7 @@
+{
+  "name": "sharp",
+  "version": "0.0.0-stub",
+  "private": true,
+  "description": "No-op stand-in for the real `sharp` package. Next.js's built-in image optimizer references sharp unconditionally, which drags a native binary into the Cloudflare Workers bundle even when images.unoptimized is set. Both customer/rider apps run with images.unoptimized: true, so this code path never actually executes — this stub just needs to exist and be pure JS.",
+  "main": "index.js"
+}

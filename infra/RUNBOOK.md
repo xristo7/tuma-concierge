@@ -30,18 +30,20 @@ Set in both:
 NEXT_PUBLIC_API_URL=http://localhost:10000
 ```
 
-(Points at the local API below. Swap for `https://tuma-api-staging.onrender.com` to hit staging instead.)
+(Points at the local API below. Swap for `https://tuma-api.doxalight-inc.workers.dev` to hit
+staging instead.)
 
 The API (`apps/api`) is a real backend now — auth, orders lifecycle, matching, MoMo escrow, chat,
-rider verification — backed by Turso (libsql), falling back to a local SQLite file
-(`apps/api/local.db`) with zero setup. Copy `apps/api/.env.example` to `.env.local` and set at
-least `JWT_SECRET`. Full env names for every stage are in `infra/ENV.md` — never commit real values.
+rider verification — backed by Turso (libsql) over HTTP, no local-file fallback. Copy
+`apps/api/.env.example` to `.env.local` and set `JWT_SECRET` and `TURSO_DATABASE_URL` /
+`TURSO_AUTH_TOKEN` (a `turso dev` instance works for local-only testing). Full env names for
+every stage are in `infra/ENV.md` — never commit real values.
 
 ## 3. Local dev
 
 ```bash
-cp apps/api/.env.example apps/api/.env.local   # set JWT_SECRET
-pnpm --filter api migrate    # creates tables (local.db by default)
+cp apps/api/.env.example apps/api/.env.local   # set JWT_SECRET + TURSO_*
+pnpm --filter api migrate    # creates tables
 pnpm --filter api seed       # demo customer/rider/admin, password: password123
 ```
 
@@ -91,57 +93,29 @@ pnpm build:customer
 pnpm build:rider
 ```
 
-### Standalone start (what Render actually runs)
+## 5. Deploy (Cloudflare Workers + Turso)
 
-The Next.js apps build with `output: "standalone"`. After building, copy static assets into the standalone tree, then start:
+All three services deploy as Cloudflare Workers. Needs Node ≥ 22 for `wrangler` v4 (see
+`infra/CLOUDFLARE.md` for the full picture, required secrets, and known gotchas).
 
 ```bash
-# customer
-mkdir -p apps/customer/.next/standalone/apps/customer/.next
-cp -r apps/customer/public apps/customer/.next/standalone/apps/customer/
-cp -r apps/customer/.next/static apps/customer/.next/standalone/apps/customer/.next/
-node apps/customer/.next/standalone/apps/customer/server.js
-
-# rider
-mkdir -p apps/rider/.next/standalone/apps/rider/.next
-cp -r apps/rider/public apps/rider/.next/standalone/apps/rider/
-cp -r apps/rider/.next/static apps/rider/.next/standalone/apps/rider/.next/
-node apps/rider/.next/standalone/apps/rider/server.js
-
-# api
-node apps/api/dist/index.js
+pnpm --filter api deploy        # wrangler deploy
+pnpm --filter customer deploy   # opennextjs-cloudflare build && wrangler deploy
+pnpm --filter rider deploy
 ```
 
-(Render sets `PORT` automatically; Next standalone and the Hono API both read `process.env.PORT`.)
+Currently live:
+- `tuma-api` → https://tuma-api.doxalight-inc.workers.dev (`GET /health`)
+- `tuma-customer` → https://tuma-customer.doxalight-inc.workers.dev
+- `tuma-rider` → https://tuma-rider.doxalight-inc.workers.dev
 
-## 5. Deploy (Render + Turso)
+Database: Turso `tuma-staging` (free tier) — `0001_init` applied, 19 tables. The `tuma-api`
+Worker still needs `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` set via `wrangler secret put`
+(carry over the values from the old Render service) before DB-backed endpoints work.
 
-Deploy is Blueprint-driven from the root `render.yaml` — three free-tier Render Web Services:
-
-| Service | Build | Start | Health |
-|---|---|---|---|
-| `tuma-api-staging` | `corepack enable && pnpm install && pnpm --filter api build && pnpm --filter api migrate` | `node apps/api/dist/index.js` | `/health` |
-| `tuma-customer-staging` | `corepack enable && pnpm install --frozen-lockfile && pnpm --filter customer build && <copy static, see above>` | `node apps/customer/.next/standalone/apps/customer/server.js` | `/` |
-| `tuma-rider-staging` | same pattern with `rider` | `node apps/rider/.next/standalone/apps/rider/server.js` | `/` |
-
-Steps:
-
-```text
-1. Merge changes to main (Render auto-deploys via autoDeploy: true).
-2. Or: Render Dashboard -> New -> Blueprint -> select xristo7/tuma-concierge -> confirm free plan only.
-3. Set env vars in the Render dashboard (never commit them):
-   - tuma-api-staging: TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, JWT_SECRET, CORS_ORIGINS,
-     and MOMO_* (sandbox by default — see apps/api/README.md) once escrow testing is needed
-   - tuma-customer-staging / tuma-rider-staging: NEXT_PUBLIC_API_URL
-```
-
-Database: Turso `tuma-staging` (free tier) is already live per `infra/STAGING.md` — `0001_init` applied, 19 tables.
-
-Currently live (per `infra/STAGING.md`):
-- `tuma-api-staging` → https://tuma-api-staging.onrender.com (`GET /health`)
-- `tuma-customer-staging`, `tuma-rider-staging` on Render
-
-Blocked / not yet live: paid Render tiers, Cloudflare R2/Workers (paid), MoMo live mode, paid TURN, production environment (waiting on product sign-off).
+Blocked / not yet live: MoMo live mode, paid TURN, production environment (waiting on
+product sign-off). `render.yaml` / the Render services are kept for reference/rollback only
+— no longer the active deploy target.
 
 ## 6. Lint / typecheck
 

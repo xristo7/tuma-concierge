@@ -1,18 +1,21 @@
 # tuma-api
 
 Hono API for Tuma Concierge. Real order lifecycle, auth, rider matching, MoMo
-escrow, and chat — backed by Turso (libsql), falling back to a local SQLite
-file for zero-setup dev.
+escrow, and chat — backed by Turso (libsql) over HTTP, so the same code runs
+in Node (local dev) and as a Cloudflare Worker (`src/worker.ts`) unchanged.
 
 ## Local
 
 ```bash
 pnpm install
-cp .env.example .env.local   # fill in JWT_SECRET at minimum
-pnpm --filter api migrate    # creates tables (local.db by default)
+cp .env.example .env.local   # fill in JWT_SECRET and TURSO_DATABASE_URL/TURSO_AUTH_TOKEN
+pnpm --filter api migrate    # creates tables
 pnpm --filter api seed       # demo customer/rider/admin (password: password123)
 pnpm --filter api dev        # http://localhost:10000
 ```
+
+No local-file DB fallback — always talks to a real Turso database. For local dev without
+touching staging, run `turso dev` and point `TURSO_DATABASE_URL` at it.
 
 ## Endpoints
 
@@ -52,15 +55,15 @@ To test against the free sandbox:
 4. Fund an order (`POST /v1/orders/:id/fund`) with a sandbox test MSISDN,
    then poll `GET /v1/payments/:id/refresh` until `status: "successful"`.
 
-## Render (`tuma-api-staging`)
+## Cloudflare Workers (`tuma-api`) — primary deploy target
 
-| | |
-|--|--|
-| **Build** | `corepack enable && pnpm install && pnpm --filter api build && pnpm --filter api migrate` |
-| **Start** | `node apps/api/dist/index.js` |
-| **Health** | `GET /health` |
+```bash
+pnpm --filter api deploy   # wrangler deploy
+```
 
-Env (names only — see `infra/ENV.md`): `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`,
-`JWT_SECRET`, `CORS_ORIGINS`, `PORT`, `NODE_VERSION=22`, `MOMO_*`.
+Secrets via `wrangler secret put <NAME>`: `JWT_SECRET`, `TURSO_DATABASE_URL`,
+`TURSO_AUTH_TOKEN`, MoMo credentials. Non-secret vars live in `wrangler.jsonc`. See
+`infra/CLOUDFLARE.md` for the full picture (including known bundling gotchas) and
+`infra/ENV.md` for the env name matrix.
 
-Do not commit secrets.
+Do not commit secrets. `render.yaml` / the old Render service are kept for reference only.

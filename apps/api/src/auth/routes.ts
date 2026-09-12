@@ -1,5 +1,4 @@
 import bcrypt from "bcryptjs";
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../db/client.js";
@@ -43,7 +42,7 @@ authRoutes.post("/register", async (c) => {
     return c.json({ error: "phone_taken", message: "Phone already registered" }, 409);
   }
 
-  const id = randomUUID();
+  const id = crypto.randomUUID();
   const passwordHash = await bcrypt.hash(password, 10);
   await db.execute({
     sql: "INSERT INTO users (id, phone, name, password_hash, role) VALUES (?, ?, ?, ?, ?)",

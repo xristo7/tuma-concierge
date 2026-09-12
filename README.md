@@ -5,20 +5,24 @@ Uganda boda shopping concierge — customers post shopping lists; verified rider
 ## Stack (staging, free-tier)
 
 - **Monorepo** `xristo7/tuma-concierge`
-- **Apps:** `apps/customer`, `apps/rider` (Next.js App Router → **Render** Node 22 Web Services, `output: standalone`)
-- **API:** owned by Backend/Ship (`tuma-api-staging` on Render; leave `workers/api` alone for now)
-- **DB:** Turso (`tuma-staging`)
+- **Apps:** `apps/customer`, `apps/rider` (Next.js App Router → **Cloudflare Workers** via OpenNext)
+- **API:** `apps/api` (Hono → **Cloudflare Worker**); `workers/api` is an unrelated legacy scaffold — leave alone
+- **DB:** Turso (`tuma-staging`), reached over HTTP from the Worker
 - **Shared:** `packages/shared` (`@tuma/shared`)
 
-See **[FRONTEND.md](./FRONTEND.md)** for pnpm filters, standalone start paths, and Render notes.
+See **[infra/CLOUDFLARE.md](./infra/CLOUDFLARE.md)** for deploy commands, required secrets, and
+known gotchas. Render (`render.yaml`) is kept for reference/rollback but is no longer the active
+deploy target — see **[FRONTEND.md](./FRONTEND.md)**.
 
 ## Layout
 
 ```
-apps/customer/   # customer web / PWA shell
-apps/rider/      # rider web / PWA shell
+apps/customer/   # customer web PWA
+apps/rider/      # rider web PWA
+apps/api/        # real backend (Hono, on Cloudflare Workers)
 workers/api/     # legacy CF worker scaffold — leave alone
 packages/shared/ # OrderStage, PaymentRail, API client for the real backend
+tools/stubs/     # sharp no-op stub (see infra/CLOUDFLARE.md gotchas)
 infra/           # env matrix, deploy notes
 ```
 
@@ -26,9 +30,10 @@ infra/           # env matrix, deploy notes
 
 | Env | Services | DB |
 |-----|----------|-----|
-| staging | `tuma-api-staging`, `tuma-customer-staging`, `tuma-rider-staging` (Render) | Turso `tuma-staging` |
+| staging | `tuma-api`, `tuma-customer`, `tuma-rider` (Cloudflare Workers) | Turso `tuma-staging` |
 | production | *blocked until Sharon OK* | *blocked* |
 
 ## Secrets
 
-Never commit `.env` or secrets. Use Render env / GitHub Actions secrets. See `infra/ENV.md`.
+Never commit `.env` or secrets. Cloudflare secrets are set via `wrangler secret put` (see
+`infra/CLOUDFLARE.md`). See `infra/ENV.md` for the full env name matrix.
