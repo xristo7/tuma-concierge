@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authRoutes } from "./auth/routes.js";
+import { callRoutes } from "./calls/routes.js";
 import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { riderRoutes } from "./riders/routes.js";
@@ -70,6 +71,7 @@ app.get("/v1", (c) =>
       "POST /v1/orders/:id/settle",
       "GET /v1/orders/:id/chat",
       "POST /v1/orders/:id/chat",
+      "GET /v1/orders/:id/call (WebSocket, Workers only)",
       "GET /v1/payments/:id/refresh",
       "POST /v1/payments/momo/callback",
       "POST /v1/riders/apply",
@@ -83,6 +85,12 @@ app.get("/v1", (c) =>
 );
 
 app.route("/v1/auth", authRoutes);
+// callRoutes first: its one route (/orders/:id/call) needs its own
+// query-param auth instead of orderRoutes' blanket requireAuth("*")
+// middleware, which — once merged into the shared /v1 router — would
+// otherwise run for every /v1/* path regardless of registration order
+// within orderRoutes itself.
+app.route("/v1", callRoutes);
 app.route("/v1", orderRoutes);
 app.route("/v1", paymentRoutes);
 app.route("/v1", riderRoutes);

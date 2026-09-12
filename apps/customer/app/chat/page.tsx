@@ -3,12 +3,15 @@
 import type { OrderRow } from "@tuma/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { CallButton, CallOverlay } from "../../components/CallOverlay";
 import { OrderChat } from "../../components/OrderChat";
 import { api } from "../../lib/api";
 import { stageLabel } from "../../lib/order-display";
+import { useCall } from "../../lib/use-call";
 
 export default function ChatPage() {
   const [order, setOrder] = useState<OrderRow | null | undefined>(undefined);
+  const call = useCall(order?.id ?? "");
 
   useEffect(() => {
     api
@@ -43,15 +46,17 @@ export default function ChatPage() {
               <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-cream bg-green" />
             )}
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-bold text-ink">
               {order.rider_id ? "Your rider" : "Finding a rider…"}
             </h1>
             <p className="text-xs text-ink-500">{stageLabel(order.stage)}</p>
           </div>
+          <CallButton call={call} />
         </header>
         <OrderChat orderId={order.id} variant="full" />
       </div>
+      <CallOverlay call={call} peerLabel="Your rider" />
     </div>
   );
 }

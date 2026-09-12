@@ -10,6 +10,20 @@
       "database_id": "26926e12-d2f4-4b40-8b1b-019f6c169e10"
     }
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CALL_ROOM",
+        "class_name": "CallRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CallRoom"]
+    }
+  ],
   "vars": {
     "ENVIRONMENT": "staging",
     "CORS_ORIGINS": "https://tuma-customer.doxalight-inc.workers.dev,https://tuma-rider.doxalight-inc.workers.dev,http://localhost:3000,http://localhost:3001",
