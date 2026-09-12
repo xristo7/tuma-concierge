@@ -1,5 +1,8 @@
 import app from "./app.js";
+import { CallRoom } from "./calls/room.js";
 import { setD1Binding, type D1Database } from "./db/client.js";
+
+export { CallRoom };
 
 /** Minimal local stand-in so we don't need @cloudflare/workers-types (which
  * conflicts with @types/node's DOM-lib globals) just for one field. */

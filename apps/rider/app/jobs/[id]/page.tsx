@@ -4,13 +4,16 @@ import type { OrderDetail } from "@tuma/shared";
 import { MapPin } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { CallButton, CallOverlay } from "../../../components/CallOverlay";
 import { OrderChat } from "../../../components/OrderChat";
 import { api, errorMessage } from "../../../lib/api";
 import { formatUgx, jobTitle, stageLabel } from "../../../lib/order-display";
+import { useCall } from "../../../lib/use-call";
 
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
+  const call = useCall(orderId);
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,16 +57,19 @@ export default function JobDetailPage() {
 
   return (
     <div className="space-y-6 px-4 pb-24 pt-4">
-      <header className="space-y-1">
-        <h1 className="text-xl font-bold text-ink">{jobTitle(order)}</h1>
-        <p className="text-sm font-semibold text-green">{stageLabel(order.stage)}</p>
-        {order.destination_area && (
-          <p className="flex items-center gap-1.5 text-sm text-ink-500">
-            <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
-            {order.destination_area}
-            {order.destination_address ? ` · ${order.destination_address}` : ""}
-          </p>
-        )}
+      <header className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-xl font-bold text-ink">{jobTitle(order)}</h1>
+          <p className="text-sm font-semibold text-green">{stageLabel(order.stage)}</p>
+          {order.destination_area && (
+            <p className="flex items-center gap-1.5 text-sm text-ink-500">
+              <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
+              {order.destination_area}
+              {order.destination_address ? ` · ${order.destination_address}` : ""}
+            </p>
+          )}
+        </div>
+        <CallButton call={call} />
       </header>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -219,6 +225,7 @@ export default function JobDetailPage() {
       </section>
 
       <OrderChat orderId={orderId} />
+      <CallOverlay call={call} peerLabel="Your customer" />
     </div>
   );
 }
