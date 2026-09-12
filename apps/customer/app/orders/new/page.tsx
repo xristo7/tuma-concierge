@@ -55,10 +55,7 @@ export default function NewOrderPage() {
         paymentRail,
         estimatedTotal: estimatedTotal ? Number(estimatedTotal) : undefined,
       });
-      // Best-effort auto-match — if no riders are online, the order page
-      // shows a retry button instead of failing the whole flow here.
-      await api.matchOrder(order.id).catch(() => {});
-      router.push(`/orders/${order.id}`);
+      router.push(`/orders/${order.id}/pay`);
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);
@@ -67,7 +64,10 @@ export default function NewOrderPage() {
 
   return (
     <div className="space-y-5 px-4 pb-24 pt-4">
-      <h1 className="text-xl font-bold text-ink">New list</h1>
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gold">Step 1 of 3 · Create</p>
+        <h1 className="text-xl font-bold text-ink">New list</h1>
+      </div>
 
       <form onSubmit={onSubmit} className="space-y-5">
         <div className="space-y-1">
@@ -187,7 +187,7 @@ export default function NewOrderPage() {
           disabled={busy}
           className="flex min-h-12 w-full items-center justify-center rounded-full bg-gold px-4 py-3 text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] transition-opacity hover:opacity-95 disabled:opacity-60"
         >
-          {busy ? "Sending…" : "Send list & find a rider"}
+          {busy ? "Saving…" : "Continue to payment"}
         </button>
       </form>
     </div>

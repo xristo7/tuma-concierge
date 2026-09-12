@@ -1,20 +1,20 @@
 "use client";
 
-import { ORDER_STAGES, type OrderDetail } from "@tuma/shared";
-import { CheckCircle2, Circle, MapPin } from "lucide-react";
-import { useParams } from "next/navigation";
+import type { OrderDetail } from "@tuma/shared";
+import { MapPin } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
 import { api, errorMessage } from "../../../lib/api";
-import { formatUgx, orderTitle, stageIndex, stageLabel } from "../../../lib/order-display";
+import { formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
+  const router = useRouter();
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [msisdn, setMsisdn] = useState("");
 
   const load = useCallback(async () => {
     const res = await api.getOrder(orderId);
@@ -31,6 +31,15 @@ export default function OrderDetailPage() {
     const interval = setInterval(() => load().catch(() => {}), 4000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Creating/matching/funding are handled on the payment screen — if a
+  // customer lands here before that's done, send them back to finish it.
+  useEffect(() => {
+    if (!detail) return;
+    if (["Create", "Match", "Fund"].includes(detail.order.stage)) {
+      router.replace(`/orders/${orderId}/pay`);
+    }
+  }, [detail, orderId, router]);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -49,9 +58,8 @@ export default function OrderDetailPage() {
     return <div className="p-4 text-sm text-ink-500">Loading order…</div>;
   }
 
-  const { order, items, substitutions, payments } = detail;
+  const { order, items, substitutions } = detail;
   const pendingSubs = substitutions.filter((s) => s.status === "pending");
-  const currentIndex = stageIndex(order.stage);
 
   return (
     <div className="space-y-6 px-4 pb-24 pt-4">
@@ -66,22 +74,6 @@ export default function OrderDetailPage() {
           </p>
         )}
       </header>
-
-      <ol className="flex flex-wrap gap-x-4 gap-y-2">
-        {ORDER_STAGES.map((stage, i) => {
-          const done = i <= currentIndex;
-          return (
-            <li key={stage} className="flex items-center gap-1.5 text-xs font-medium">
-              {done ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green" strokeWidth={2} />
-              ) : (
-                <Circle className="h-3.5 w-3.5 text-ink-500/40" strokeWidth={2} />
-              )}
-              <span className={done ? "text-ink" : "text-ink-500/60"}>{stage}</span>
-            </li>
-          );
-        })}
-      </ol>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
@@ -103,80 +95,7 @@ export default function OrderDetailPage() {
         </div>
       </section>
 
-      {/* Stage action panel */}
       <section className="home-card space-y-3">
-        {order.stage === "Create" && (
-          <>
-            <p className="text-sm text-ink-500">Looking for a verified rider near you.</p>
-            <button
-              disabled={busy}
-              onClick={() => run(() => api.matchOrder(orderId))}
-              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
-            >
-              Find a rider
-            </button>
-          </>
-        )}
-
-        {order.stage === "Match" && !order.rider_id && (
-          <>
-            <p className="text-sm text-ink-500">No riders available yet.</p>
-            <button
-              disabled={busy}
-              onClick={() => run(() => api.matchOrder(orderId))}
-              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
-            >
-              Try again
-            </button>
-          </>
-        )}
-
-        {order.stage === "Match" && order.rider_id && (
-          <>
-            <p className="text-sm text-ink-500">Rider assigned. Fund your order to start shopping.</p>
-            {order.payment_rail === "escrow" ? (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  run(() => api.fundOrder(orderId, { msisdn }));
-                }}
-                className="space-y-2"
-              >
-                <input
-                  required
-                  value={msisdn}
-                  onChange={(e) => setMsisdn(e.target.value)}
-                  placeholder="MoMo number (e.g. 256700000099)"
-                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-                />
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
-                >
-                  Fund via MoMo
-                </button>
-              </form>
-            ) : (
-              <button
-                disabled={busy}
-                onClick={() => run(() => api.fundOrder(orderId))}
-                className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
-              >
-                Confirm — rider fronts the cash
-              </button>
-            )}
-          </>
-        )}
-
-        {order.stage === "Fund" && (
-          <p className="text-sm text-ink-500">
-            {payments.some((p) => p.status === "pending")
-              ? "Waiting for MoMo confirmation…"
-              : "Funding in progress…"}
-          </p>
-        )}
-
         {(order.stage === "Shop" || order.stage === "Substitute") && (
           <>
             <p className="text-sm text-ink-500">Your rider is shopping.</p>

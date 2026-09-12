@@ -1,12 +1,12 @@
 "use client";
 
-import { ORDER_STAGES, type OrderDetail } from "@tuma/shared";
-import { CheckCircle2, Circle, MapPin } from "lucide-react";
+import type { OrderDetail } from "@tuma/shared";
+import { MapPin } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
 import { api, errorMessage } from "../../../lib/api";
-import { formatUgx, jobTitle, stageIndex, stageLabel } from "../../../lib/order-display";
+import { formatUgx, jobTitle, stageLabel } from "../../../lib/order-display";
 
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
@@ -49,7 +49,6 @@ export default function JobDetailPage() {
   }
 
   const { order, items, substitutions } = detail;
-  const currentIndex = stageIndex(order.stage);
   const canDeliver = ["Shop", "Substitute", "Approve"].includes(order.stage);
   const canPropose = order.stage === "Shop" || order.stage === "Substitute";
 
@@ -66,22 +65,6 @@ export default function JobDetailPage() {
           </p>
         )}
       </header>
-
-      <ol className="flex flex-wrap gap-x-4 gap-y-2">
-        {ORDER_STAGES.map((stage, i) => {
-          const done = i <= currentIndex;
-          return (
-            <li key={stage} className="flex items-center gap-1.5 text-xs font-medium">
-              {done ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-green" strokeWidth={2} />
-              ) : (
-                <Circle className="h-3.5 w-3.5 text-ink-500/40" strokeWidth={2} />
-              )}
-              <span className={done ? "text-ink" : "text-ink-500/60"}>{stage}</span>
-            </li>
-          );
-        })}
-      </ol>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
