@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { OrderChat } from "../../components/OrderChat";
 import { api } from "../../lib/api";
-import { orderTitle } from "../../lib/order-display";
+import { stageLabel } from "../../lib/order-display";
 
 export default function ChatPage() {
   const [order, setOrder] = useState<OrderRow | null | undefined>(undefined);
@@ -33,9 +33,19 @@ export default function ChatPage() {
 
   return (
     <div className="space-y-4 px-4 pb-6 pt-4">
-      <div>
-        <h1 className="text-xl font-bold text-ink">Chat</h1>
-        <p className="text-sm text-ink-500">{orderTitle(order)}</p>
+      <div className="flex items-center gap-3">
+        <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gold text-sm font-bold text-ink">
+          R
+          {order.rider_id && (
+            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-cream bg-green" />
+          )}
+        </span>
+        <div className="min-w-0">
+          <h1 className="truncate text-base font-bold text-ink">
+            {order.rider_id ? "Your rider" : "Finding a rider…"}
+          </h1>
+          <p className="text-xs text-ink-500">{stageLabel(order.stage)}</p>
+        </div>
       </div>
       <OrderChat orderId={order.id} />
     </div>
