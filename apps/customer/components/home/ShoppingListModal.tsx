@@ -22,7 +22,6 @@ function currency(n: number) {
 export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState<"items" | "location">("items");
-  const [title, setTitle] = useState("");
   const [items, setItems] = useState<Item[]>([{ name: "", quantity: "1", unitCost: "" }]);
 
   const [locations, setLocations] = useState<SavedLocation[]>([]);
@@ -112,7 +111,6 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
           unitCost: Number(it.unitCost) || 0,
         }));
       const list = await api.createList({
-        title: title.trim() || undefined,
         items: cleanItems.map((it) => ({ name: it.name, quantity: it.quantity })),
       });
       const { order } = await api.createOrder({
@@ -135,13 +133,6 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
     <Modal title={step === "items" ? "Shopping List" : "Delivery location"} onClose={onClose}>
       {step === "items" ? (
         <div className="space-y-4">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="List title (optional)"
-            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-          />
-
           <div className="space-y-2">
             {items.map((item, i) => (
               <div key={i} className="flex items-center gap-2 rounded-xl border border-[var(--border-faint)] bg-white p-2.5">

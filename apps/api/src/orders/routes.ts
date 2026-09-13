@@ -20,7 +20,9 @@ async function logEvent(orderId: string, stage: string, note: string, actorId: s
 
 async function getOrder(orderId: string): Promise<Row | undefined> {
   const res = await db.execute({
-    sql: "SELECT * FROM orders WHERE id = ?",
+    sql: `SELECT o.*, u.name as customer_name FROM orders o
+          LEFT JOIN users u ON u.id = o.customer_id
+          WHERE o.id = ?`,
     args: [orderId],
   });
   return res.rows[0] as Row | undefined;
@@ -187,7 +189,9 @@ orderRoutes.post("/orders", async (c) => {
 orderRoutes.get("/orders/active", async (c) => {
   const user = c.get("user");
   const res = await db.execute({
-    sql: `SELECT * FROM orders WHERE customer_id = ? AND stage != 'Settle' ORDER BY updated_at DESC LIMIT 1`,
+    sql: `SELECT o.*, u.name as customer_name FROM orders o
+          LEFT JOIN users u ON u.id = o.customer_id
+          WHERE o.customer_id = ? AND o.stage != 'Settle' ORDER BY o.updated_at DESC LIMIT 1`,
     args: [user.sub],
   });
   return c.json({ activeOrder: res.rows[0] ?? null });

@@ -58,7 +58,9 @@ riderRoutes.get("/riders/me", requireAuth, requireRole("rider"), async (c) => {
 riderRoutes.get("/riders/me/orders", requireAuth, requireRole("rider"), async (c) => {
   const user = c.get("user");
   const res = await db.execute({
-    sql: "SELECT * FROM orders WHERE rider_id = ? ORDER BY updated_at DESC",
+    sql: `SELECT o.*, u.name as customer_name FROM orders o
+          LEFT JOIN users u ON u.id = o.customer_id
+          WHERE o.rider_id = ? ORDER BY o.updated_at DESC`,
     args: [user.sub],
   });
   return c.json({ orders: res.rows });

@@ -32,6 +32,10 @@ export function formatUgx(amount: number | null | undefined): string {
 }
 
 export function jobTitle(order: OrderRow): string {
+  if (order.type !== "parcel") {
+    const firstName = order.customer_name?.trim().split(/\s+/)[0];
+    if (firstName) return `${firstName}'s List`;
+  }
   const noun = order.type === "parcel" ? "Parcel" : "Delivery";
   return order.destination_area ? `${noun} to ${order.destination_area}` : `Job #${order.id.slice(-6)}`;
 }

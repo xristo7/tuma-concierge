@@ -26,6 +26,7 @@ export type OrderRow = {
   id: string;
   list_id: string;
   customer_id: string;
+  customer_name: string | null;
   rider_id: string | null;
   stage: string;
   type: OrderType;
