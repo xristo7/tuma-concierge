@@ -274,28 +274,30 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Or enter an address</p>
-            <input
-              value={manualArea}
-              onChange={(e) => {
-                setManualArea(e.target.value);
-                setSelectedLocationId(null);
-                setMapArea(null);
-                setMapAddress(null);
-              }}
-              placeholder="Area (e.g. Kololo)"
-              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-            />
-            <input
-              value={manualAddress}
-              onChange={(e) => {
-                setManualAddress(e.target.value);
-                setSelectedLocationId(null);
-                setMapArea(null);
-                setMapAddress(null);
-              }}
-              placeholder="Address / landmark"
-              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={manualArea}
+                onChange={(e) => {
+                  setManualArea(e.target.value);
+                  setSelectedLocationId(null);
+                  setMapArea(null);
+                  setMapAddress(null);
+                }}
+                placeholder="Area (e.g. Kololo)"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+              <input
+                value={manualAddress}
+                onChange={(e) => {
+                  setManualAddress(e.target.value);
+                  setSelectedLocationId(null);
+                  setMapArea(null);
+                  setMapAddress(null);
+                }}
+                placeholder="Address / landmark"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">

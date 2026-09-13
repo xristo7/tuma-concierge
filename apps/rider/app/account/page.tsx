@@ -185,20 +185,22 @@ export default function AccountPage() {
             <Field label="Last name" value={lastName} onChange={setLastName} placeholder="Okello" required />
           </div>
           <Field label="Email (optional)" value={email} onChange={setEmail} placeholder="you@example.com" type="email" />
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-ink-500">Phone</label>
-            <input
-              disabled
-              value={user?.phone ?? ""}
-              className="w-full rounded-xl border border-[var(--border-faint)] bg-[#ECE8E2] px-3 py-2.5 text-[15px] text-ink-500 outline-none"
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-ink-500">Phone</label>
+              <input
+                disabled
+                value={user?.phone ?? ""}
+                className="w-full rounded-xl border border-[var(--border-faint)] bg-[#ECE8E2] px-3 py-2.5 text-[15px] text-ink-500 outline-none"
+              />
+            </div>
+            <Field
+              label="Alt. phone (optional)"
+              value={altPhone}
+              onChange={setAltPhone}
+              placeholder="+256700000000"
             />
           </div>
-          <Field
-            label="Alternative phone (optional)"
-            value={altPhone}
-            onChange={setAltPhone}
-            placeholder="+256700000000"
-          />
         </section>
 
         <section className="home-card space-y-3">

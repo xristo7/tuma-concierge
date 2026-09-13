@@ -170,18 +170,20 @@ function PointEditor({
               ))}
             </div>
           )}
-          <input
-            value={point.area}
-            onChange={(e) => setPoint({ ...point, area: e.target.value, selectedLocationId: null })}
-            placeholder="Area (e.g. Kololo)"
-            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-          />
-          <input
-            value={point.address}
-            onChange={(e) => setPoint({ ...point, address: e.target.value, selectedLocationId: null })}
-            placeholder="Address / landmark"
-            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-          />
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              value={point.area}
+              onChange={(e) => setPoint({ ...point, area: e.target.value, selectedLocationId: null })}
+              placeholder="Area (e.g. Kololo)"
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            />
+            <input
+              value={point.address}
+              onChange={(e) => setPoint({ ...point, address: e.target.value, selectedLocationId: null })}
+              placeholder="Address / landmark"
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            />
+          </div>
         </>
       )}
     </div>

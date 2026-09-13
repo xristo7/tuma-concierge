@@ -89,18 +89,20 @@ export function SavedLocations() {
 
       {adding && (
         <div className="space-y-2 border-t border-[var(--border-faint)] pt-3">
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Name (e.g. Home, Office, Hostel)"
-            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
-          />
-          <input
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-            placeholder="Area (e.g. Kololo)"
-            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
-          />
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Name (e.g. Home)"
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
+            />
+            <input
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              placeholder="Area (e.g. Kololo)"
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
+            />
+          </div>
           <input
             value={address}
             onChange={(e) => setAddress(e.target.value)}

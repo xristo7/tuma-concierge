@@ -134,18 +134,20 @@ export default function NewOrderPage() {
 
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-ink">Delivery</h2>
-          <input
-            value={destinationArea}
-            onChange={(e) => setDestinationArea(e.target.value)}
-            placeholder="Area (e.g. Kololo)"
-            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-          />
-          <input
-            value={destinationAddress}
-            onChange={(e) => setDestinationAddress(e.target.value)}
-            placeholder="Address / landmark (optional)"
-            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              value={destinationArea}
+              onChange={(e) => setDestinationArea(e.target.value)}
+              placeholder="Area (e.g. Kololo)"
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            />
+            <input
+              value={destinationAddress}
+              onChange={(e) => setDestinationAddress(e.target.value)}
+              placeholder="Address / landmark (optional)"
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            />
+          </div>
           <input
             value={estimatedTotal}
             onChange={(e) => setEstimatedTotal(e.target.value.replace(/[^\d]/g, ""))}
