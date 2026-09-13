@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authRoutes } from "./auth/routes.js";
+import { locationRoutes } from "./locations/routes.js";
 import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { riderRoutes } from "./riders/routes.js";
@@ -78,6 +79,9 @@ app.get("/v1", (c) =>
       "GET /v1/riders/me/orders",
       "GET /v1/admin/riders",
       "POST /v1/admin/riders/:userId/verify",
+      "GET /v1/locations",
+      "POST /v1/locations",
+      "DELETE /v1/locations/:id",
     ],
   }),
 );
@@ -86,5 +90,6 @@ app.route("/v1/auth", authRoutes);
 app.route("/v1", orderRoutes);
 app.route("/v1", paymentRoutes);
 app.route("/v1", riderRoutes);
+app.route("/v1", locationRoutes);
 
 export default app;

@@ -65,10 +65,18 @@ export default function OrderDetailPage() {
     <div className="space-y-6 px-4 pb-24 pt-4">
       <header className="space-y-1">
         <h1 className="text-xl font-bold text-ink">{orderTitle(order)}</h1>
-        <p className="text-sm font-semibold text-green">{stageLabel(order.stage)}</p>
+        <p className="text-sm font-semibold text-green">{stageLabel(order.stage, order.type)}</p>
+        {order.type === "parcel" && order.pickup_area && (
+          <p className="flex items-center gap-1.5 text-sm text-ink-500">
+            <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
+            Pickup: {order.pickup_area}
+            {order.pickup_address ? ` · ${order.pickup_address}` : ""}
+          </p>
+        )}
         {order.destination_area && (
           <p className="flex items-center gap-1.5 text-sm text-ink-500">
             <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
+            {order.type === "parcel" ? "Deliver to: " : ""}
             {order.destination_area}
             {order.destination_address ? ` · ${order.destination_address}` : ""}
           </p>
@@ -77,28 +85,32 @@ export default function OrderDetailPage() {
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-      <section className="home-card space-y-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Items</h2>
-        <ul className="space-y-1.5">
-          {items.map((item) => (
-            <li key={item.id} className="flex items-center justify-between text-sm text-ink">
-              <span>
-                {item.quantity}× {item.name}
-              </span>
-              {item.note && <span className="text-xs text-ink-500">{item.note}</span>}
-            </li>
-          ))}
-        </ul>
-        <div className="flex justify-between border-t border-[var(--border-faint)] pt-2 text-sm font-semibold">
-          <span>Total</span>
-          <span>{formatUgx(order.final_total ?? order.estimated_total)}</span>
-        </div>
-      </section>
+      {order.type === "shopping" && (
+        <section className="home-card space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Items</h2>
+          <ul className="space-y-1.5">
+            {items.map((item) => (
+              <li key={item.id} className="flex items-center justify-between text-sm text-ink">
+                <span>
+                  {item.quantity}× {item.name}
+                </span>
+                {item.note && <span className="text-xs text-ink-500">{item.note}</span>}
+              </li>
+            ))}
+          </ul>
+          <div className="flex justify-between border-t border-[var(--border-faint)] pt-2 text-sm font-semibold">
+            <span>Total</span>
+            <span>{formatUgx(order.final_total ?? order.estimated_total)}</span>
+          </div>
+        </section>
+      )}
 
       <section className="home-card space-y-3">
         {(order.stage === "Shop" || order.stage === "Substitute") && (
           <>
-            <p className="text-sm text-ink-500">Your rider is shopping.</p>
+            <p className="text-sm text-ink-500">
+              {order.type === "parcel" ? "Your rider is picking up the parcel." : "Your rider is shopping."}
+            </p>
             {pendingSubs.length > 0 && (
               <ul className="space-y-2">
                 {pendingSubs.map((sub) => (
@@ -150,7 +162,7 @@ export default function OrderDetailPage() {
               onClick={() => run(() => api.handoverOrder(orderId, order.pin_code as string))}
               className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
             >
-              Confirm I received my order
+              Confirm I received my {order.type === "parcel" ? "parcel" : "order"}
             </button>
           </>
         )}

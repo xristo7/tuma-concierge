@@ -20,16 +20,21 @@ export type ListItem = {
   unit_price: number | null;
 };
 
+export type OrderType = "shopping" | "parcel";
+
 export type OrderRow = {
   id: string;
   list_id: string;
   customer_id: string;
   rider_id: string | null;
   stage: string;
+  type: OrderType;
   payment_rail: "escrow" | "float" | null;
   currency: string;
   estimated_total: number | null;
   final_total: number | null;
+  pickup_area: string | null;
+  pickup_address: string | null;
   destination_area: string | null;
   destination_address: string | null;
   pin_code: string | null;
@@ -88,6 +93,15 @@ export type Rider = {
   vehicle_info: string | null;
   rating: number;
   momo_msisdn: string | null;
+};
+
+export type SavedLocation = {
+  id: string;
+  user_id: string;
+  label: string;
+  area: string | null;
+  address: string | null;
+  created_at: string;
 };
 
 export type AuthUser = {

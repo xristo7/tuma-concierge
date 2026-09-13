@@ -135,6 +135,9 @@ orderRoutes.get("/lists/:id", async (c) => {
 
 const createOrderSchema = z.object({
   listId: z.string(),
+  type: z.enum(["shopping", "parcel"]).default("shopping"),
+  pickupArea: z.string().max(120).optional(),
+  pickupAddress: z.string().max(240).optional(),
   destinationArea: z.string().max(120).optional(),
   destinationAddress: z.string().max(240).optional(),
   paymentRail: z.enum(["escrow", "float"]).default("escrow"),
@@ -156,14 +159,17 @@ orderRoutes.post("/orders", async (c) => {
 
   const orderId = newId("ord");
   await db.execute({
-    sql: `INSERT INTO orders (id, list_id, customer_id, stage, payment_rail, estimated_total, destination_area, destination_address)
-          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?)`,
+    sql: `INSERT INTO orders (id, list_id, customer_id, stage, type, payment_rail, estimated_total, pickup_area, pickup_address, destination_area, destination_address)
+          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       orderId,
       parsed.data.listId,
       user.sub,
+      parsed.data.type,
       parsed.data.paymentRail,
       parsed.data.estimatedTotal ?? null,
+      parsed.data.pickupArea ?? null,
+      parsed.data.pickupAddress ?? null,
       parsed.data.destinationArea ?? null,
       parsed.data.destinationAddress ?? null,
     ],

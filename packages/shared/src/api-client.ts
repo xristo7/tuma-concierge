@@ -6,8 +6,10 @@ import type {
   ListSummary,
   OrderDetail,
   OrderRow,
+  OrderType,
   Payment,
   Rider,
+  SavedLocation,
 } from "./domain";
 
 export type CreateApiClientOptions = {
@@ -86,6 +88,9 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     // Orders
     async createOrder(input: {
       listId: string;
+      type?: OrderType;
+      pickupArea?: string;
+      pickupAddress?: string;
       destinationArea?: string;
       destinationAddress?: string;
       paymentRail?: "escrow" | "float";
@@ -167,6 +172,20 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
     async myRiderOrders() {
       return request<{ orders: OrderRow[] }>("/v1/riders/me/orders");
+    },
+
+    // Saved locations
+    async getLocations() {
+      return request<{ locations: SavedLocation[] }>("/v1/locations");
+    },
+    async saveLocation(input: { label: string; area?: string; address?: string }) {
+      return request<{ location: SavedLocation }>("/v1/locations", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async deleteLocation(id: string) {
+      return request<{ ok: true }>(`/v1/locations/${id}`, { method: "DELETE" });
     },
 
     // Admin

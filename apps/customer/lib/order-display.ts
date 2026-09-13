@@ -21,7 +21,8 @@ export function stageProgressPct(stage: string): number {
   return Math.round(((stageIndex(stage) + 1) / ORDER_STAGES.length) * 100);
 }
 
-export function stageLabel(stage: string): string {
+export function stageLabel(stage: string, type?: OrderRow["type"]): string {
+  if (type === "parcel" && stage === "Shop") return "Picking up";
   return STAGE_LABELS[stage as OrderStageValue] ?? stage;
 }
 
@@ -31,5 +32,6 @@ export function formatUgx(amount: number | null | undefined): string {
 }
 
 export function orderTitle(order: OrderRow): string {
-  return order.destination_area ? `Order to ${order.destination_area}` : `Order #${order.id.slice(-6)}`;
+  const noun = order.type === "parcel" ? "Parcel" : "Order";
+  return order.destination_area ? `${noun} to ${order.destination_area}` : `${noun} #${order.id.slice(-6)}`;
 }

@@ -2,6 +2,7 @@
 
 import { LogOut, Shield, User } from "lucide-react";
 import Link from "next/link";
+import { SavedLocations } from "../../components/SavedLocations";
 import { useAuth } from "../../lib/auth-context";
 
 export default function AccountPage() {
@@ -20,6 +21,8 @@ export default function AccountPage() {
           <span className="block text-sm text-ink-500">{user?.phone}</span>
         </span>
       </section>
+
+      <SavedLocations />
 
       {user?.role === "admin" && (
         <Link

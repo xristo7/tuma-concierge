@@ -101,6 +101,12 @@ export default function PayPage() {
       </div>
 
       <section className="home-card space-y-2">
+        {order.type === "parcel" && (
+          <div className="flex justify-between text-sm">
+            <span className="text-ink-500">Pickup</span>
+            <span className="font-semibold text-ink">{order.pickup_area ?? "—"}</span>
+          </div>
+        )}
         <div className="flex justify-between text-sm">
           <span className="text-ink-500">Delivery</span>
           <span className="font-semibold text-ink">{order.destination_area ?? "—"}</span>
