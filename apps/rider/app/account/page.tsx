@@ -180,8 +180,10 @@ export default function AccountPage() {
       <form onSubmit={onSubmit} className="space-y-5">
         <section className="home-card space-y-3">
           <h2 className="text-sm font-semibold text-ink">Personal details</h2>
-          <Field label="First name" value={firstName} onChange={setFirstName} placeholder="Juma" required />
-          <Field label="Last name" value={lastName} onChange={setLastName} placeholder="Okello" required />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="First name" value={firstName} onChange={setFirstName} placeholder="Juma" required />
+            <Field label="Last name" value={lastName} onChange={setLastName} placeholder="Okello" required />
+          </div>
           <Field label="Email (optional)" value={email} onChange={setEmail} placeholder="you@example.com" type="email" />
           <div className="space-y-1">
             <label className="text-xs font-semibold text-ink-500">Phone</label>
@@ -231,34 +233,38 @@ export default function AccountPage() {
         <section className="home-card space-y-3">
           <h2 className="text-sm font-semibold text-ink">Stage details</h2>
           <Field label="Stage name" value={stageName} onChange={setStageName} placeholder="Ntinda Trading Center Stage" required />
-          <Field
-            label="Stage chairman name"
-            value={stageChairmanName}
-            onChange={setStageChairmanName}
-            placeholder="Chairman's full name"
-            required
-          />
-          <Field
-            label="Stage chairman contact"
-            value={stageChairmanContact}
-            onChange={setStageChairmanContact}
-            placeholder="+256700000000"
-            required
-          />
-          <Field
-            label="Emergency contact name"
-            value={emergencyContactName}
-            onChange={setEmergencyContactName}
-            placeholder="Next of kin / emergency contact"
-            required
-          />
-          <Field
-            label="Emergency contact phone"
-            value={emergencyContactPhone}
-            onChange={setEmergencyContactPhone}
-            placeholder="+256700000000"
-            required
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Stage chairman name"
+              value={stageChairmanName}
+              onChange={setStageChairmanName}
+              placeholder="Chairman's full name"
+              required
+            />
+            <Field
+              label="Stage chairman contact"
+              value={stageChairmanContact}
+              onChange={setStageChairmanContact}
+              placeholder="+256700000000"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field
+              label="Emergency contact name"
+              value={emergencyContactName}
+              onChange={setEmergencyContactName}
+              placeholder="Next of kin"
+              required
+            />
+            <Field
+              label="Emergency contact phone"
+              value={emergencyContactPhone}
+              onChange={setEmergencyContactPhone}
+              placeholder="+256700000000"
+              required
+            />
+          </div>
         </section>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

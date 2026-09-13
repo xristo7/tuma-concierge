@@ -126,20 +126,22 @@ export default function JobDetailPage() {
               }}
               className="space-y-2"
             >
-              <input
-                required
-                value={originalName}
-                onChange={(e) => setOriginalName(e.target.value)}
-                placeholder="Original item"
-                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-              />
-              <input
-                required
-                value={substituteName}
-                onChange={(e) => setSubstituteName(e.target.value)}
-                placeholder="Substitute item"
-                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  required
+                  value={originalName}
+                  onChange={(e) => setOriginalName(e.target.value)}
+                  placeholder="Original item"
+                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                />
+                <input
+                  required
+                  value={substituteName}
+                  onChange={(e) => setSubstituteName(e.target.value)}
+                  placeholder="Substitute item"
+                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                />
+              </div>
               <input
                 value={priceDelta}
                 onChange={(e) => setPriceDelta(e.target.value.replace(/[^-\d]/g, ""))}
