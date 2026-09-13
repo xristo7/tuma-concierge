@@ -1,11 +1,17 @@
 "use client";
 
 import type { SavedLocation } from "@tuma/shared";
-import { LocateFixed, Plus, Trash2 } from "lucide-react";
+import { LocateFixed, Map, MapPin, Plus, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+
+const LocationMapPicker = dynamic(
+  () => import("../LocationMapPicker").then((m) => m.LocationMapPicker),
+  { ssr: false },
+);
 
 type Item = { name: string; quantity: string; unitCost: string };
 
@@ -25,6 +31,9 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   const [manualAddress, setManualAddress] = useState("");
   const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "done" | "error">("idle");
   const [geoCoords, setGeoCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapArea, setMapArea] = useState<string | null>(null);
+  const [mapAddress, setMapAddress] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [paymentRail, setPaymentRail] = useState<"escrow" | "float">("escrow");
 
   const [busy, setBusy] = useState(false);
@@ -62,6 +71,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   function useMyLocation() {
     setGeoStatus("locating");
     setSelectedLocationId(null);
+    setMapArea(null);
+    setMapAddress(null);
     if (!navigator.geolocation) {
       setGeoStatus("error");
       return;
@@ -78,9 +89,10 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
 
   async function submit() {
     const selected = locations.find((l) => l.id === selectedLocationId);
-    const destinationArea = selected?.area || manualArea.trim() || undefined;
+    const destinationArea = selected?.area || mapArea || manualArea.trim() || undefined;
     const destinationAddress =
       selected?.address ||
+      mapAddress ||
       manualAddress.trim() ||
       (geoCoords ? `Current location (${geoCoords.lat.toFixed(4)}, ${geoCoords.lng.toFixed(4)})` : undefined);
 
@@ -190,21 +202,56 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <div className="space-y-4">
+          {mapAddress || mapArea ? (
+            <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-ink">{mapAddress || mapArea}</p>
+                <button onClick={() => setShowPicker(true)} className="mt-1 text-xs font-bold text-gold underline">
+                  Change pin
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowPicker(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-faint)] py-3 text-sm font-bold text-ink"
+            >
+              <Map className="h-4 w-4 text-gold" strokeWidth={2.25} aria-hidden />
+              Choose on map
+            </button>
+          )}
           <button
             onClick={useMyLocation}
             className={`flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-sm font-semibold ${
-              geoStatus === "done" ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink"
+              geoStatus === "done" && !mapAddress && !mapArea
+                ? "border-gold bg-gold/10 text-ink"
+                : "border-[var(--border-faint)] text-ink"
             }`}
           >
             <LocateFixed className="h-4 w-4 text-gold" strokeWidth={2.25} aria-hidden />
             {geoStatus === "locating"
               ? "Locating…"
-              : geoStatus === "done"
+              : geoStatus === "done" && !mapAddress && !mapArea
                 ? "Using current location"
-                : "Use my current location"}
+                : "Use my current location instead"}
           </button>
           {geoStatus === "error" && (
             <p className="text-xs text-red-600">Couldn&apos;t get your location — enable location access or enter an address below.</p>
+          )}
+          {showPicker && (
+            <LocationMapPicker
+              initial={geoCoords ?? undefined}
+              onCancel={() => setShowPicker(false)}
+              onConfirm={(loc) => {
+                setGeoCoords({ lat: loc.lat, lng: loc.lng });
+                setGeoStatus("done");
+                setSelectedLocationId(null);
+                setMapArea(loc.area);
+                setMapAddress(loc.address);
+                setShowPicker(false);
+              }}
+            />
           )}
 
           {locations.length > 0 && (
@@ -218,6 +265,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
                       setSelectedLocationId(loc.id);
                       setGeoStatus("idle");
                       setGeoCoords(null);
+                      setMapArea(null);
+                      setMapAddress(null);
                     }}
                     className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
                       selectedLocationId === loc.id
@@ -239,6 +288,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => {
                 setManualArea(e.target.value);
                 setSelectedLocationId(null);
+                setMapArea(null);
+                setMapAddress(null);
               }}
               placeholder="Area (e.g. Kololo)"
               className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
@@ -248,6 +299,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => {
                 setManualAddress(e.target.value);
                 setSelectedLocationId(null);
+                setMapArea(null);
+                setMapAddress(null);
               }}
               placeholder="Address / landmark"
               className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"

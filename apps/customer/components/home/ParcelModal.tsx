@@ -1,11 +1,17 @@
 "use client";
 
 import type { SavedLocation } from "@tuma/shared";
-import { LocateFixed, Map, Type } from "lucide-react";
+import { LocateFixed, Map, MapPin, Type } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+
+const LocationMapPicker = dynamic(
+  () => import("../LocationMapPicker").then((m) => m.LocationMapPicker),
+  { ssr: false },
+);
 
 type Mode = "text" | "map";
 
@@ -16,6 +22,8 @@ type PointState = {
   selectedLocationId: string | null;
   geoCoords: { lat: number; lng: number } | null;
   geoStatus: "idle" | "locating" | "done" | "error";
+  mapArea: string | null;
+  mapAddress: string | null;
 };
 
 const emptyPoint: PointState = {
@@ -25,6 +33,8 @@ const emptyPoint: PointState = {
   selectedLocationId: null,
   geoCoords: null,
   geoStatus: "idle",
+  mapArea: null,
+  mapAddress: null,
 };
 
 function PointEditor({
@@ -36,8 +46,10 @@ function PointEditor({
   setPoint: (p: PointState) => void;
   locations: SavedLocation[];
 }) {
+  const [showPicker, setShowPicker] = useState(false);
+
   function useMyLocation() {
-    setPoint({ ...point, geoStatus: "locating", selectedLocationId: null });
+    setPoint({ ...point, geoStatus: "locating", selectedLocationId: null, mapArea: null, mapAddress: null });
     if (!navigator.geolocation) {
       setPoint({ ...point, geoStatus: "error" });
       return;
@@ -48,12 +60,16 @@ function PointEditor({
           ...point,
           geoStatus: "done",
           selectedLocationId: null,
+          mapArea: null,
+          mapAddress: null,
           geoCoords: { lat: pos.coords.latitude, lng: pos.coords.longitude },
         }),
       () => setPoint({ ...point, geoStatus: "error" }),
       { timeout: 10000 },
     );
   }
+
+  const pinnedLabel = point.mapAddress || point.mapArea;
 
   return (
     <div className="space-y-3">
@@ -79,24 +95,59 @@ function PointEditor({
       </div>
 
       {point.mode === "map" ? (
-        <div className="space-y-2 rounded-xl border border-dashed border-[var(--border-faint)] p-4 text-center">
-          <p className="text-sm text-ink-500">
-            Map picker isn&apos;t set up yet (needs a maps API key) — use your current location or type an address instead.
-          </p>
+        <div className="space-y-2">
+          {pinnedLabel ? (
+            <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-ink">{pinnedLabel}</p>
+                <button onClick={() => setShowPicker(true)} className="mt-1 text-xs font-bold text-gold underline">
+                  Change pin
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowPicker(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-faint)] py-3 text-sm font-bold text-ink"
+            >
+              <Map className="h-4 w-4 text-gold" strokeWidth={2.25} aria-hidden />
+              Choose on map
+            </button>
+          )}
           <button
             onClick={useMyLocation}
             className={`mx-auto flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-bold ${
-              point.geoStatus === "done" ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink"
+              point.geoStatus === "done" && !pinnedLabel
+                ? "border-gold bg-gold/10 text-ink"
+                : "border-[var(--border-faint)] text-ink"
             }`}
           >
             <LocateFixed className="h-3.5 w-3.5 text-gold" strokeWidth={2.25} aria-hidden />
             {point.geoStatus === "locating"
               ? "Locating…"
-              : point.geoStatus === "done"
+              : point.geoStatus === "done" && !pinnedLabel
                 ? "Using current location"
-                : "Use my current location"}
+                : "Use my current location instead"}
           </button>
           {point.geoStatus === "error" && <p className="text-xs text-red-600">Couldn&apos;t get your location.</p>}
+          {showPicker && (
+            <LocationMapPicker
+              initial={point.geoCoords ?? undefined}
+              onCancel={() => setShowPicker(false)}
+              onConfirm={(loc) => {
+                setPoint({
+                  ...point,
+                  geoCoords: { lat: loc.lat, lng: loc.lng },
+                  geoStatus: "done",
+                  selectedLocationId: null,
+                  mapArea: loc.area,
+                  mapAddress: loc.address,
+                });
+                setShowPicker(false);
+              }}
+            />
+          )}
         </div>
       ) : (
         <>
@@ -137,14 +188,17 @@ function PointEditor({
   );
 }
 
-function resolvePoint(point: PointState, locations: SavedLocation[]) {
+function resolvePoint(point: PointState, locations: SavedLocation[]): { area?: string; address?: string } {
   const selected = locations.find((l) => l.id === point.selectedLocationId);
-  const area = selected?.area || point.area.trim() || undefined;
-  const address =
-    selected?.address ||
-    point.address.trim() ||
-    (point.geoCoords ? `Current location (${point.geoCoords.lat.toFixed(4)}, ${point.geoCoords.lng.toFixed(4)})` : undefined);
-  return { area, address };
+  if (selected) return { area: selected.area ?? undefined, address: selected.address ?? undefined };
+  if (point.mode === "map") {
+    if (point.mapArea || point.mapAddress) return { area: point.mapArea ?? undefined, address: point.mapAddress ?? undefined };
+    if (point.geoCoords) {
+      return { area: undefined, address: `Current location (${point.geoCoords.lat.toFixed(4)}, ${point.geoCoords.lng.toFixed(4)})` };
+    }
+    return { area: undefined, address: undefined };
+  }
+  return { area: point.area.trim() || undefined, address: point.address.trim() || undefined };
 }
 
 export function ParcelModal({ onClose }: { onClose: () => void }) {
