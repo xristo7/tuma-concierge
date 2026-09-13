@@ -1,9 +1,10 @@
-export { OrderStage, ORDER_STAGES } from "./order-stage";
-export type { OrderStage as OrderStageValue } from "./order-stage";
-export { PaymentRail } from "./payment-rail";
-export type { PaymentRail as PaymentRailValue } from "./payment-rail";
-export { createApiClient } from "./api-client";
-export type { CreateApiClientOptions, ApiClient } from "./api-client";
+export { OrderStage, ORDER_STAGES } from "./order-stage.js";
+export type { OrderStage as OrderStageValue } from "./order-stage.js";
+export { PaymentRail } from "./payment-rail.js";
+export type { PaymentRail as PaymentRailValue } from "./payment-rail.js";
+export { createApiClient } from "./api-client.js";
+export type { CreateApiClientOptions, ApiClient } from "./api-client.js";
+export { isRiderProfileComplete } from "./domain.js";
 export type {
   ListStatus,
   ListSummary,
@@ -20,4 +21,4 @@ export type {
   OrderDetail,
   CreateListBody,
   CreateListResponse,
-} from "./domain";
+} from "./domain.js";

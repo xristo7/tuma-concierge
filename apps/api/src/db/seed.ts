@@ -23,7 +23,15 @@ async function run() {
     args: [adminId, "+256700000003", "Admin", passwordHash],
   });
   await db.execute({
-    sql: `INSERT OR IGNORE INTO riders (user_id, verified, is_online, area, vehicle_info) VALUES (?, 1, 1, 'Kololo', 'Boda — UBG 123X')`,
+    sql: `INSERT OR IGNORE INTO riders (
+            user_id, verified, is_online, area, vehicle_info,
+            first_name, last_name, stage_address, home_address, stage_lat, stage_lng,
+            stage_name, stage_chairman_name, stage_chairman_contact,
+            emergency_contact_name, emergency_contact_phone, national_id_key, profile_completed_at
+          ) VALUES (?, 1, 1, 'Kololo', 'UBG 123X',
+            'Juma', 'Okello', 'Kololo, Kampala', 'Ntinda, Kampala', 0.3476, 32.5825,
+            'Kololo Stage', 'Peter Mugisha', '+256700000010',
+            'Grace Okello', '+256700000011', 'seed/demo-national-id.jpg', datetime('now'))`,
     args: [riderId],
   });
 

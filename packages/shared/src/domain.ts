@@ -94,7 +94,43 @@ export type Rider = {
   vehicle_info: string | null;
   rating: number;
   momo_msisdn: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  alt_phone: string | null;
+  stage_address: string | null;
+  home_address: string | null;
+  stage_lat: number | null;
+  stage_lng: number | null;
+  stage_name: string | null;
+  stage_chairman_name: string | null;
+  stage_chairman_contact: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  national_id_key: string | null;
+  profile_completed_at: string | null;
 };
+
+/** The fields a rider must fill in (incl. their motorcycle reg. via `vehicle_info`,
+ * a National ID scan, and a stage location picked on the map) before they're
+ * eligible for admin verification/approval to take jobs. */
+export function isRiderProfileComplete(rider: Rider | null | undefined): boolean {
+  if (!rider) return false;
+  return Boolean(
+    rider.first_name &&
+      rider.last_name &&
+      rider.vehicle_info &&
+      rider.stage_address &&
+      rider.stage_lat != null &&
+      rider.stage_lng != null &&
+      rider.home_address &&
+      rider.stage_name &&
+      rider.stage_chairman_name &&
+      rider.stage_chairman_contact &&
+      rider.emergency_contact_name &&
+      rider.emergency_contact_phone &&
+      rider.national_id_key,
+  );
+}
 
 export type SavedLocation = {
   id: string;

@@ -10,7 +10,7 @@ import type {
   Payment,
   Rider,
   SavedLocation,
-} from "./domain";
+} from "./domain.js";
 
 export type CreateApiClientOptions = {
   baseUrl: string;
@@ -161,8 +161,36 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
 
     // Riders
-    async applyAsRider(input: { area?: string; vehicleInfo?: string; momoMsisdn?: string }) {
+    async applyAsRider(input: {
+      area?: string;
+      vehicleInfo?: string;
+      momoMsisdn?: string;
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      altPhone?: string;
+      stageAddress?: string;
+      homeAddress?: string;
+      stageLat?: number;
+      stageLng?: number;
+      stageName?: string;
+      stageChairmanName?: string;
+      stageChairmanContact?: string;
+      emergencyContactName?: string;
+      emergencyContactPhone?: string;
+    }) {
       return request<{ rider: Rider }>("/v1/riders/apply", { method: "POST", body: JSON.stringify(input) });
+    },
+    /** Uploads the rider's National ID scan (verification only). `file` is a browser File/Blob. */
+    async uploadRiderIdDocument(file: Blob) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await f(`${root}/v1/riders/id-document`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ rider: Rider }>(res);
     },
     async setRiderOnline(online: boolean) {
       return request<{ rider: Rider }>("/v1/riders/status", { method: "POST", body: JSON.stringify({ online }) });

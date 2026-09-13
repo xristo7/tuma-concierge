@@ -1,12 +1,15 @@
 "use client";
 
-import type { AuthUser } from "@tuma/shared";
+import type { AuthUser, Rider } from "@tuma/shared";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, TOKEN_KEY, USER_KEY } from "./api";
 
 type AuthState = {
   user: AuthUser | null;
   ready: boolean;
+  rider: Rider | null;
+  riderReady: boolean;
+  refreshRider: () => Promise<void>;
   login: (phone: string, password: string) => Promise<void>;
   register: (input: { phone: string; name: string; password: string }) => Promise<void>;
   logout: () => void;
@@ -17,6 +20,8 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
+  const [rider, setRider] = useState<Rider | null>(null);
+  const [riderReady, setRiderReady] = useState(false);
 
   useEffect(() => {
     try {
@@ -28,6 +33,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setReady(true);
     }
   }, []);
+
+  const refreshRider = useCallback(async () => {
+    if (!user || user.role !== "rider") {
+      setRider(null);
+      setRiderReady(true);
+      return;
+    }
+    try {
+      const res = await api.myRiderProfile();
+      setRider(res.rider);
+    } finally {
+      setRiderReady(true);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    setRiderReady(false);
+    void refreshRider();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const persist = useCallback((token: string, nextUser: AuthUser) => {
     window.localStorage.setItem(TOKEN_KEY, token);
@@ -55,11 +80,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.removeItem(TOKEN_KEY);
     window.localStorage.removeItem(USER_KEY);
     setUser(null);
+    setRider(null);
   }, []);
 
   const value = useMemo(
-    () => ({ user, ready, login, register, logout }),
-    [user, ready, login, register, logout],
+    () => ({ user, ready, rider, riderReady, refreshRider, login, register, logout }),
+    [user, ready, rider, riderReady, refreshRider, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

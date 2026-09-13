@@ -19,6 +19,9 @@ importers:
       '@libsql/client':
         specifier: ^0.14.0
         version: 0.14.0
+      '@tuma/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
@@ -114,6 +117,9 @@ importers:
       '@tuma/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      leaflet:
+        specifier: ^1.9.4
+        version: 1.9.4
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.3.0)
@@ -126,10 +132,16 @@ importers:
       react-dom:
         specifier: ^19.0.0
         version: 19.3.0(react@19.3.0)
+      react-leaflet:
+        specifier: ^5.0.0
+        version: 5.0.0(leaflet@1.9.4)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
     devDependencies:
       '@opennextjs/cloudflare':
         specifier: ^1.20.6
         version: 1.20.6(next@15.5.25(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.131.1)
+      '@types/leaflet':
+        specifier: ^1.9.22
+        version: 1.9.22
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.2
