@@ -163,7 +163,7 @@ export function LocationMapPicker({
               <button
                 key={i}
                 onClick={() => chooseResult(r)}
-                className="block w-full truncate px-3 py-2 text-left text-sm text-ink hover:bg-[#ECE8E2]"
+                className="block w-full truncate px-3 py-2 text-left text-sm text-ink hover:bg-[rgb(var(--surface-muted))]"
               >
                 {r.display_name}
               </button>

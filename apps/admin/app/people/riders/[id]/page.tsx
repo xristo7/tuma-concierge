@@ -81,7 +81,7 @@ export default function RiderDetailPage() {
         <h1 className="text-xl font-bold text-ink">{rider.name}</h1>
         <span
           className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-            rider.verified ? "bg-green/15 text-green" : "bg-[#ECE8E2] text-ink-500"
+            rider.verified ? "bg-green/15 text-green" : "bg-[rgb(var(--surface-muted))] text-ink-500"
           }`}
         >
           {rider.verified ? "Verified" : "Pending"}

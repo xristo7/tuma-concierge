@@ -221,7 +221,7 @@ export default function JobDetailPage() {
                     </span>
                   </div>
                   {isEditing && (
-                    <div className="mt-1.5 space-y-1.5 rounded-xl bg-[#ECE8E2] p-2.5">
+                    <div className="mt-1.5 space-y-1.5 rounded-xl bg-[rgb(var(--surface-muted))] p-2.5">
                       <button
                         type="button"
                         onClick={() => markUnavailable(item)}
@@ -291,7 +291,7 @@ export default function JobDetailPage() {
         <section className="home-card space-y-2">
           <h2 className="text-sm font-semibold text-ink">Delivery fee</h2>
           {latestFeeProposal && (
-            <div className="flex items-center justify-between rounded-xl bg-[#ECE8E2] p-3 text-sm">
+            <div className="flex items-center justify-between rounded-xl bg-[rgb(var(--surface-muted))] p-3 text-sm">
               <span className="text-ink">
                 You suggested {formatUgx(latestFeeProposal.proposed_total)}
                 {latestFeeProposal.reason ? ` — ${latestFeeProposal.reason}` : ""}
@@ -390,7 +390,7 @@ export default function JobDetailPage() {
                       ? "bg-green/15 text-green"
                       : sub.status === "rejected"
                         ? "bg-red-100 text-red-700"
-                        : "bg-[#ECE8E2] text-ink-500"
+                        : "bg-[rgb(var(--surface-muted))] text-ink-500"
                   }`}
                 >
                   {sub.status}

@@ -94,7 +94,7 @@ export default function AdminOrderDetailPage() {
                     ? "bg-green/15 text-green"
                     : sub.status === "rejected"
                       ? "bg-red-100 text-red-700"
-                      : "bg-[#ECE8E2] text-ink-500"
+                      : "bg-[rgb(var(--surface-muted))] text-ink-500"
                 }`}
               >
                 {sub.status}
@@ -117,7 +117,7 @@ export default function AdminOrderDetailPage() {
                     ? "bg-green/15 text-green"
                     : p.status === "failed"
                       ? "bg-red-100 text-red-700"
-                      : "bg-[#ECE8E2] text-ink-500"
+                      : "bg-[rgb(var(--surface-muted))] text-ink-500"
                 }`}
               >
                 {p.status}

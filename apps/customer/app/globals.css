@@ -28,6 +28,9 @@
   /* Card surface — separate from --color-cream (the page background) so
      dark mode can give cards visible elevation against a darker page. */
   --surface-card: 255 255 255;
+  /* Muted chip/pill surface (item badges, qty/unit inputs, total bars) —
+     a step down from --surface-card, not the page background itself. */
+  --surface-muted: 236 232 226;
   /* Surface tokens (SURFACE-TOKENS.md) */
   --radius-card: 24px;
   --border-faint: rgba(10, 10, 10, 0.08);
@@ -59,6 +62,7 @@
     --color-navy-400: 120 155 214;
     --color-navy-700: 150 180 224;
     --surface-card: 22 48 88;
+    --surface-muted: 40 76 122;
     --border-faint: rgba(247, 243, 238, 0.1);
   }
 }
@@ -80,6 +84,7 @@
   --color-navy-400: 120 155 214;
   --color-navy-700: 150 180 224;
   --surface-card: 22 48 88;
+  --surface-muted: 40 76 122;
   --border-faint: rgba(247, 243, 238, 0.1);
 }
 

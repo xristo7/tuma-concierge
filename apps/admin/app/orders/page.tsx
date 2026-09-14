@@ -42,7 +42,7 @@ export default function OrdersPage() {
             key={t}
             onClick={() => setType(t)}
             className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${
-              type === t ? "bg-ink text-white" : "bg-[#ECE8E2] text-ink-500"
+              type === t ? "bg-ink text-white" : "bg-[rgb(var(--surface-muted))] text-ink-500"
             }`}
           >
             {t}
@@ -55,7 +55,7 @@ export default function OrdersPage() {
             key={s}
             onClick={() => setStage(s)}
             className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-              stage === s ? "bg-gold text-ink" : "bg-[#ECE8E2] text-ink-500"
+              stage === s ? "bg-gold text-ink" : "bg-[rgb(var(--surface-muted))] text-ink-500"
             }`}
           >
             {s === "all" ? "All" : stageLabel(s)}

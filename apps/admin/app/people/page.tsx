@@ -44,7 +44,7 @@ function RidersTab() {
             key={f}
             onClick={() => setFilter(f)}
             className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${
-              filter === f ? "bg-ink text-white" : "bg-[#ECE8E2] text-ink-500"
+              filter === f ? "bg-ink text-white" : "bg-[rgb(var(--surface-muted))] text-ink-500"
             }`}
           >
             {f}
@@ -140,7 +140,7 @@ export default function PeoplePage() {
     <div className="space-y-5 px-4 pb-6 pt-4">
       <h1 className="text-xl font-bold text-ink">People</h1>
 
-      <div className="flex rounded-full bg-[#ECE8E2] p-1">
+      <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
         {(["riders", "customers"] as const).map((t) => (
           <button
             key={t}

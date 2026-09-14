@@ -8,7 +8,7 @@ import { api } from "../../lib/api";
 
 function statusClasses(status: string) {
   if (status === "delivered") return "bg-green/15 text-green";
-  return "bg-[#E8E4DE] text-ink-500";
+  return "bg-[rgb(var(--surface-muted))] text-ink-500";
 }
 
 export function RecentLists() {

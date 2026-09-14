@@ -160,7 +160,7 @@ export default function AccountPage() {
         {rider && (
           <span
             className={`ml-auto shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-              rider.verified ? "bg-green/15 text-green" : "bg-[#ECE8E2] text-ink-500"
+              rider.verified ? "bg-green/15 text-green" : "bg-[rgb(var(--surface-muted))] text-ink-500"
             }`}
           >
             {rider.verified ? "Verified" : "Pending"}
@@ -191,7 +191,7 @@ export default function AccountPage() {
               <input
                 disabled
                 value={user?.phone ?? ""}
-                className="w-full rounded-xl border border-[var(--border-faint)] bg-[#ECE8E2] px-3 py-2.5 text-[15px] text-ink-500 outline-none"
+                className="w-full rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-muted))] px-3 py-2.5 text-[15px] text-ink-500 outline-none"
               />
             </div>
             <Field

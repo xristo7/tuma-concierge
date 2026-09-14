@@ -154,7 +154,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
           <div className="space-y-2">
             {items.map((item, i) => (
               <div key={i} className="flex items-center gap-2 rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] p-2.5">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ECE8E2] text-xs font-bold text-ink-500">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-xs font-bold text-ink-500">
                   {i + 1}
                 </span>
                 <input
@@ -168,14 +168,14 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
                   onChange={(e) => updateItem(i, { quantity: e.target.value.replace(/[^\d]/g, "") })}
                   inputMode="numeric"
                   placeholder="Qty"
-                  className="w-12 shrink-0 rounded-lg border border-[var(--border-faint)] px-1.5 py-1 text-center text-sm outline-none"
+                  className="w-12 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-center text-sm text-ink outline-none"
                 />
                 <input
                   value={item.unitCost}
                   onChange={(e) => updateItem(i, { unitCost: e.target.value.replace(/[^\d]/g, "") })}
                   inputMode="numeric"
                   placeholder="Unit cost"
-                  className="w-20 shrink-0 rounded-lg border border-[var(--border-faint)] px-1.5 py-1 text-right text-sm outline-none"
+                  className="w-20 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-right text-sm text-ink outline-none"
                 />
                 <button
                   onClick={() => removeItem(i)}
@@ -195,7 +195,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          <div className="flex items-center justify-between rounded-xl bg-[#ECE8E2] px-4 py-3">
+          <div className="flex items-center justify-between rounded-xl bg-[rgb(var(--surface-muted))] px-4 py-3">
             <span className="text-sm font-semibold text-ink">Total</span>
             <span className="text-base font-bold text-ink">{currency(total)}</span>
           </div>

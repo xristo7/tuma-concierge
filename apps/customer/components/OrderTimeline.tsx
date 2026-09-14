@@ -55,7 +55,7 @@ export function OrderTimeline({
   return (
     <section className="home-card space-y-4">
       <div className="flex items-center justify-between">
-        <span className="rounded-full bg-[#ECE8E2] px-3 py-1 text-xs font-semibold text-ink-500">Timeline</span>
+        <span className="rounded-full bg-[rgb(var(--surface-muted))] px-3 py-1 text-xs font-semibold text-ink-500">Timeline</span>
         <span
           className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
             isComplete ? "bg-green/15 text-green" : "bg-gold/15 text-gold"

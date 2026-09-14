@@ -103,7 +103,7 @@ export default function VerifyPage() {
         </div>
 
         {hasBothChannels && (
-          <div className="flex rounded-full bg-[#ECE8E2] p-1">
+          <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
             {(["sms", "email"] as const).map((c) => (
               <button
                 key={c}

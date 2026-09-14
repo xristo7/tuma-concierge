@@ -31,7 +31,7 @@ export function Modal({
           <h2 className="text-lg font-bold text-ink">{title}</h2>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ECE8E2] text-ink-500"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-ink-500"
             aria-label="Close"
           >
             <X className="h-4 w-4" strokeWidth={2.25} />

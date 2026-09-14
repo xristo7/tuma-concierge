@@ -188,7 +188,7 @@ export default function OrderDetailPage() {
             <button
               disabled={busy}
               onClick={() => run(() => api.decideFeeProposal(orderId, pendingFeeProposal.id, false))}
-              className="flex-1 rounded-full bg-[#ECE8E2] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
+              className="flex-1 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
             >
               Reject
             </button>
@@ -336,7 +336,7 @@ export default function OrderDetailPage() {
                         <button
                           disabled={busy}
                           onClick={() => run(() => decideGroup(group, false))}
-                          className="flex-1 rounded-full bg-[#ECE8E2] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
+                          className="flex-1 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
                         >
                           Reject
                         </button>

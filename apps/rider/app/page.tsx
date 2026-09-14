@@ -75,7 +75,7 @@ export default function JobsHomePage() {
             disabled={busy || !rider.verified}
             onClick={toggleOnline}
             className={`rounded-full px-4 py-2 text-sm font-bold disabled:opacity-50 ${
-              rider.is_online ? "bg-green text-white" : "bg-[#ECE8E2] text-ink"
+              rider.is_online ? "bg-green text-white" : "bg-[rgb(var(--surface-muted))] text-ink"
             }`}
           >
             {rider.is_online ? "Online" : "Offline"}

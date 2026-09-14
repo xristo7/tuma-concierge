@@ -45,7 +45,7 @@ export default function LoginPage() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/tuma-logo-white.png" alt="Tuma" className="mx-auto hidden h-9 w-auto dark:block" />
 
-        <div className="flex rounded-full bg-[#ECE8E2] p-1">
+        <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
           {(["login", "register"] as const).map((m) => (
             <button
               key={m}
@@ -91,7 +91,7 @@ export default function LoginPage() {
                 />
               </div>
 
-              <div className="flex rounded-full bg-[#ECE8E2] p-1">
+              <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
                 {(["email", "phone"] as const).map((t) => (
                   <button
                     key={t}

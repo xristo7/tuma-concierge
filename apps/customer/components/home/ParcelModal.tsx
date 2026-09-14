@@ -86,7 +86,7 @@ function PointEditor({
 
   return (
     <div className="space-y-3">
-      <div className="flex rounded-full bg-[#ECE8E2] p-1">
+      <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
         <button
           onClick={() => setPoint({ ...point, mode: "text" })}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-bold ${
