@@ -254,7 +254,7 @@ export default function JobDetailPage() {
 
         {canPropose && pendingCount === 0 && (
           <p className="text-sm text-ink-500">
-            Tap the pencil next to an item above if something's unavailable or costs more.
+            Tap the pencil next to an item above if something&apos;s unavailable or costs more.
           </p>
         )}
 
