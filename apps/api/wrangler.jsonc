@@ -41,6 +41,7 @@
   "vars": {
     "ENVIRONMENT": "staging",
     "CORS_ORIGINS": "https://tumaffe.online,https://rider.tumaffe.online,https://admin.tumaffe.online,https://tuma-customer.doxalight-inc.workers.dev,https://tuma-rider.doxalight-inc.workers.dev,https://tuma-admin.doxalight-inc.workers.dev,http://localhost:3000,http://localhost:3001,http://localhost:3002",
-    "PAYMENTS_PROVIDER": "yo_mock"
+    "PAYMENTS_PROVIDER": "yo_mock",
+    "GOOGLE_CLIENT_ID": "744058453576-8hn5n31mmjdh1uhq2n3qgonuian27170.apps.googleusercontent.com"
   }
 }

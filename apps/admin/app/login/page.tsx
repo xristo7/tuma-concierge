@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PasswordInput } from "../../components/PasswordInput";
 import { errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
@@ -51,10 +52,9 @@ export default function LoginPage() {
             <label className="text-xs font-semibold text-ink-500" htmlFor="password">
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
               required
-              type="password"
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}

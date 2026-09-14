@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
+import { PasswordInput } from "../../components/PasswordInput";
 import { errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
@@ -144,10 +146,9 @@ export default function LoginPage() {
             <label className="text-xs font-semibold text-ink-500" htmlFor="password">
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
               required
-              type="password"
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -172,6 +173,8 @@ export default function LoginPage() {
             </Link>
           )}
         </form>
+
+        <GoogleSignInButton role="rider" />
 
         {mode === "register" && (
           <p className="text-center text-xs text-ink-500">

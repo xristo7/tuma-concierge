@@ -90,6 +90,13 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
         body: JSON.stringify(input),
       });
     },
+    /** Sign in/up with Google — `idToken` is the credential Google Identity Services hands the client. */
+    async googleAuth(idToken: string, role?: "customer" | "rider") {
+      return request<{ token: string; user: AuthUser; riderStatus?: "pending_verification" }>("/v1/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ idToken, role }),
+      });
+    },
     async me() {
       return request<{ user: AuthUser }>("/v1/auth/me");
     },

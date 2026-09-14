@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PasswordInput } from "../../components/PasswordInput";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
@@ -116,10 +117,9 @@ export default function ForgotPasswordPage() {
               <label className="text-xs font-semibold text-ink-500" htmlFor="newPassword">
                 New password
               </label>
-              <input
+              <PasswordInput
                 id="newPassword"
                 required
-                type="password"
                 minLength={6}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}

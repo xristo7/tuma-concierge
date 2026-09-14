@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { Hono } from "hono";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { hashCode } from "../verify/otp.js";
@@ -135,6 +136,85 @@ authRoutes.post("/login", async (c) => {
   return c.json({
     token,
     user: toAuthUser(row),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Sign in / sign up with Google — verifies the ID token the client got from
+// Google Identity Services directly against Google's own signing keys, so
+// the API never needs the OAuth client secret at all (that's only for the
+// server-side authorization-code flow, which this isn't). An email Google
+// has already verified is trusted as verified here too, skipping our own
+// OTP step for that account.
+// ---------------------------------------------------------------------------
+
+const googleJwks = createRemoteJWKSet(new URL("https://www.googleapis.com/oauth2/v3/certs"));
+
+const googleAuthSchema = z.object({
+  idToken: z.string().min(10),
+  role: z.enum(["customer", "rider"]).default("customer"),
+});
+
+authRoutes.post("/google", async (c) => {
+  const parsed = googleAuthSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+  const { idToken, role } = parsed.data;
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) return c.json({ error: "google_not_configured" }, 501);
+
+  let email: string | undefined;
+  let name: string | undefined;
+  try {
+    const { payload } = await jwtVerify(idToken, googleJwks, {
+      issuer: ["https://accounts.google.com", "accounts.google.com"],
+      audience: clientId,
+    });
+    if (!payload.email_verified) return c.json({ error: "google_email_unverified" }, 400);
+    email = payload.email as string | undefined;
+    name = payload.name as string | undefined;
+  } catch (err) {
+    return c.json({ error: "invalid_google_token", message: String(err) }, 401);
+  }
+  if (!email) return c.json({ error: "google_email_missing" }, 400);
+
+  const existing = await db.execute({ sql: "SELECT * FROM users WHERE email = ?", args: [email] });
+  let row = existing.rows[0] as unknown as (UserRow & Record<string, unknown>) | undefined;
+  let isNewUser = false;
+
+  if (!row) {
+    isNewUser = true;
+    const id = crypto.randomUUID();
+    // Google-only accounts never use a password to sign in, but the column
+    // is NOT NULL — fill it with something nobody knows and nobody needs.
+    const passwordHash = await bcrypt.hash(crypto.randomUUID(), 10);
+    await db.execute({
+      sql: `INSERT INTO users (id, email, name, password_hash, role, email_verified_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+      args: [id, email, name?.trim() || email.split("@")[0], passwordHash, role],
+    });
+    if (role === "rider") {
+      await db.execute({ sql: "INSERT INTO riders (user_id, verified, is_online) VALUES (?, 0, 0)", args: [id] });
+    }
+    const userRow = await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [id] });
+    row = userRow.rows[0] as unknown as typeof row;
+  } else if (row.status === "suspended") {
+    return c.json({ error: "account_suspended", message: "This account has been suspended" }, 403);
+  } else if (!row.email_verified_at) {
+    // Google already proved they own this email — piggyback the confirmation.
+    await db.execute({
+      sql: "UPDATE users SET email_verified_at = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+      args: [row.id],
+    });
+    const userRow = await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [row.id] });
+    row = userRow.rows[0] as unknown as typeof row;
+  }
+
+  const token = await signToken({ sub: row!.id, role: row!.role, phone: row!.phone });
+  return c.json({
+    token,
+    user: toAuthUser(row!),
+    ...(isNewUser && row!.role === "rider" ? { riderStatus: "pending_verification" as const } : {}),
   });
 });
 
