@@ -5,6 +5,7 @@ import { MapPin, Pencil, X } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
+import { VoiceReasonRecorder } from "../../../components/VoiceReasonRecorder";
 import { api, errorMessage } from "../../../lib/api";
 import { formatUgx, jobTitle, stageLabel } from "../../../lib/order-display";
 
@@ -320,19 +321,24 @@ export default function JobDetailPage() {
             )
           ) : (
             <div className="space-y-1.5">
-              <div className="grid grid-cols-2 gap-1.5">
-                <input
-                  value={feeDraft}
-                  onChange={(e) => setFeeDraft(e.target.value.replace(/[^\d]/g, ""))}
-                  inputMode="numeric"
-                  placeholder="New total (UGX)"
-                  className="w-full rounded-lg border border-[var(--border-faint)] px-2.5 py-2 text-sm outline-none focus:border-gold"
-                />
+              <input
+                value={feeDraft}
+                onChange={(e) => setFeeDraft(e.target.value.replace(/[^\d]/g, ""))}
+                inputMode="numeric"
+                placeholder="New total (UGX)"
+                className="w-full rounded-lg border border-[var(--border-faint)] px-2.5 py-2 text-sm outline-none focus:border-gold"
+              />
+              <div className="flex items-center gap-1.5">
                 <input
                   value={feeReason}
                   onChange={(e) => setFeeReason(e.target.value)}
-                  placeholder="Reason (optional)"
+                  placeholder="Reason (optional) — type or dictate"
                   className="w-full rounded-lg border border-[var(--border-faint)] px-2.5 py-2 text-sm outline-none focus:border-gold"
+                />
+                <VoiceReasonRecorder
+                  onTranscript={(text) =>
+                    setFeeReason((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
+                  }
                 />
               </div>
               <div className="flex gap-1.5">

@@ -41,6 +41,10 @@ voiceRoutes.post("/voice/transcribe", async (c) => {
   if (!(file instanceof File)) return c.json({ error: "missing_audio" }, 400);
   if (file.size > MAX_AUDIO_BYTES) return c.json({ error: "file_too_large" }, 400);
   if (file.size === 0) return c.json({ error: "empty_audio" }, 400);
+  // Plain dictation (e.g. a rider's reason for a fee change) skips the
+  // shopping-item extraction pass entirely — one fewer model call, and
+  // there's nothing item-shaped to extract from a sentence like that anyway.
+  const extractItems = form?.get("extractItems") !== "false";
 
   const ai = getAiBinding();
 
@@ -54,8 +58,8 @@ voiceRoutes.post("/voice/transcribe", async (c) => {
     return c.json({ error: "transcription_failed", message: "Couldn't understand the recording. Please try again." }, 502);
   }
 
-  if (!transcript) {
-    return c.json({ transcript: "", items: [] });
+  if (!transcript || !extractItems) {
+    return c.json({ transcript, items: [] });
   }
 
   let items: ExtractedItem[] = [];

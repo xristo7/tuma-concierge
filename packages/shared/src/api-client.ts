@@ -118,9 +118,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
 
     // Voice notes — transcribes a recorded shopping list into items
-    async transcribeVoiceNote(audio: Blob) {
+    async transcribeVoiceNote(audio: Blob, options: { extractItems?: boolean } = {}) {
       const form = new FormData();
       form.append("audio", audio, "note.webm");
+      if (options.extractItems === false) form.append("extractItems", "false");
       const res = await f(`${root}/v1/voice/transcribe`, {
         method: "POST",
         headers: authHeaders(),
