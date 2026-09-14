@@ -8,8 +8,10 @@ type AuthState = {
   user: AuthUser | null;
   ready: boolean;
   login: (phone: string, password: string) => Promise<void>;
-  register: (input: { phone: string; name: string; password: string }) => Promise<void>;
+  register: (input: { phone: string; email?: string; name: string; password: string }) => Promise<void>;
   logout: () => void;
+  /** Patches the persisted user in place (e.g. after OTP verification succeeds) without a new token. */
+  updateUser: (user: AuthUser) => void;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -44,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const register = useCallback(
-    async (input: { phone: string; name: string; password: string }) => {
+    async (input: { phone: string; email?: string; name: string; password: string }) => {
       const res = await api.register({ ...input, role: "customer" });
       persist(res.token, res.user);
     },
@@ -57,9 +59,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const updateUser = useCallback((nextUser: AuthUser) => {
+    window.localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    setUser(nextUser);
+  }, []);
+
   const value = useMemo(
-    () => ({ user, ready, login, register, logout }),
-    [user, ready, login, register, logout],
+    () => ({ user, ready, login, register, logout, updateUser }),
+    [user, ready, login, register, logout, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

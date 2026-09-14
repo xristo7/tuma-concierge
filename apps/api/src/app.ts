@@ -5,6 +5,7 @@ import { locationRoutes } from "./locations/routes.js";
 import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { riderRoutes } from "./riders/routes.js";
+import { verifyRoutes } from "./verify/routes.js";
 
 /** Hono app shared by the Node entry (local dev) and the Cloudflare Worker entry. */
 const app = new Hono();
@@ -56,6 +57,8 @@ app.get("/v1", (c) =>
       "POST /v1/auth/register",
       "POST /v1/auth/login",
       "GET /v1/auth/me",
+      "POST /v1/auth/verify/request",
+      "POST /v1/auth/verify/confirm",
       "POST /v1/lists",
       "GET /v1/lists/recent",
       "GET /v1/lists/:id",
@@ -87,6 +90,7 @@ app.get("/v1", (c) =>
 );
 
 app.route("/v1/auth", authRoutes);
+app.route("/v1/auth", verifyRoutes);
 app.route("/v1", orderRoutes);
 app.route("/v1", paymentRoutes);
 app.route("/v1", riderRoutes);

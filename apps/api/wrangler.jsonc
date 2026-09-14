@@ -16,6 +16,25 @@
       "bucket_name": "tuma"
     }
   ],
+  "migrations": [
+    // The in-app call feature (PR #6) was previously deployed to this
+    // Worker directly, ahead of this branch's own history, then dropped
+    // from this branch's committed code (see "drop duplicate
+    // call-signaling scope from this branch"). CallRoom holds no
+    // persistent data — it's a pure in-memory WebSocket relay — so
+    // formally retiring the orphaned Durable Object class is safe.
+    // Wrangler needs the original creating migration replayed (a no-op,
+    // since Cloudflare already has this tag on record) before it will
+    // accept the deletion that follows.
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CallRoom"]
+    },
+    {
+      "tag": "v2-drop-call-room",
+      "deleted_classes": ["CallRoom"]
+    }
+  ],
   "vars": {
     "ENVIRONMENT": "staging",
     "CORS_ORIGINS": "https://tuma-customer.doxalight-inc.workers.dev,https://tuma-rider.doxalight-inc.workers.dev,http://localhost:3000,http://localhost:3001",

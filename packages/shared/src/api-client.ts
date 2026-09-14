@@ -61,11 +61,17 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
 
     // Auth
-    async register(input: { phone: string; name: string; password: string; role?: "customer" | "rider" }) {
-      return request<{ token: string; user: AuthUser }>("/v1/auth/register", {
-        method: "POST",
-        body: JSON.stringify(input),
-      });
+    async register(input: {
+      phone: string;
+      email?: string;
+      name: string;
+      password: string;
+      role?: "customer" | "rider";
+    }) {
+      return request<{ token: string; user: AuthUser; riderStatus?: "pending_verification"; verifyDevCode?: string }>(
+        "/v1/auth/register",
+        { method: "POST", body: JSON.stringify(input) },
+      );
     },
     async login(input: { phone: string; password: string }) {
       return request<{ token: string; user: AuthUser }>("/v1/auth/login", {
@@ -75,6 +81,20 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
     async me() {
       return request<{ user: AuthUser }>("/v1/auth/me");
+    },
+
+    // Onboarding verification (either phone or email confirms the account)
+    async requestVerification(channel: "sms" | "email") {
+      return request<{ sent: true; channel: "sms" | "email"; target: string; devCode?: string }>(
+        "/v1/auth/verify/request",
+        { method: "POST", body: JSON.stringify({ channel }) },
+      );
+    },
+    async confirmVerification(channel: "sms" | "email", code: string) {
+      return request<{ user: AuthUser }>("/v1/auth/verify/confirm", {
+        method: "POST",
+        body: JSON.stringify({ channel, code }),
+      });
     },
 
     // Lists

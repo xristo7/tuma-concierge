@@ -8,6 +8,7 @@ export default function LoginPage() {
   const { login, register } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -21,7 +22,7 @@ export default function LoginPage() {
       if (mode === "login") {
         await login(phone, password);
       } else {
-        await register({ phone, name, password });
+        await register({ phone, email: email.trim() || undefined, name, password });
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -85,6 +86,24 @@ export default function LoginPage() {
               placeholder="+256700000001"
             />
           </div>
+          {mode === "register" && (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-ink-500" htmlFor="email">
+                Email <span className="font-normal text-ink-500/70">(optional)</span>
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                placeholder="sharon@example.com"
+              />
+              <p className="text-xs text-ink-500">
+                We&apos;ll verify your phone by SMS — add an email if you&apos;d rather verify that way instead.
+              </p>
+            </div>
+          )}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-ink-500" htmlFor="password">
               Password

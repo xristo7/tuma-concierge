@@ -144,9 +144,18 @@ export type SavedLocation = {
 export type AuthUser = {
   id: string;
   phone: string;
+  email: string | null;
   name: string;
   role: "customer" | "rider" | "admin";
+  phoneVerifiedAt: string | null;
+  emailVerifiedAt: string | null;
 };
+
+/** True once either phone or email has been confirmed via OTP — the two
+ * channels are interchangeable, only one needs to succeed. */
+export function isUserVerified(user: AuthUser | null | undefined): boolean {
+  return !!user && (!!user.phoneVerifiedAt || !!user.emailVerifiedAt);
+}
 
 export type OrderDetail = {
   order: OrderRow;
