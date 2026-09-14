@@ -332,10 +332,15 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
                     paymentRail === rail ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink-500"
                   }`}
                 >
-                  {rail}
+                  {rail === "float" ? "Cash" : "Escrow"}
                 </button>
               ))}
             </div>
+            <p className="text-xs text-ink-500">
+              {paymentRail === "float"
+                ? "You pay the rider directly, in person."
+                : "You pay upfront — held safely until delivery is confirmed."}
+            </p>
           </div>
 
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

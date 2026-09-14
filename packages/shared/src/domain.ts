@@ -263,6 +263,25 @@ export type OrderDetail = {
   feeProposals: FeeProposal[];
 };
 
+/** A rider's mobile-money cash-out of their wallet balance. */
+export type WalletWithdrawal = {
+  id: string;
+  rider_id: string;
+  amount: number;
+  provider: string;
+  provider_ref: string | null;
+  msisdn: string | null;
+  network: string | null;
+  status: "pending" | "successful" | "failed";
+  created_at: string;
+  updated_at: string;
+};
+
+export type Wallet = {
+  balance: number;
+  withdrawals: WalletWithdrawal[];
+};
+
 export type CreateListBody = {
   title?: string;
   items?: Array<{ name: string; quantity?: number; unitCost?: number; note?: string }>;

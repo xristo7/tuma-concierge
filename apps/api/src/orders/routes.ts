@@ -10,7 +10,6 @@ import type { MobileMoneyNetwork } from "@tuma/shared";
 import {
   activeProvider,
   initiateCollection,
-  initiateDisbursement,
   mobileMoneyNetworkLabel,
   UnsupportedNetworkError,
 } from "../payments/service.js";
@@ -417,13 +416,21 @@ orderRoutes.post("/orders/:id/match", async (c) => {
     return c.json({ error: "no_riders_available", message: "No verified riders online right now" }, 409);
   }
 
-  await touchOrder(id, { rider_id: candidate.id, stage: "Match", matched_out_of_range: outOfRange ? 1 : 0 });
+  // Cash orders have nothing for the customer to fund — the rider fronts
+  // the money themselves — so there's no reason to leave the order sitting
+  // in "Match" waiting on anyone. Skip straight to Shop. Escrow orders still
+  // need the customer to actually pay in, so they stop at "Match" as before.
+  const nextStage = order.payment_rail === "float" ? "Shop" : "Match";
+  await touchOrder(id, { rider_id: candidate.id, stage: nextStage, matched_out_of_range: outOfRange ? 1 : 0 });
   await logEvent(
     id,
     "Match",
     outOfRange ? `Matched with rider ${candidate.name} (out of normal range)` : `Matched with rider ${candidate.name}`,
     user.sub,
   );
+  if (order.payment_rail === "float") {
+    await logEvent(id, "Fund", "Cash rail — rider fronting funds, no payment needed upfront", user.sub);
+  }
 
   return c.json({ order: await getOrder(id) });
 });
@@ -875,13 +882,21 @@ orderRoutes.post("/orders/:id/handover", async (c) => {
   return c.json({ order: await getOrder(id) });
 });
 
+// Settling is the rider's own confirmation that the job is done — the
+// customer already gave theirs by entering the handover PIN. Requiring both
+// before any money moves is the whole point of escrow: nothing releases
+// from it until each side has confirmed. Escrow proceeds are credited to
+// the rider's in-app wallet here rather than wired out immediately; they
+// withdraw to mobile money separately, whenever they want. Cash-rail jobs
+// have nothing to release — the rider already holds the cash — so this
+// just closes the job out.
 orderRoutes.post("/orders/:id/settle", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
   const order = await getOrder(id);
   if (!order) return c.json({ error: "not_found" }, 404);
-  if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
-    return c.json({ error: "forbidden" }, 403);
+  if (order.rider_id !== user.sub && user.role !== "admin") {
+    return c.json({ error: "forbidden", message: "Only the assigned rider can settle this order" }, 403);
   }
   if (order.stage !== "Handover") {
     return c.json({ error: "invalid_stage", message: `Cannot settle from stage ${order.stage}` }, 409);
@@ -890,34 +905,9 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
   const total = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
 
   if (order.payment_rail === "escrow" && order.rider_id) {
-    const riderRow = await db.execute({
-      sql: "SELECT momo_msisdn FROM riders WHERE user_id = ?",
-      args: [order.rider_id as string],
-    });
-    const msisdn = riderRow.rows[0]?.momo_msisdn as string | undefined;
-
-    if (!msisdn) {
-      return c.json({ error: "rider_missing_mobile_money", message: "Rider has no mobile money number on file" }, 409);
-    }
-
-    const paymentId = newId("pay");
-    let providerRef: string;
-    let network: MobileMoneyNetwork;
-    try {
-      const initiated = await initiateDisbursement({ referenceId: paymentId, msisdn, amount: total });
-      providerRef = initiated.providerRef;
-      network = initiated.network;
-    } catch (err) {
-      if (err instanceof UnsupportedNetworkError) {
-        return c.json({ error: "unsupported_network", message: err.message }, 400);
-      }
-      return c.json({ error: "payout_request_failed", message: String(err) }, 502);
-    }
-
     await db.execute({
-      sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, msisdn, network, amount, currency, status)
-            VALUES (?, ?, 'disbursement', ?, ?, ?, ?, ?, 'UGX', 'pending')`,
-      args: [paymentId, id, activeProvider(), providerRef, msisdn, network, total],
+      sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
+      args: [total, order.rider_id as string],
     });
   }
 
@@ -926,7 +916,12 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
     sql: "UPDATE lists SET status = 'delivered', updated_at = datetime('now') WHERE id = ?",
     args: [order.list_id as string],
   });
-  await logEvent(id, "Settle", "Order settled", user.sub);
+  await logEvent(
+    id,
+    "Settle",
+    order.payment_rail === "escrow" ? `Order settled — ${formatAmount(total)} credited to rider wallet` : "Order settled",
+    user.sub,
+  );
 
   return c.json({ order: await getOrder(id) });
 });

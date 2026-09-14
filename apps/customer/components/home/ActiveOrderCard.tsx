@@ -29,6 +29,10 @@ export function ActiveOrderCard() {
   if (order === null) return null;
 
   const progress = stageProgressPct(order.stage) / 100;
+  // A matched escrow order sitting unpaid needs the customer to act right
+  // now — call that out distinctly instead of blending into the generic
+  // "Finding rider" progress label, so it's never silently stuck.
+  const needsPayment = order.stage === "Match" && order.payment_rail === "escrow" && !!order.rider_id;
 
   return (
     <section className="space-y-3">
@@ -47,14 +51,21 @@ export function ActiveOrderCard() {
         className="home-card block overflow-hidden !border-l-0 !p-0"
       >
         <div className="flex">
-          <span className="w-1.5 shrink-0 bg-green" aria-hidden />
+          <span className={`w-1.5 shrink-0 ${needsPayment ? "bg-gold" : "bg-green"}`} aria-hidden />
           <div className="min-w-0 flex-1 space-y-3 px-4 py-4">
             <div className="flex items-start justify-between gap-2">
               <h3 className="text-[15px] font-bold leading-snug text-ink">{orderTitle(order)}</h3>
-              <span className="shrink-0 rounded-full bg-green/15 px-2.5 py-0.5 text-xs font-semibold text-green">
-                {stageLabel(order.stage)}
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                  needsPayment ? "bg-gold/15 text-gold" : "bg-green/15 text-green"
+                }`}
+              >
+                {needsPayment ? "Payment needed" : stageLabel(order.stage)}
               </span>
             </div>
+            {needsPayment && (
+              <p className="text-sm font-medium text-gold">A rider is ready — tap to pay and send your order.</p>
+            )}
             <div className="flex items-center gap-3">
               <div
                 className="h-2 flex-1 overflow-hidden rounded-full bg-cream"

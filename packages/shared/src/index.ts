@@ -39,4 +39,6 @@ export type {
   OrderRating,
   CreateListBody,
   CreateListResponse,
+  Wallet,
+  WalletWithdrawal,
 } from "./domain.js";

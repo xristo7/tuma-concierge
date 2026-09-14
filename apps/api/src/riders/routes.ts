@@ -1,11 +1,15 @@
-import { isRiderProfileComplete, type Rider } from "@tuma/shared";
+import { isRiderProfileComplete, type MobileMoneyNetwork, type Rider } from "@tuma/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
+import { newId } from "../lib/ids.js";
+import { activeProvider, checkPaymentStatus, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
 import { getR2Bucket } from "../storage/r2.js";
 
 export const riderRoutes = new Hono();
+
+type Row = Record<string, unknown>;
 
 const applySchema = z.object({
   area: z.string().max(120).optional(),
@@ -170,6 +174,108 @@ riderRoutes.get("/riders/me/orders", requireAuth, requireRole("rider"), async (c
     args: [user.sub],
   });
   return c.json({ orders: res.rows });
+});
+
+// ---------------------------------------------------------------------------
+// Wallet — escrow payouts land here at Settle instead of going straight to
+// mobile money; riders withdraw the balance out whenever they want.
+// ---------------------------------------------------------------------------
+
+riderRoutes.get("/riders/me/wallet", requireAuth, requireRole("rider"), async (c) => {
+  const user = c.get("user");
+  const riderRes = await db.execute({ sql: "SELECT wallet_balance FROM riders WHERE user_id = ?", args: [user.sub] });
+  const balance = (riderRes.rows[0]?.wallet_balance as number | undefined) ?? 0;
+  const withdrawalsRes = await db.execute({
+    sql: "SELECT * FROM wallet_withdrawals WHERE rider_id = ? ORDER BY created_at DESC LIMIT 20",
+    args: [user.sub],
+  });
+  return c.json({ balance, withdrawals: withdrawalsRes.rows });
+});
+
+/** Withdraws the entire current balance to the rider's mobile money number on file. */
+riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider"), async (c) => {
+  const user = c.get("user");
+  const riderRes = await db.execute({
+    sql: "SELECT wallet_balance, momo_msisdn FROM riders WHERE user_id = ?",
+    args: [user.sub],
+  });
+  const rider = riderRes.rows[0] as Row | undefined;
+  if (!rider) return c.json({ error: "not_a_rider" }, 404);
+  const balance = (rider.wallet_balance as number) ?? 0;
+  const msisdn = rider.momo_msisdn as string | null;
+  if (balance <= 0) return c.json({ error: "no_balance", message: "Nothing to withdraw yet" }, 409);
+  if (!msisdn) {
+    return c.json({ error: "no_mobile_money", message: "Add a mobile money number in your profile first" }, 409);
+  }
+
+  const withdrawalId = newId("wd");
+  let providerRef: string;
+  let network: MobileMoneyNetwork;
+  try {
+    const initiated = await initiateDisbursement({ referenceId: withdrawalId, msisdn, amount: balance });
+    providerRef = initiated.providerRef;
+    network = initiated.network;
+  } catch (err) {
+    if (err instanceof UnsupportedNetworkError) {
+      return c.json({ error: "unsupported_network", message: err.message }, 400);
+    }
+    return c.json({ error: "withdrawal_request_failed", message: String(err) }, 502);
+  }
+
+  // Zero the balance immediately so it can't be withdrawn twice while this
+  // one is still pending; a failed withdrawal refunds it back (see refresh
+  // below), mirroring how a failed escrow collection just never funds.
+  await db.execute({
+    sql: "UPDATE riders SET wallet_balance = 0, updated_at = datetime('now') WHERE user_id = ?",
+    args: [user.sub],
+  });
+  await db.execute({
+    sql: `INSERT INTO wallet_withdrawals (id, rider_id, amount, provider, provider_ref, msisdn, network, status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+    args: [withdrawalId, user.sub, balance, activeProvider(), providerRef, msisdn, network],
+  });
+
+  return c.json({ withdrawalId, amount: balance, status: "pending" }, 201);
+});
+
+/** Sandbox/mock testing has no public webhook target, so the client polls this instead. */
+riderRoutes.get("/riders/me/wallet/withdrawals/:id/refresh", requireAuth, requireRole("rider"), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const res = await db.execute({
+    sql: "SELECT * FROM wallet_withdrawals WHERE id = ? AND rider_id = ?",
+    args: [id, user.sub],
+  });
+  const withdrawal = res.rows[0] as Row | undefined;
+  if (!withdrawal) return c.json({ error: "not_found" }, 404);
+  if (withdrawal.status !== "pending") return c.json({ withdrawal });
+
+  try {
+    const status = await checkPaymentStatus({
+      provider: withdrawal.provider as string,
+      provider_ref: withdrawal.provider_ref as string | null,
+      created_at: withdrawal.created_at as string,
+    });
+    if (status === "successful") {
+      await db.execute({
+        sql: "UPDATE wallet_withdrawals SET status = 'successful', updated_at = datetime('now') WHERE id = ?",
+        args: [id],
+      });
+    } else if (status === "failed") {
+      await db.execute({
+        sql: "UPDATE wallet_withdrawals SET status = 'failed', updated_at = datetime('now') WHERE id = ?",
+        args: [id],
+      });
+      await db.execute({
+        sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
+        args: [withdrawal.amount as number, user.sub],
+      });
+    }
+    const updated = await db.execute({ sql: "SELECT * FROM wallet_withdrawals WHERE id = ?", args: [id] });
+    return c.json({ withdrawal: updated.rows[0] });
+  } catch (err) {
+    return c.json({ error: "status_check_failed", message: String(err) }, 502);
+  }
 });
 
 // ---------------------------------------------------------------------------

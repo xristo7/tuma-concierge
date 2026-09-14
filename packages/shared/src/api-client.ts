@@ -19,6 +19,7 @@ import type {
   Rider,
   SavedLocation,
   UserStatus,
+  Wallet,
 } from "./domain.js";
 
 export type CreateApiClientOptions = {
@@ -320,6 +321,17 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
     async myRiderOrders() {
       return request<{ orders: OrderRow[] }>("/v1/riders/me/orders");
+    },
+    async myWallet() {
+      return request<Wallet>("/v1/riders/me/wallet");
+    },
+    async withdrawWallet() {
+      return request<{ withdrawalId: string; amount: number; status: "pending" }>("/v1/riders/me/wallet/withdraw", {
+        method: "POST",
+      });
+    },
+    async refreshWithdrawal(id: string) {
+      return request<{ withdrawal: Wallet["withdrawals"][number] }>(`/v1/riders/me/wallet/withdrawals/${id}/refresh`);
     },
 
     // Saved locations

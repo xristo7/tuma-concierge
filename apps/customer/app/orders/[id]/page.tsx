@@ -384,16 +384,9 @@ export default function OrderDetailPage() {
         )}
 
         {order.stage === "Handover" && (
-          <>
-            <p className="text-sm text-ink-500">Handover confirmed. Complete payment to your rider.</p>
-            <button
-              disabled={busy}
-              onClick={() => run(() => api.settleOrder(orderId))}
-              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
-            >
-              Settle order
-            </button>
-          </>
+          <p className="text-sm text-ink-500">
+            Handover confirmed — thanks! Your rider will close out the order to complete payment.
+          </p>
         )}
 
         {order.stage === "Settle" && (
