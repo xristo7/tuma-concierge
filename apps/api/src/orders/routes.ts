@@ -13,6 +13,10 @@ orderRoutes.use("*", requireAuth);
 
 type Row = Record<string, unknown>;
 
+function formatAmount(n: number): string {
+  return `UGX ${n.toLocaleString("en-UG")}`;
+}
+
 async function logEvent(orderId: string, stage: string, note: string, actorId: string) {
   await db.execute({
     sql: "INSERT INTO order_events (id, order_id, stage, note, actor_id) VALUES (?, ?, ?, ?, ?)",
@@ -236,12 +240,13 @@ orderRoutes.get("/orders/:id", async (c) => {
     return c.json({ error: "forbidden" }, 403);
   }
 
-  const [items, events, substitutions, payments, rating] = await Promise.all([
+  const [items, events, substitutions, payments, rating, feeProposals] = await Promise.all([
     db.execute({ sql: "SELECT * FROM list_items WHERE list_id = ?", args: [order.list_id as string] }),
     db.execute({ sql: "SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
     db.execute({ sql: "SELECT * FROM substitutions WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
     db.execute({ sql: "SELECT * FROM payments WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
     db.execute({ sql: "SELECT rating, comment FROM order_ratings WHERE order_id = ?", args: [id] }),
+    db.execute({ sql: "SELECT * FROM fee_proposals WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
   ]);
 
   return c.json({
@@ -251,6 +256,7 @@ orderRoutes.get("/orders/:id", async (c) => {
     substitutions: substitutions.rows,
     payments: payments.rows,
     rating: rating.rows[0] ?? null,
+    feeProposals: feeProposals.rows,
   });
 });
 
@@ -269,7 +275,12 @@ orderRoutes.post("/orders/:id/match", async (c) => {
     if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
     throw e;
   }
-  if (order.stage !== "Create") {
+  // Normally an unmatched order is in "Create". A funded order whose rider
+  // cancelled is left in "Match" with rider_id cleared instead of being
+  // rewound to "Create" — that would re-expose the funding step even though
+  // the customer already paid — so it's matchable again too.
+  const canMatch = order.stage === "Create" || (order.stage === "Match" && !order.rider_id);
+  if (!canMatch) {
     return c.json({ error: "invalid_stage", message: `Cannot match from stage ${order.stage}` }, 409);
   }
 
@@ -291,8 +302,9 @@ orderRoutes.post("/orders/:id/match", async (c) => {
     const geoRiders = await db.execute({
       sql: `SELECT u.id, u.name, r.stage_lat, r.stage_lng FROM riders r JOIN users u ON u.id = r.user_id
             WHERE r.verified = 1 AND r.is_online = 1 AND r.stage_lat IS NOT NULL AND r.stage_lng IS NOT NULL
-            AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')`,
-      args: [],
+            AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
+            AND u.id NOT IN (SELECT rider_id FROM order_rider_exclusions WHERE order_id = ?)`,
+      args: [id],
     });
     let nearest: { row: Row; distanceKm: number } | null = null;
     for (const row of geoRiders.rows as Row[]) {
@@ -314,8 +326,9 @@ orderRoutes.post("/orders/:id/match", async (c) => {
           sql: `SELECT u.id, u.name FROM riders r JOIN users u ON u.id = r.user_id
                 WHERE r.verified = 1 AND r.is_online = 1 AND r.area = ?
                 AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
+                AND u.id NOT IN (SELECT rider_id FROM order_rider_exclusions WHERE order_id = ?)
                 LIMIT 1`,
-          args: [area],
+          args: [area, id],
         })
       : { rows: [] as Row[] };
     candidate = byArea.rows[0] as Row | undefined;
@@ -326,8 +339,9 @@ orderRoutes.post("/orders/:id/match", async (c) => {
       sql: `SELECT u.id, u.name FROM riders r JOIN users u ON u.id = r.user_id
             WHERE r.verified = 1 AND r.is_online = 1
             AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
+            AND u.id NOT IN (SELECT rider_id FROM order_rider_exclusions WHERE order_id = ?)
             LIMIT 1`,
-      args: [],
+      args: [id],
     });
     candidate = any.rows[0] as Row | undefined;
     if (candidate) outOfRange = true;
@@ -344,6 +358,49 @@ orderRoutes.post("/orders/:id/match", async (c) => {
     outOfRange ? `Matched with rider ${candidate.name} (out of normal range)` : `Matched with rider ${candidate.name}`,
     user.sub,
   );
+
+  return c.json({ order: await getOrder(id) });
+});
+
+// ---------------------------------------------------------------------------
+// Cancel — a rider backing out of a job they were matched to. The order
+// drops back into the matching pool instead of being cancelled outright,
+// and this rider is never offered it again.
+// ---------------------------------------------------------------------------
+
+const CANCELLABLE_STAGES = ["Match", "Fund", "Shop", "Substitute", "Approve", "Deliver"];
+
+orderRoutes.post("/orders/:id/cancel", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertRider(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  if (!CANCELLABLE_STAGES.includes(order.stage as string)) {
+    return c.json({ error: "invalid_stage", message: `Cannot cancel from stage ${order.stage}` }, 409);
+  }
+
+  await db.execute({
+    sql: "INSERT OR IGNORE INTO order_rider_exclusions (order_id, rider_id) VALUES (?, ?)",
+    args: [id, user.sub],
+  });
+
+  // Money already collected? Skip back to "Match" (needs a new rider only) —
+  // rewinding all the way to "Create" would re-expose the funding step and
+  // risk a double charge. Otherwise a full "Create" rewind is safe.
+  const paid = await db.execute({
+    sql: "SELECT id FROM payments WHERE order_id = ? AND type = 'collection' AND status = 'successful' LIMIT 1",
+    args: [id],
+  });
+  const nextStage = paid.rows.length > 0 ? "Match" : "Create";
+
+  await touchOrder(id, { rider_id: null, stage: nextStage, matched_out_of_range: 0 });
+  await logEvent(id, nextStage, "Rider cancelled — order returned to the job pool", user.sub);
 
   return c.json({ order: await getOrder(id) });
 });
@@ -369,7 +426,10 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
     return c.json({ error: "invalid_stage", message: `Cannot fund from stage ${order.stage}` }, 409);
   }
 
-  const amount = (order.estimated_total as number | null) ?? 0;
+  // final_total is set the moment a fee proposal or item substitution is
+  // approved — charge that when present so an accepted pre-funding fee
+  // change is actually what gets collected, not the original estimate.
+  const amount = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
 
   if (order.payment_rail === "float") {
     // Float rail: rider fronts the cash, no escrow collection needed.
@@ -609,6 +669,93 @@ orderRoutes.post("/orders/:id/substitutions/:subId/decision", async (c) => {
   if ((remaining.rows[0]?.n as number) === 0) {
     await touchOrder(id, { stage: "Approve" });
   }
+
+  return c.json({ order: await getOrder(id) });
+});
+
+// ---------------------------------------------------------------------------
+// Fee proposals — rider suggests a different total than the auto-calculated
+// (or customer-entered) one; customer accepts or rejects it.
+// ---------------------------------------------------------------------------
+
+const proposeFeeSchema = z.object({
+  proposedTotal: z.number().int().nonnegative(),
+  reason: z.string().max(240).optional(),
+});
+
+orderRoutes.post("/orders/:id/fee-proposals", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertRider(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  if (order.stage === "Create" || order.stage === "Settle") {
+    return c.json({ error: "invalid_stage", message: `Cannot propose a fee from stage ${order.stage}` }, 409);
+  }
+
+  const parsed = proposeFeeSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  const previousTotal = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
+  const proposalId = newId("fee");
+  await db.execute({
+    sql: `INSERT INTO fee_proposals (id, order_id, previous_total, proposed_total, reason)
+          VALUES (?, ?, ?, ?, ?)`,
+    args: [proposalId, id, previousTotal, parsed.data.proposedTotal, parsed.data.reason ?? null],
+  });
+  await logEvent(
+    id,
+    order.stage as string,
+    `Rider suggested a new total: ${formatAmount(parsed.data.proposedTotal)} (was ${formatAmount(previousTotal)})`,
+    user.sub,
+  );
+
+  return c.json({ proposalId, order: await getOrder(id) }, 201);
+});
+
+orderRoutes.post("/orders/:id/fee-proposals/:proposalId/decision", async (c) => {
+  const id = c.req.param("id");
+  const proposalId = c.req.param("proposalId");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+
+  const parsed = decisionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  const propRes = await db.execute({
+    sql: "SELECT * FROM fee_proposals WHERE id = ? AND order_id = ? AND status = 'pending'",
+    args: [proposalId, id],
+  });
+  const proposal = propRes.rows[0] as Row | undefined;
+  if (!proposal) return c.json({ error: "not_found" }, 404);
+
+  const status = parsed.data.approve ? "approved" : "rejected";
+  await db.execute({
+    sql: "UPDATE fee_proposals SET status = ?, updated_at = datetime('now') WHERE id = ?",
+    args: [status, proposalId],
+  });
+
+  if (parsed.data.approve) {
+    await touchOrder(id, { final_total: proposal.proposed_total });
+  }
+  await logEvent(
+    id,
+    order.stage as string,
+    `Fee suggestion ${status}${parsed.data.approve ? ` — new total ${formatAmount(proposal.proposed_total as number)}` : ""}`,
+    user.sub,
+  );
 
   return c.json({ order: await getOrder(id) });
 });

@@ -155,6 +155,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     async matchOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/match`, { method: "POST" });
     },
+    /** Rider backs out of a job they were matched to — it drops back into the matching pool for another rider. */
+    async cancelOrder(orderId: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/cancel`, { method: "POST" });
+    },
     async fundOrder(orderId: string, input: { msisdn?: string } = {}) {
       return request<{ order: OrderRow; payment?: { id: string; status: string } }>(
         `/v1/orders/${orderId}/fund`,
@@ -188,6 +192,19 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
     async decideSubstitutionBatch(orderId: string, batchId: string, approve: boolean) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/substitutions/batch/${batchId}/decision`, {
+        method: "POST",
+        body: JSON.stringify({ approve }),
+      });
+    },
+    /** Rider suggests a different total than the app's auto-calculated (or customer-entered) one. */
+    async proposeFee(orderId: string, input: { proposedTotal: number; reason?: string }) {
+      return request<{ proposalId: string; order: OrderRow }>(`/v1/orders/${orderId}/fee-proposals`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async decideFeeProposal(orderId: string, proposalId: string, approve: boolean) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/fee-proposals/${proposalId}/decision`, {
         method: "POST",
         body: JSON.stringify({ approve }),
       });

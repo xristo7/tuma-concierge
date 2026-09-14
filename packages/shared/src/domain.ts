@@ -239,6 +239,18 @@ export type OrderRating = {
   comment: string | null;
 };
 
+/** A rider-suggested total (e.g. after an out-of-range match) awaiting the customer's accept/reject. */
+export type FeeProposal = {
+  id: string;
+  order_id: string;
+  previous_total: number;
+  proposed_total: number;
+  reason: string | null;
+  status: "pending" | "approved" | "rejected";
+  created_at: string;
+  updated_at: string;
+};
+
 export type OrderDetail = {
   order: OrderRow;
   items: ListItem[];
@@ -246,6 +258,7 @@ export type OrderDetail = {
   substitutions: Substitution[];
   payments: Payment[];
   rating: OrderRating | null;
+  feeProposals: FeeProposal[];
 };
 
 export type CreateListBody = {

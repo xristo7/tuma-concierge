@@ -28,6 +28,7 @@ export type {
   FailedPayment,
   AdminOrderRow,
   DeliverySettings,
+  FeeProposal,
   OrderDetail,
   OrderRating,
   CreateListBody,

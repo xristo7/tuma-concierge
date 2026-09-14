@@ -51,7 +51,10 @@ export default function PayPage() {
   const stage = detail?.order.stage;
   const riderId = detail?.order.rider_id;
   useEffect(() => {
-    if (!detail || stage !== "Create" || riderId) return;
+    // Also retries for a funded order whose rider cancelled — it's left in
+    // "Match" with rider_id cleared rather than rewound to "Create", since
+    // rewinding would re-expose the funding step after money already moved.
+    if (!detail || riderId || (stage !== "Create" && stage !== "Match")) return;
     let cancelled = false;
 
     async function attempt() {
@@ -105,6 +108,19 @@ export default function PayPage() {
     }
   }
 
+  async function decideFee(proposalId: string, approve: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.decideFeeProposal(orderId, proposalId, approve);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!detail) {
     return <div className="p-4 text-sm text-ink-500">Loading…</div>;
   }
@@ -112,6 +128,7 @@ export default function PayPage() {
   const { order } = detail;
   const hasRider = Boolean(order.rider_id);
   const pendingPayment = detail.payments.find((p) => p.status === "pending");
+  const pendingFeeProposal = detail.feeProposals.find((f) => f.status === "pending");
 
   return (
     <div className="space-y-6 px-4 pb-24 pt-4">
@@ -133,7 +150,7 @@ export default function PayPage() {
         </div>
         <div className="flex justify-between border-t border-[var(--border-faint)] pt-2 text-sm font-semibold">
           <span>Total</span>
-          <span>{formatUgx(order.estimated_total)}</span>
+          <span>{formatUgx(order.final_total ?? order.estimated_total)}</span>
         </div>
       </section>
 
@@ -154,6 +171,32 @@ export default function PayPage() {
               Your rider is available but currently outside the normal service area, so this delivery may
               cost a little more than usual.
             </p>
+          </div>
+        )}
+
+        {hasRider && pendingFeeProposal && (
+          <div className="space-y-2 rounded-xl border border-gold bg-gold/10 p-3">
+            <p className="text-sm text-ink">
+              Your rider suggests a new total: <strong>{formatUgx(pendingFeeProposal.proposed_total)}</strong>{" "}
+              <span className="text-ink-500">(was {formatUgx(pendingFeeProposal.previous_total)})</span>
+              {pendingFeeProposal.reason && <span className="block text-ink-500">{pendingFeeProposal.reason}</span>}
+            </p>
+            <div className="flex gap-2">
+              <button
+                disabled={busy}
+                onClick={() => decideFee(pendingFeeProposal.id, true)}
+                className="flex-1 rounded-full bg-green px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+              >
+                Accept
+              </button>
+              <button
+                disabled={busy}
+                onClick={() => decideFee(pendingFeeProposal.id, false)}
+                className="flex-1 rounded-full bg-[#ECE8E2] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
+              >
+                Reject
+              </button>
+            </div>
           </div>
         )}
 

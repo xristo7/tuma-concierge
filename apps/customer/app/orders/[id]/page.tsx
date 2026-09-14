@@ -60,7 +60,8 @@ export default function OrderDetailPage() {
     return <div className="p-4 text-sm text-ink-500">Loading order…</div>;
   }
 
-  const { order, items, substitutions } = detail;
+  const { order, items, substitutions, feeProposals } = detail;
+  const pendingFeeProposal = feeProposals.find((f) => f.status === "pending");
   const pendingSubs = substitutions.filter((s) => s.status === "pending");
   // Group by batch so a rider's multi-item edit shows as one card with one
   // approve/reject action; older single-item proposals (no batch_id) each
@@ -118,6 +119,32 @@ export default function OrderDetailPage() {
             a little more than usual.
           </p>
         </div>
+      )}
+
+      {pendingFeeProposal && (
+        <section className="home-card space-y-2 !border-l-4 !border-l-gold">
+          <p className="text-sm text-ink">
+            Your rider suggests a new total: <strong>{formatUgx(pendingFeeProposal.proposed_total)}</strong>{" "}
+            <span className="text-ink-500">(was {formatUgx(pendingFeeProposal.previous_total)})</span>
+            {pendingFeeProposal.reason && <span className="block text-ink-500">{pendingFeeProposal.reason}</span>}
+          </p>
+          <div className="flex gap-2">
+            <button
+              disabled={busy}
+              onClick={() => run(() => api.decideFeeProposal(orderId, pendingFeeProposal.id, true))}
+              className="flex-1 rounded-full bg-green px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+            >
+              Accept
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => run(() => api.decideFeeProposal(orderId, pendingFeeProposal.id, false))}
+              className="flex-1 rounded-full bg-[#ECE8E2] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
+            >
+              Reject
+            </button>
+          </div>
+        </section>
       )}
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
