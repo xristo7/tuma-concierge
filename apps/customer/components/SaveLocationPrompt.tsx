@@ -19,6 +19,7 @@ const KIND_OPTIONS: { key: LocationKind; icon: typeof Home }[] = [
 
 export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [kind, setKind] = useState<LocationKind>("Home");
+  const [otherName, setOtherName] = useState("");
   const [step, setStep] = useState<Step>("menu");
   const [showPicker, setShowPicker] = useState(false);
   const [manualArea, setManualArea] = useState("");
@@ -28,14 +29,19 @@ export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; 
   const [error, setError] = useState<string | null>(null);
 
   async function persist(input: { area?: string; address?: string; lat?: number; lng?: number }) {
+    if (kind === "Other" && !otherName.trim()) {
+      setError("Give this location a name.");
+      return;
+    }
     if (!input.area && !input.address) {
       setError("Couldn't find that location — try another option.");
       return;
     }
     setBusy(true);
     setError(null);
+    const label = kind === "Other" ? otherName.trim() : kind;
     try {
-      await api.saveLocation({ label: kind, area: input.area, address: input.address, lat: input.lat, lng: input.lng });
+      await api.saveLocation({ label, area: input.area, address: input.address, lat: input.lat, lng: input.lng });
       onSaved();
     } catch (err) {
       setError(errorMessage(err));
@@ -43,7 +49,13 @@ export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; 
     }
   }
 
+  const needsName = kind === "Other" && !otherName.trim();
+
   function useCurrentLocation() {
+    if (needsName) {
+      setError("Give this location a name.");
+      return;
+    }
     setError(null);
     setLocating(true);
     if (!navigator.geolocation) {
@@ -90,6 +102,15 @@ export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; 
               </button>
             ))}
           </div>
+          {kind === "Other" && (
+            <input
+              value={otherName}
+              onChange={(e) => setOtherName(e.target.value)}
+              placeholder="Name this location (e.g. Mum's place, Gym)"
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              autoFocus
+            />
+          )}
         </div>
 
         {step === "menu" ? (
@@ -97,7 +118,7 @@ export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; 
             <button
               type="button"
               onClick={useCurrentLocation}
-              disabled={busy || locating}
+              disabled={busy || locating || needsName}
               className="flex w-full items-center gap-3 rounded-2xl border border-gold bg-gold/10 p-3.5 text-left disabled:opacity-60"
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold/20 text-gold">
@@ -120,8 +141,9 @@ export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; 
 
             <button
               type="button"
-              onClick={() => setShowPicker(true)}
-              className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border-faint)] p-3.5 text-left"
+              onClick={() => (needsName ? setError("Give this location a name.") : setShowPicker(true))}
+              className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border-faint)] p-3.5 text-left disabled:opacity-60"
+              disabled={needsName}
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-ink-500">
                 <Map className="h-5 w-5" strokeWidth={2.25} aria-hidden />
@@ -135,8 +157,9 @@ export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; 
 
             <button
               type="button"
-              onClick={() => setStep("manual")}
-              className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border-faint)] p-3.5 text-left"
+              onClick={() => (needsName ? setError("Give this location a name.") : setStep("manual"))}
+              className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border-faint)] p-3.5 text-left disabled:opacity-60"
+              disabled={needsName}
             >
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-ink-500">
                 <Keyboard className="h-5 w-5" strokeWidth={2.25} aria-hidden />
@@ -174,7 +197,7 @@ export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; 
               <button
                 type="button"
                 onClick={() => persist({ area: manualArea.trim() || undefined, address: manualAddress.trim() || undefined })}
-                disabled={busy}
+                disabled={busy || needsName}
                 className="flex-[2] rounded-full bg-gold py-2.5 text-sm font-bold text-ink disabled:opacity-60"
               >
                 {busy ? "Saving…" : "Save location"}
