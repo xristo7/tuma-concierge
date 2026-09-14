@@ -2,7 +2,7 @@ import { ChevronDown, MapPin } from "lucide-react";
 
 export function BrandHeader() {
   return (
-    <header className="sticky top-0 z-40 bg-cream/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-40 border-b border-navy/15 bg-cream/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 pb-1 pt-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

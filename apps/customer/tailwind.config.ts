@@ -33,6 +33,14 @@ const config: Config = {
           400: "#2FA86A",
           600: "#1B7A4E",
         },
+        // From the Tuma wordmark — used for brand chrome (header accents,
+        // headings-as-brand, trust badges), kept separate from `gold`
+        // which stays the one CTA/interactive accent.
+        navy: {
+          DEFAULT: "#153A75",
+          400: "#3D66A6",
+          700: "#0F2A57",
+        },
       },
     },
   },

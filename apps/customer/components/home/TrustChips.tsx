@@ -11,7 +11,7 @@ export function TrustChips() {
       {CHIPS.map((label) => (
         <li
           key={label}
-          className="inline-flex items-center gap-1.5 rounded-full bg-[#ECE8E2] px-2.5 py-1.5 text-[11px] font-medium text-ink"
+          className="inline-flex items-center gap-1.5 rounded-full bg-navy/10 px-2.5 py-1.5 text-[11px] font-medium text-navy"
         >
           <span
             className="h-1.5 w-1.5 shrink-0 rounded-full bg-green"
