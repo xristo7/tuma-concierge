@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
 import { OrderTimeline } from "../../../components/OrderTimeline";
 import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
+import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { api, errorMessage } from "../../../lib/api";
 import { formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
 
@@ -156,6 +157,8 @@ export default function OrderDetailPage() {
       </header>
 
       <OrderTimeline order={order} events={detail.events} statusLabel={stageLabel(order.stage, order.type)} />
+
+      {order.voice_note_key && <VoiceNotePlayer orderId={orderId} />}
 
       {!!order.matched_out_of_range && order.rider_id && (
         <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">

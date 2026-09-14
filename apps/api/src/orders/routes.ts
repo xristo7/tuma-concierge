@@ -7,6 +7,7 @@ import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
 import { getDeliverySettings } from "../lib/settings.js";
 import { isMomoConfigured, requestToPay, transfer } from "../momo/client.js";
+import { getR2Bucket } from "../storage/r2.js";
 
 export const orderRoutes = new Hono();
 orderRoutes.use("*", requireAuth);
@@ -257,6 +258,64 @@ orderRoutes.get("/orders/:id", async (c) => {
     payments: payments.rows,
     rating: rating.rows[0] ?? null,
     feeProposals: feeProposals.rows,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Voice note — spoken context a typed list can miss (units, brand, exactly
+// which shelf/shop). Attached by the customer, playable by whoever can
+// already see the order.
+// ---------------------------------------------------------------------------
+
+const MAX_VOICE_NOTE_BYTES = 10 * 1024 * 1024;
+const ALLOWED_VOICE_NOTE_MIME = new Set(["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav"]);
+
+orderRoutes.post("/orders/:id/voice-note", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+
+  const form = await c.req.formData().catch(() => null);
+  const file = form?.get("audio");
+  if (!(file instanceof File)) return c.json({ error: "missing_audio" }, 400);
+  if (!ALLOWED_VOICE_NOTE_MIME.has(file.type)) return c.json({ error: "unsupported_file_type" }, 400);
+  if (file.size > MAX_VOICE_NOTE_BYTES) return c.json({ error: "file_too_large" }, 400);
+
+  const ext = file.type.split("/")[1] ?? "webm";
+  const key = `orders/${id}/voice-note.${ext}`;
+  const bucket = getR2Bucket();
+  await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+
+  await touchOrder(id, { voice_note_key: key });
+  await logEvent(id, order.stage as string, "Customer attached a voice note", user.sub);
+
+  return c.json({ order: await getOrder(id) });
+});
+
+orderRoutes.get("/orders/:id/voice-note", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  const key = order.voice_note_key as string | null;
+  if (!key) return c.json({ error: "not_found" }, 404);
+
+  const bucket = getR2Bucket();
+  const object = await bucket.get(key);
+  if (!object) return c.json({ error: "not_found" }, 404);
+
+  return new Response(object.body, {
+    headers: { "Content-Type": object.httpMetadata?.contentType ?? "audio/webm" },
   });
 });
 

@@ -5,6 +5,7 @@ import { MapPin, Pencil, X } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
+import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { VoiceReasonRecorder } from "../../../components/VoiceReasonRecorder";
 import { api, errorMessage } from "../../../lib/api";
 import { formatUgx, jobTitle, stageLabel } from "../../../lib/order-display";
@@ -161,6 +162,8 @@ export default function JobDetailPage() {
           </p>
         )}
       </header>
+
+      {order.voice_note_key && <VoiceNotePlayer orderId={orderId} />}
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 

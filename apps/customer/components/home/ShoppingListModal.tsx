@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+import { OrderVoiceNoteRecorder } from "./OrderVoiceNoteRecorder";
 import { VoiceNoteRecorder } from "./VoiceNoteRecorder";
 
 const LocationMapPicker = dynamic(
@@ -35,6 +36,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   const [mapAddress, setMapAddress] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [paymentRail, setPaymentRail] = useState<"escrow" | "float">("escrow");
+  const [voiceNote, setVoiceNote] = useState<Blob | null>(null);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +134,9 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
         paymentRail,
         estimatedTotal: total || undefined,
       });
+      if (voiceNote) {
+        api.uploadOrderVoiceNote(order.id, voiceNote).catch(() => {});
+      }
       onClose();
       router.push(`/orders/${order.id}`);
     } catch (err) {
@@ -313,6 +318,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
               Riders find you faster when you add a landmark or house detail along with your map pin.
             </p>
           </div>
+
+          <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />
 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment</p>

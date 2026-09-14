@@ -154,6 +154,23 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     async getOrder(orderId: string) {
       return request<OrderDetail>(`/v1/orders/${orderId}`);
     },
+    /** Attaches a spoken note to the order — context a typed list can miss (units, brand, exactly where in the shop). */
+    async uploadOrderVoiceNote(orderId: string, audio: Blob) {
+      const form = new FormData();
+      form.append("audio", audio, "voice-note.webm");
+      const res = await f(`${root}/v1/orders/${orderId}/voice-note`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ order: OrderRow }>(res);
+    },
+    /** Fetches the order's voice note as a Blob (not JSON — raw fetch, mirrors adminRiderIdDocumentBlob). */
+    async orderVoiceNoteBlob(orderId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/orders/${orderId}/voice-note`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load voice note`);
+      return res.blob();
+    },
     async matchOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/match`, { method: "POST" });
     },

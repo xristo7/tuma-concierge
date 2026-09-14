@@ -69,6 +69,8 @@ app.get("/v1", (c) =>
       "POST /v1/orders",
       "GET /v1/orders/active",
       "GET /v1/orders/:id",
+      "POST /v1/orders/:id/voice-note",
+      "GET /v1/orders/:id/voice-note",
       "POST /v1/orders/:id/match",
       "POST /v1/orders/:id/cancel",
       "POST /v1/orders/:id/fund",

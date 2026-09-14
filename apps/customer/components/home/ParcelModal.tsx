@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+import { OrderVoiceNoteRecorder } from "./OrderVoiceNoteRecorder";
 
 /** Great-circle distance in km — mirrors apps/api/src/lib/geo.ts, used only
  * for the live fee preview here; the backend recomputes it authoritatively. */
@@ -264,6 +265,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
   const [description, setDescription] = useState("");
   const [estimatedTotal, setEstimatedTotal] = useState("");
   const [paymentRail, setPaymentRail] = useState<"escrow" | "float">("escrow");
+  const [voiceNote, setVoiceNote] = useState<Blob | null>(null);
   const [locations, setLocations] = useState<SavedLocation[]>([]);
   const [ratePerKm, setRatePerKm] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -323,6 +325,9 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
         paymentRail,
         estimatedTotal: liveEstimate ?? (estimatedTotal ? Number(estimatedTotal) : undefined),
       });
+      if (voiceNote) {
+        api.uploadOrderVoiceNote(order.id, voiceNote).catch(() => {});
+      }
       onClose();
       router.push(`/orders/${order.id}`);
     } catch (err) {
@@ -379,6 +384,8 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
               className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
             />
           )}
+
+          <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />
 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment</p>

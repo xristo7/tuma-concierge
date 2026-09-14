@@ -58,6 +58,7 @@ export type OrderRow = {
   destination_lng: number | null;
   distance_km: number | null;
   matched_out_of_range: number;
+  voice_note_key: string | null;
   pin_code: string | null;
   eta_minutes: number | null;
   created_at: string;
