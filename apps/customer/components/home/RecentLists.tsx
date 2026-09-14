@@ -48,7 +48,7 @@ export function RecentLists() {
         {lists.map((list) => (
           <li key={list.id}>
             <Link
-              href="/orders"
+              href={`/orders/lists/${list.listId}`}
               className="home-card flex items-center gap-3 !rounded-2xl !px-3 !py-3"
             >
               <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${statusClasses(list.status)}`}>

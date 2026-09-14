@@ -92,9 +92,17 @@ export default function OrderDetailPage() {
             {items.map((item) => (
               <li key={item.id} className="flex items-center justify-between text-sm text-ink">
                 <span>
-                  {item.quantity}× {item.name}
+                  <span className="block">
+                    {item.quantity}× {item.name}
+                    {item.unit_price != null && (
+                      <span className="text-ink-500"> · Est. {formatUgx(item.unit_price)} each</span>
+                    )}
+                  </span>
+                  {item.note && <span className="block text-xs text-ink-500">{item.note}</span>}
                 </span>
-                {item.note && <span className="text-xs text-ink-500">{item.note}</span>}
+                {item.unit_price != null && (
+                  <span className="shrink-0 font-semibold">{formatUgx(item.unit_price * item.quantity)}</span>
+                )}
               </li>
             ))}
           </ul>

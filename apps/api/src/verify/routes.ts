@@ -61,8 +61,13 @@ verifyRoutes.post("/verify/request", async (c) => {
     }
   }
 
-  const { devCode } = await createAndSendOtp(user.sub, channel, target);
-  return c.json({ sent: true, channel, target: maskTarget(channel, target), ...(devCode ? { devCode } : {}) });
+  try {
+    const { devCode } = await createAndSendOtp(user.sub, channel, target);
+    return c.json({ sent: true, channel, target: maskTarget(channel, target), ...(devCode ? { devCode } : {}) });
+  } catch (err) {
+    console.error(`Failed to send ${channel} verification code:`, err);
+    return c.json({ error: "send_failed", message: `Couldn't send the code. Please try again.` }, 502);
+  }
 });
 
 const confirmSchema = z.object({ channel: z.enum(["sms", "email"]), code: z.string().length(6) });

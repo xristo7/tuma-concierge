@@ -9,6 +9,8 @@ export type {
   ListStatus,
   ListSummary,
   ListItem,
+  ListRow,
+  ListDetail,
   OrderType,
   OrderRow,
   OrderEvent,

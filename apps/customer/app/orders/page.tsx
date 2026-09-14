@@ -65,17 +65,23 @@ export default function OrdersPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Lists</h2>
           <ul className="space-y-2.5">
             {lists.map((list) => (
-              <li key={list.id} className="home-card flex items-center gap-3 !rounded-2xl !px-3 !py-3">
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#E8E4DE] text-ink-500">
-                  <ShoppingBag className="h-5 w-5" strokeWidth={1.75} aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-bold text-ink">{list.title}</span>
-                  <span className="mt-0.5 block text-xs text-ink-500">{list.itemCount} items</span>
-                </span>
-                <span className="shrink-0 rounded-full bg-[#ECE8E2] px-2.5 py-0.5 text-xs font-semibold capitalize text-ink-500">
-                  {list.status}
-                </span>
+              <li key={list.id}>
+                <Link
+                  href={`/orders/lists/${list.listId}`}
+                  className="home-card flex items-center gap-3 !rounded-2xl !px-3 !py-3"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#E8E4DE] text-ink-500">
+                    <ShoppingBag className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-bold text-ink">{list.title}</span>
+                    <span className="mt-0.5 block text-xs text-ink-500">{list.itemCount} items</span>
+                  </span>
+                  <span className="shrink-0 rounded-full bg-[#ECE8E2] px-2.5 py-0.5 text-xs font-semibold capitalize text-ink-500">
+                    {list.status}
+                  </span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-ink-500/60" strokeWidth={1.75} aria-hidden />
+                </Link>
               </li>
             ))}
           </ul>

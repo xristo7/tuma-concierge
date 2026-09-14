@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+import { VoiceNoteRecorder } from "./VoiceNoteRecorder";
 
 const LocationMapPicker = dynamic(
   () => import("../LocationMapPicker").then((m) => m.LocationMapPicker),
@@ -55,6 +56,14 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   }
   function removeItem(i: number) {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function addItemsFromVoice(extracted: Array<{ name: string; quantity: number }>) {
+    const spoken = extracted.map((it) => ({ name: it.name, quantity: String(it.quantity), unitCost: "" }));
+    setItems((prev) => {
+      const rest = prev.filter((it) => it.name.trim().length > 0);
+      return [...rest, ...spoken];
+    });
   }
 
   function goToLocation() {
@@ -111,7 +120,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
           unitCost: Number(it.unitCost) || 0,
         }));
       const list = await api.createList({
-        items: cleanItems.map((it) => ({ name: it.name, quantity: it.quantity })),
+        items: cleanItems.map((it) => ({ name: it.name, quantity: it.quantity, unitCost: it.unitCost })),
       });
       const { order } = await api.createOrder({
         listId: list.listId,
@@ -133,6 +142,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
     <Modal title={step === "items" ? "Shopping List" : "Delivery location"} onClose={onClose}>
       {step === "items" ? (
         <div className="space-y-4">
+          <VoiceNoteRecorder onItemsExtracted={addItemsFromVoice} />
+
           <div className="space-y-2">
             {items.map((item, i) => (
               <div key={i} className="flex items-center gap-2 rounded-xl border border-[var(--border-faint)] bg-white p-2.5">

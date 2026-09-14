@@ -1,4 +1,5 @@
 import app from "./app.js";
+import { setAiBinding, type AiBinding } from "./ai/binding.js";
 import { setD1Binding, type D1Database } from "./db/client.js";
 import { setR2Binding, type R2Bucket } from "./storage/r2.js";
 
@@ -6,7 +7,7 @@ import { setR2Binding, type R2Bucket } from "./storage/r2.js";
  * conflicts with @types/node's DOM-lib globals) just for one field. */
 type CfExecutionContext = { waitUntil(promise: Promise<unknown>): void; passThroughOnException(): void };
 
-type WorkerEnv = Record<string, unknown> & { DB?: D1Database; RIDER_DOCS?: R2Bucket };
+type WorkerEnv = Record<string, unknown> & { DB?: D1Database; RIDER_DOCS?: R2Bucket; AI?: AiBinding };
 
 /** Cloudflare Worker entry. `env` carries Worker vars/secrets/bindings —
  * nodejs_compat gives us a `process` global, so mirror the string vars onto
@@ -20,6 +21,7 @@ export default {
     }
     setD1Binding(env.DB);
     setR2Binding(env.RIDER_DOCS);
+    setAiBinding(env.AI);
     return app.fetch(request, env as never, ctx as never);
   },
 };

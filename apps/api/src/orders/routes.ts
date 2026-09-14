@@ -63,6 +63,7 @@ const createListSchema = z.object({
       z.object({
         name: z.string().min(1).max(120),
         quantity: z.number().int().positive().default(1),
+        unitCost: z.number().int().nonnegative().optional(),
         note: z.string().max(240).optional(),
       }),
     )
@@ -82,8 +83,8 @@ orderRoutes.post("/lists", async (c) => {
   });
   for (const item of parsed.data.items) {
     await db.execute({
-      sql: "INSERT INTO list_items (id, list_id, name, quantity, note) VALUES (?, ?, ?, ?, ?)",
-      args: [newId("item"), listId, item.name, item.quantity, item.note ?? null],
+      sql: "INSERT INTO list_items (id, list_id, name, quantity, unit_price, note) VALUES (?, ?, ?, ?, ?, ?)",
+      args: [newId("item"), listId, item.name, item.quantity, item.unitCost ?? null, item.note ?? null],
     });
   }
 

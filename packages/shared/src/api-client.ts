@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   CreateListBody,
   CreateListResponse,
+  ListDetail,
   ListSummary,
   OrderDetail,
   OrderRow,
@@ -103,6 +104,21 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
     async getRecentLists(limit = 10) {
       return request<{ lists: ListSummary[] }>(`/v1/lists/recent?limit=${limit}`);
+    },
+    async getList(listId: string) {
+      return request<ListDetail>(`/v1/lists/${listId}`);
+    },
+
+    // Voice notes — transcribes a recorded shopping list into items
+    async transcribeVoiceNote(audio: Blob) {
+      const form = new FormData();
+      form.append("audio", audio, "note.webm");
+      const res = await f(`${root}/v1/voice/transcribe`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ transcript: string; items: Array<{ name: string; quantity: number }> }>(res);
     },
 
     // Orders

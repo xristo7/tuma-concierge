@@ -20,6 +20,20 @@ export type ListItem = {
   unit_price: number | null;
 };
 
+export type ListRow = {
+  id: string;
+  customer_id: string;
+  title: string;
+  status: ListStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ListDetail = {
+  list: ListRow;
+  items: ListItem[];
+};
+
 export type OrderType = "shopping" | "parcel";
 
 export type OrderRow = {
@@ -167,7 +181,7 @@ export type OrderDetail = {
 
 export type CreateListBody = {
   title?: string;
-  items?: Array<{ name: string; quantity?: number; note?: string }>;
+  items?: Array<{ name: string; quantity?: number; unitCost?: number; note?: string }>;
 };
 
 export type CreateListResponse = {

@@ -16,6 +16,9 @@
       "bucket_name": "tuma"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
   "migrations": [
     // The in-app call feature (PR #6) was previously deployed to this
     // Worker directly, ahead of this branch's own history, then dropped

@@ -6,6 +6,7 @@ import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { riderRoutes } from "./riders/routes.js";
 import { verifyRoutes } from "./verify/routes.js";
+import { voiceRoutes } from "./voice/routes.js";
 
 /** Hono app shared by the Node entry (local dev) and the Cloudflare Worker entry. */
 const app = new Hono();
@@ -85,6 +86,7 @@ app.get("/v1", (c) =>
       "GET /v1/locations",
       "POST /v1/locations",
       "DELETE /v1/locations/:id",
+      "POST /v1/voice/transcribe",
     ],
   }),
 );
@@ -95,5 +97,6 @@ app.route("/v1", orderRoutes);
 app.route("/v1", paymentRoutes);
 app.route("/v1", riderRoutes);
 app.route("/v1", locationRoutes);
+app.route("/v1", voiceRoutes);
 
 export default app;
