@@ -127,6 +127,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
         type: "shopping",
         destinationArea,
         destinationAddress,
+        destinationLat: geoCoords?.lat,
+        destinationLng: geoCoords?.lng,
         paymentRail,
         estimatedTotal: total || undefined,
       });

@@ -3,7 +3,9 @@ import { z } from "zod";
 import type { InArgs } from "@libsql/client";
 import { db } from "../db/client.js";
 import { requireAuth } from "../auth/middleware.js";
+import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
+import { getDeliverySettings } from "../lib/settings.js";
 import { isMomoConfigured, requestToPay, transfer } from "../momo/client.js";
 
 export const orderRoutes = new Hono();
@@ -141,8 +143,12 @@ const createOrderSchema = z.object({
   type: z.enum(["shopping", "parcel"]).default("shopping"),
   pickupArea: z.string().max(120).optional(),
   pickupAddress: z.string().max(240).optional(),
+  pickupLat: z.number().optional(),
+  pickupLng: z.number().optional(),
   destinationArea: z.string().max(120).optional(),
   destinationAddress: z.string().max(240).optional(),
+  destinationLat: z.number().optional(),
+  destinationLng: z.number().optional(),
   paymentRail: z.enum(["escrow", "float"]).default("escrow"),
   estimatedTotal: z.number().int().nonnegative().optional(),
 });
@@ -151,30 +157,53 @@ orderRoutes.post("/orders", async (c) => {
   const user = c.get("user");
   const parsed = createOrderSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+  const d = parsed.data;
 
   const list = await db.execute({
     sql: "SELECT * FROM lists WHERE id = ?",
-    args: [parsed.data.listId],
+    args: [d.listId],
   });
   const listRow = list.rows[0];
   if (!listRow) return c.json({ error: "list_not_found" }, 404);
   if (listRow.customer_id !== user.sub) return c.json({ error: "forbidden" }, 403);
 
+  // A parcel ride's cost is distance × the admin-set rate per km, computed
+  // from pickup/destination coords whenever both were pinned on the map —
+  // this always wins over any client-supplied estimate. Shopping orders have
+  // no pickup point (the "shop" is wherever the rider goes), so there's no
+  // ride distance to price this way; they keep the customer's own estimate.
+  let distanceKm: number | null = null;
+  let estimatedTotal = d.estimatedTotal ?? null;
+  if (d.type === "parcel" && d.pickupLat != null && d.pickupLng != null && d.destinationLat != null && d.destinationLng != null) {
+    distanceKm = haversineKm(d.pickupLat, d.pickupLng, d.destinationLat, d.destinationLng);
+    const { deliveryRatePerKm } = await getDeliverySettings();
+    estimatedTotal = Math.round(distanceKm * deliveryRatePerKm);
+  }
+
   const orderId = newId("ord");
   await db.execute({
-    sql: `INSERT INTO orders (id, list_id, customer_id, stage, type, payment_rail, estimated_total, pickup_area, pickup_address, destination_area, destination_address)
-          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO orders (
+            id, list_id, customer_id, stage, type, payment_rail, estimated_total,
+            pickup_area, pickup_address, pickup_lat, pickup_lng,
+            destination_area, destination_address, destination_lat, destination_lng, distance_km
+          )
+          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       orderId,
-      parsed.data.listId,
+      d.listId,
       user.sub,
-      parsed.data.type,
-      parsed.data.paymentRail,
-      parsed.data.estimatedTotal ?? null,
-      parsed.data.pickupArea ?? null,
-      parsed.data.pickupAddress ?? null,
-      parsed.data.destinationArea ?? null,
-      parsed.data.destinationAddress ?? null,
+      d.type,
+      d.paymentRail,
+      estimatedTotal,
+      d.pickupArea ?? null,
+      d.pickupAddress ?? null,
+      d.pickupLat ?? null,
+      d.pickupLng ?? null,
+      d.destinationArea ?? null,
+      d.destinationAddress ?? null,
+      d.destinationLat ?? null,
+      d.destinationLng ?? null,
+      distanceKm,
     ],
   });
   await db.execute({
@@ -242,37 +271,77 @@ orderRoutes.post("/orders/:id/match", async (c) => {
     return c.json({ error: "invalid_stage", message: `Cannot match from stage ${order.stage}` }, 409);
   }
 
-  // Simple nearest-available matching: verified + online riders, prefer
-  // matching area, else first available. Real geo-matching is future work.
-  const area = order.destination_area as string | null;
-  const byArea = area
-    ? await db.execute({
-        sql: `SELECT u.id, u.name FROM riders r JOIN users u ON u.id = r.user_id
-              WHERE r.verified = 1 AND r.is_online = 1 AND r.area = ?
-              AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
-              LIMIT 1`,
-        args: [area],
-      })
-    : { rows: [] as Row[] };
+  // Nearest-available matching: among verified + online + unassigned riders
+  // who have a stage location, pick the closest to where this ride starts
+  // (pickup point for a parcel, destination for a shopping run, since
+  // there's no separate pickup point for those). If that rider is beyond
+  // the normal service range — or no rider has location data at all — we
+  // still match them rather than leave the customer with nobody, but flag
+  // it so the customer can be told the ride may cost a bit more than usual.
+  const { serviceRangeKm } = await getDeliverySettings();
+  const matchLat = (order.type === "parcel" ? order.pickup_lat : order.destination_lat) as number | null;
+  const matchLng = (order.type === "parcel" ? order.pickup_lng : order.destination_lng) as number | null;
 
-  const candidate =
-    byArea.rows[0] ??
-    (
-      await db.execute({
-        sql: `SELECT u.id, u.name FROM riders r JOIN users u ON u.id = r.user_id
-              WHERE r.verified = 1 AND r.is_online = 1
-              AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
-              LIMIT 1`,
-        args: [],
-      })
-    ).rows[0];
+  let candidate: Row | undefined;
+  let outOfRange = false;
+
+  if (matchLat != null && matchLng != null) {
+    const geoRiders = await db.execute({
+      sql: `SELECT u.id, u.name, r.stage_lat, r.stage_lng FROM riders r JOIN users u ON u.id = r.user_id
+            WHERE r.verified = 1 AND r.is_online = 1 AND r.stage_lat IS NOT NULL AND r.stage_lng IS NOT NULL
+            AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')`,
+      args: [],
+    });
+    let nearest: { row: Row; distanceKm: number } | null = null;
+    for (const row of geoRiders.rows as Row[]) {
+      const distanceKm = haversineKm(matchLat, matchLng, row.stage_lat as number, row.stage_lng as number);
+      if (!nearest || distanceKm < nearest.distanceKm) nearest = { row, distanceKm };
+    }
+    if (nearest) {
+      candidate = nearest.row;
+      outOfRange = nearest.distanceKm > serviceRangeKm;
+    }
+  }
+
+  // No rider with usable coordinates nearby — fall back to a same-named-area
+  // match (still counts as "in range"), then to any available rider at all.
+  if (!candidate) {
+    const area = order.destination_area as string | null;
+    const byArea = area
+      ? await db.execute({
+          sql: `SELECT u.id, u.name FROM riders r JOIN users u ON u.id = r.user_id
+                WHERE r.verified = 1 AND r.is_online = 1 AND r.area = ?
+                AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
+                LIMIT 1`,
+          args: [area],
+        })
+      : { rows: [] as Row[] };
+    candidate = byArea.rows[0] as Row | undefined;
+  }
+
+  if (!candidate) {
+    const any = await db.execute({
+      sql: `SELECT u.id, u.name FROM riders r JOIN users u ON u.id = r.user_id
+            WHERE r.verified = 1 AND r.is_online = 1
+            AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
+            LIMIT 1`,
+      args: [],
+    });
+    candidate = any.rows[0] as Row | undefined;
+    if (candidate) outOfRange = true;
+  }
 
   if (!candidate) {
     return c.json({ error: "no_riders_available", message: "No verified riders online right now" }, 409);
   }
 
-  await touchOrder(id, { rider_id: candidate.id, stage: "Match" });
-  await logEvent(id, "Match", `Matched with rider ${candidate.name}`, user.sub);
+  await touchOrder(id, { rider_id: candidate.id, stage: "Match", matched_out_of_range: outOfRange ? 1 : 0 });
+  await logEvent(
+    id,
+    "Match",
+    outOfRange ? `Matched with rider ${candidate.name} (out of normal range)` : `Matched with rider ${candidate.name}`,
+    user.sub,
+  );
 
   return c.json({ order: await getOrder(id) });
 });

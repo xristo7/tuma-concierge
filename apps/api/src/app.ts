@@ -1,10 +1,12 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { adminRoutes } from "./admin/routes.js";
 import { authRoutes } from "./auth/routes.js";
 import { locationRoutes } from "./locations/routes.js";
 import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { riderRoutes } from "./riders/routes.js";
+import { settingsRoutes } from "./settings/routes.js";
 import { verifyRoutes } from "./verify/routes.js";
 import { voiceRoutes } from "./voice/routes.js";
 
@@ -16,6 +18,7 @@ const defaultOrigins = [
   "https://tuma-rider-staging.onrender.com",
   "http://localhost:3000",
   "http://localhost:3001",
+  "http://localhost:3002", // apps/admin dev server
 ];
 
 app.use("*", (c, next) => {
@@ -82,10 +85,19 @@ app.get("/v1", (c) =>
       "GET /v1/riders/me",
       "GET /v1/riders/me/orders",
       "GET /v1/admin/riders",
+      "GET /v1/admin/riders/:userId/id-document",
       "POST /v1/admin/riders/:userId/verify",
+      "GET /v1/admin/stats",
+      "GET /v1/admin/integrations",
+      "GET /v1/admin/customers",
+      "GET /v1/admin/customers/:id",
+      "GET /v1/admin/orders",
+      "POST /v1/admin/users/:id/status",
       "GET /v1/locations",
       "POST /v1/locations",
       "DELETE /v1/locations/:id",
+      "GET /v1/settings",
+      "PUT /v1/admin/settings",
       "POST /v1/voice/transcribe",
     ],
   }),
@@ -97,6 +109,12 @@ app.route("/v1", orderRoutes);
 app.route("/v1", paymentRoutes);
 app.route("/v1", riderRoutes);
 app.route("/v1", locationRoutes);
+app.route("/v1", settingsRoutes);
+// voiceRoutes before adminRoutes: adminRoutes' blanket requireRole("admin")
+// middleware is registered as "*" within the shared /v1 router, so it would
+// otherwise intercept voiceRoutes' /voice/transcribe too (same Hono gotcha
+// documented above for callRoutes vs orderRoutes).
 app.route("/v1", voiceRoutes);
+app.route("/v1", adminRoutes);
 
 export default app;

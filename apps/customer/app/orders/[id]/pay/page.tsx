@@ -1,6 +1,7 @@
 "use client";
 
 import type { OrderDetail } from "@tuma/shared";
+import { TriangleAlert } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../../../lib/api";
@@ -39,38 +40,57 @@ export default function PayPage() {
     }
   }, [detail, orderId, router]);
 
-  // Silently find a rider as soon as we land here; retry until one is found.
+  // Silently find a rider as soon as we land here, then keep retrying on a
+  // fixed 4s cadence until one is found. Depends only on stable primitives
+  // (stage, rider_id) rather than `detail` itself — `detail` is a brand-new
+  // object on every load(), so keying on it re-fires this effect on every
+  // poll tick, and a failed matchOrder's `finally` calling load() would
+  // immediately re-trigger another matchOrder with no delay at all: an
+  // unbounded, zero-delay retry loop whenever no rider is available yet
+  // (this is what took the API down — see incident notes).
+  const stage = detail?.order.stage;
+  const riderId = detail?.order.rider_id;
   useEffect(() => {
-    if (!detail || detail.order.stage !== "Create" || matching.current) return;
-    matching.current = true;
-    api
-      .matchOrder(orderId)
-      .catch(() => {})
-      .finally(() => {
+    if (!detail || stage !== "Create" || riderId) return;
+    let cancelled = false;
+
+    async function attempt() {
+      if (matching.current) return;
+      matching.current = true;
+      try {
+        await api.matchOrder(orderId);
+      } catch {
+        // no rider available yet — the interval below retries in 4s
+      } finally {
         matching.current = false;
-        load().catch(() => {});
-      });
-  }, [detail, orderId, load]);
+        if (!cancelled) load().catch(() => {});
+      }
+    }
 
-  useEffect(() => {
-    if (!detail || detail.order.rider_id) return;
-    const interval = setInterval(() => load().catch(() => {}), 4000);
-    return () => clearInterval(interval);
-  }, [detail, load]);
+    attempt();
+    const interval = setInterval(attempt, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId, stage, riderId]);
 
-  // Poll payment status while a MoMo collection is pending.
+  // Poll payment status while a MoMo collection is pending. Keyed on the
+  // pending payment's id (stable across reloads that don't change it)
+  // rather than `detail`, for the same reason as above.
+  const pendingPaymentId = detail?.payments.find((p) => p.status === "pending")?.id;
   useEffect(() => {
-    if (!detail) return;
-    const pending = detail.payments.find((p) => p.status === "pending");
-    if (!pending) return;
+    if (!pendingPaymentId) return;
     const interval = setInterval(() => {
       api
-        .refreshPayment(pending.id)
+        .refreshPayment(pendingPaymentId)
         .then(() => load())
         .catch(() => {});
     }, 3000);
     return () => clearInterval(interval);
-  }, [detail, load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPaymentId]);
 
   async function doFund() {
     setBusy(true);
@@ -124,6 +144,16 @@ export default function PayPage() {
           <div className="flex items-center gap-3 py-4">
             <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
             <p className="text-sm text-ink-500">Finding a nearby verified rider…</p>
+          </div>
+        )}
+
+        {hasRider && !!order.matched_out_of_range && (
+          <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
+            <p className="text-sm text-ink">
+              Your rider is available but currently outside the normal service area, so this delivery may
+              cost a little more than usual.
+            </p>
           </div>
         )}
 

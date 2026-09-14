@@ -50,12 +50,24 @@ export type OrderRow = {
   final_total: number | null;
   pickup_area: string | null;
   pickup_address: string | null;
+  pickup_lat: number | null;
+  pickup_lng: number | null;
   destination_area: string | null;
   destination_address: string | null;
+  destination_lat: number | null;
+  destination_lng: number | null;
+  distance_km: number | null;
+  matched_out_of_range: number;
   pin_code: string | null;
   eta_minutes: number | null;
   created_at: string;
   updated_at: string;
+};
+
+/** Admin-tunable delivery pricing/matching numbers (packages/shared/src/api-client.ts: getSettings/adminUpdateSettings). */
+export type DeliverySettings = {
+  deliveryRatePerKm: number;
+  serviceRangeKm: number;
 };
 
 export type OrderEvent = {
@@ -146,6 +158,15 @@ export function isRiderProfileComplete(rider: Rider | null | undefined): boolean
   );
 }
 
+/** Shape returned by the admin rider-listing endpoints: a `Rider` row joined with its user record. */
+export type AdminRider = Rider & {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  status: UserStatus;
+};
+
 export type SavedLocation = {
   id: string;
   user_id: string;
@@ -155,12 +176,15 @@ export type SavedLocation = {
   created_at: string;
 };
 
+export type UserStatus = "active" | "suspended";
+
 export type AuthUser = {
   id: string;
   phone: string;
   email: string | null;
   name: string;
   role: "customer" | "rider" | "admin";
+  status: UserStatus;
   phoneVerifiedAt: string | null;
   emailVerifiedAt: string | null;
 };
@@ -170,6 +194,44 @@ export type AuthUser = {
 export function isUserVerified(user: AuthUser | null | undefined): boolean {
   return !!user && (!!user.phoneVerifiedAt || !!user.emailVerifiedAt);
 }
+
+export type AdminCustomer = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  status: UserStatus;
+  created_at: string;
+  order_count: number;
+};
+
+export type AdminStats = {
+  totalCustomers: number;
+  totalRiders: number;
+  verifiedRiders: number;
+  onlineRiders: number;
+  ordersByStage: Record<string, number>;
+  paymentsByStatus: Record<string, number>;
+  settledGmv: number;
+};
+
+export type IntegrationsStatus = {
+  momo: { configured: boolean; targetEnv: string; baseUrl: string };
+  storage: { configured: boolean };
+};
+
+export type FailedPayment = {
+  id: string;
+  order_id: string;
+  type: "collection" | "disbursement" | "refund";
+  amount: number;
+  currency: string;
+  msisdn: string | null;
+  created_at: string;
+};
+
+/** `OrderRow` joined with the assigned rider's name, as returned by admin listings. */
+export type AdminOrderRow = OrderRow & { rider_name: string | null };
 
 export type OrderDetail = {
   order: OrderRow;

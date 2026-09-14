@@ -1,8 +1,15 @@
 import type {
+  AdminCustomer,
+  AdminOrderRow,
+  AdminRider,
+  AdminStats,
   AuthUser,
   ChatMessage,
   CreateListBody,
   CreateListResponse,
+  DeliverySettings,
+  FailedPayment,
+  IntegrationsStatus,
   ListDetail,
   ListSummary,
   OrderDetail,
@@ -11,6 +18,7 @@ import type {
   Payment,
   Rider,
   SavedLocation,
+  UserStatus,
 } from "./domain.js";
 
 export type CreateApiClientOptions = {
@@ -127,8 +135,12 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
       type?: OrderType;
       pickupArea?: string;
       pickupAddress?: string;
+      pickupLat?: number;
+      pickupLng?: number;
       destinationArea?: string;
       destinationAddress?: string;
+      destinationLat?: number;
+      destinationLng?: number;
       paymentRail?: "escrow" | "float";
       estimatedTotal?: number;
     }) {
@@ -252,14 +264,60 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
       return request<{ ok: true }>(`/v1/locations/${id}`, { method: "DELETE" });
     },
 
+    // Delivery pricing settings (rate per km, service range) — public read, admin write.
+    async getSettings() {
+      return request<{ settings: DeliverySettings }>("/v1/settings");
+    },
+    async adminUpdateSettings(input: Partial<DeliverySettings>) {
+      return request<{ settings: DeliverySettings }>("/v1/admin/settings", {
+        method: "PUT",
+        body: JSON.stringify(input),
+      });
+    },
+
     // Admin
     async adminListRiders() {
-      return request<{ riders: Rider[] }>("/v1/admin/riders");
+      return request<{ riders: AdminRider[] }>("/v1/admin/riders");
     },
     async adminVerifyRider(userId: string, verified: boolean) {
       return request<{ rider: Rider }>(`/v1/admin/riders/${userId}/verify`, {
         method: "POST",
         body: JSON.stringify({ verified }),
+      });
+    },
+    /** Fetches a rider's National ID scan as a Blob (not JSON — raw fetch, mirrors uploadRiderIdDocument). */
+    async adminRiderIdDocumentBlob(userId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/admin/riders/${userId}/id-document`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load ID document`);
+      return res.blob();
+    },
+    async adminStats() {
+      return request<{ stats: AdminStats }>("/v1/admin/stats");
+    },
+    async adminIntegrations() {
+      return request<{ integrations: IntegrationsStatus; recentFailedPayments: FailedPayment[] }>(
+        "/v1/admin/integrations",
+      );
+    },
+    async adminListCustomers(q?: string) {
+      const qs = q ? `?q=${encodeURIComponent(q)}` : "";
+      return request<{ customers: AdminCustomer[] }>(`/v1/admin/customers${qs}`);
+    },
+    async adminGetCustomer(id: string) {
+      return request<{ customer: AdminCustomer; orders: AdminOrderRow[] }>(`/v1/admin/customers/${id}`);
+    },
+    async adminListOrders(filters: { stage?: string; type?: OrderType; limit?: number } = {}) {
+      const params = new URLSearchParams();
+      if (filters.stage) params.set("stage", filters.stage);
+      if (filters.type) params.set("type", filters.type);
+      if (filters.limit) params.set("limit", String(filters.limit));
+      const qs = params.toString();
+      return request<{ orders: AdminOrderRow[] }>(`/v1/admin/orders${qs ? `?${qs}` : ""}`);
+    },
+    async adminSetUserStatus(userId: string, status: UserStatus) {
+      return request<{ user: AuthUser }>(`/v1/admin/users/${userId}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
       });
     },
   };

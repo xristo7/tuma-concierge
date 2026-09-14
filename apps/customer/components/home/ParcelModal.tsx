@@ -1,12 +1,24 @@
 "use client";
 
 import type { SavedLocation } from "@tuma/shared";
-import { LocateFixed, Map, MapPin, Type } from "lucide-react";
+import { LocateFixed, Map, MapPin, Route, Type } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+
+/** Great-circle distance in km — mirrors apps/api/src/lib/geo.ts, used only
+ * for the live fee preview here; the backend recomputes it authoritatively. */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 const LocationMapPicker = dynamic(
   () => import("../LocationMapPicker").then((m) => m.LocationMapPicker),
@@ -190,13 +202,28 @@ function PointEditor({
   );
 }
 
-function resolvePoint(point: PointState, locations: SavedLocation[]): { area?: string; address?: string } {
+function resolvePoint(
+  point: PointState,
+  locations: SavedLocation[],
+): { area?: string; address?: string; lat?: number; lng?: number } {
   const selected = locations.find((l) => l.id === point.selectedLocationId);
   if (selected) return { area: selected.area ?? undefined, address: selected.address ?? undefined };
   if (point.mode === "map") {
-    if (point.mapArea || point.mapAddress) return { area: point.mapArea ?? undefined, address: point.mapAddress ?? undefined };
+    if (point.mapArea || point.mapAddress) {
+      return {
+        area: point.mapArea ?? undefined,
+        address: point.mapAddress ?? undefined,
+        lat: point.geoCoords?.lat,
+        lng: point.geoCoords?.lng,
+      };
+    }
     if (point.geoCoords) {
-      return { area: undefined, address: `Current location (${point.geoCoords.lat.toFixed(4)}, ${point.geoCoords.lng.toFixed(4)})` };
+      return {
+        area: undefined,
+        address: `Current location (${point.geoCoords.lat.toFixed(4)}, ${point.geoCoords.lng.toFixed(4)})`,
+        lat: point.geoCoords.lat,
+        lng: point.geoCoords.lng,
+      };
     }
     return { area: undefined, address: undefined };
   }
@@ -212,6 +239,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
   const [estimatedTotal, setEstimatedTotal] = useState("");
   const [paymentRail, setPaymentRail] = useState<"escrow" | "float">("escrow");
   const [locations, setLocations] = useState<SavedLocation[]>([]);
+  const [ratePerKm, setRatePerKm] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -220,7 +248,19 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
       .getLocations()
       .then((res) => setLocations(res.locations))
       .catch(() => {});
+    api
+      .getSettings()
+      .then((res) => setRatePerKm(res.settings.deliveryRatePerKm))
+      .catch(() => {});
   }, []);
+
+  const pickupPoint = resolvePoint(pickup, locations);
+  const deliveryPoint = resolvePoint(delivery, locations);
+  const distanceKm =
+    pickupPoint.lat != null && pickupPoint.lng != null && deliveryPoint.lat != null && deliveryPoint.lng != null
+      ? haversineKm(pickupPoint.lat, pickupPoint.lng, deliveryPoint.lat, deliveryPoint.lng)
+      : null;
+  const liveEstimate = distanceKm != null && ratePerKm != null ? Math.round(distanceKm * ratePerKm) : null;
 
   function next() {
     const p = resolvePoint(pickup, locations);
@@ -248,10 +288,14 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
         type: "parcel",
         pickupArea: p.area,
         pickupAddress: p.address,
+        pickupLat: p.lat,
+        pickupLng: p.lng,
         destinationArea: d.area,
         destinationAddress: d.address,
+        destinationLat: d.lat,
+        destinationLng: d.lng,
         paymentRail,
-        estimatedTotal: estimatedTotal ? Number(estimatedTotal) : undefined,
+        estimatedTotal: liveEstimate ?? (estimatedTotal ? Number(estimatedTotal) : undefined),
       });
       onClose();
       router.push(`/orders/${order.id}/pay`);
@@ -292,13 +336,23 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
         <div className="space-y-4">
           <PointEditor point={delivery} setPoint={setDelivery} locations={locations} />
 
-          <input
-            value={estimatedTotal}
-            onChange={(e) => setEstimatedTotal(e.target.value.replace(/[^\d]/g, ""))}
-            inputMode="numeric"
-            placeholder="Estimated delivery fee (UGX, optional)"
-            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-          />
+          {liveEstimate != null ? (
+            <div className="flex items-center gap-2 rounded-xl border border-gold bg-gold/10 p-3">
+              <Route className="h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
+              <p className="text-sm text-ink">
+                <span className="font-bold">UGX {liveEstimate.toLocaleString("en-UG")}</span> estimated ·{" "}
+                {distanceKm!.toFixed(1)} km
+              </p>
+            </div>
+          ) : (
+            <input
+              value={estimatedTotal}
+              onChange={(e) => setEstimatedTotal(e.target.value.replace(/[^\d]/g, ""))}
+              inputMode="numeric"
+              placeholder="Estimated delivery fee (UGX, optional)"
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            />
+          )}
 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment</p>

@@ -1,6 +1,9 @@
 -- Full rider profile, required before a rider can be approved to take jobs.
--- National ID scan is stored in R2 (RIDER_DOCS binding); this column just
+-- National ID scan is stored in R2 (RIDER_DOCS binding) — this column just
 -- holds the object key — verification-only, never exposed via any public route.
+-- (Comments in these files must avoid the semicolon character entirely —
+-- migrate.ts splits each file on it without understanding SQL comments, so
+-- one here silently truncates the next statement.)
 
 ALTER TABLE riders ADD COLUMN first_name TEXT;
 ALTER TABLE riders ADD COLUMN last_name TEXT;

@@ -1,7 +1,7 @@
 "use client";
 
 import type { OrderDetail } from "@tuma/shared";
-import { MapPin } from "lucide-react";
+import { MapPin, TriangleAlert } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
@@ -82,6 +82,16 @@ export default function OrderDetailPage() {
           </p>
         )}
       </header>
+
+      {!!order.matched_out_of_range && order.rider_id && (
+        <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
+          <p className="text-sm text-ink">
+            Your rider is available but currently outside the normal service area, so this delivery may cost
+            a little more than usual.
+          </p>
+        </div>
+      )}
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
