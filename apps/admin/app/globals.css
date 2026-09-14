@@ -31,6 +31,11 @@
   /* Muted chip/pill surface (item badges, qty/unit inputs, total bars) —
      a step down from --surface-card, not the page background itself. */
   --surface-muted: 236 232 226;
+  /* Text input fill. In light mode this is just white (browser default,
+     unchanged); in dark mode it overrides the browser's native dark
+     form-control fill (a flat gray from `color-scheme: dark`) with a
+     washed-out navy that actually matches the page. */
+  --surface-input: 255 255 255;
   /* Surface tokens (SURFACE-TOKENS.md) */
   --radius-card: 24px;
   --border-faint: rgba(10, 10, 10, 0.08);
@@ -63,6 +68,7 @@
     --color-navy-700: 150 180 224;
     --surface-card: 22 48 88;
     --surface-muted: 40 76 122;
+    --surface-input: 33 63 106;
     --border-faint: rgba(247, 243, 238, 0.1);
   }
 }
@@ -85,6 +91,7 @@
   --color-navy-700: 150 180 224;
   --surface-card: 22 48 88;
   --surface-muted: 40 76 122;
+  --surface-input: 33 63 106;
   --border-faint: rgba(247, 243, 238, 0.1);
 }
 
@@ -119,4 +126,14 @@ body {
 
 .card-on-dark {
   border: 1px solid var(--border-faint-on-dark);
+}
+
+/* Text-like form fields default to --surface-input instead of the browser's
+   own `color-scheme: dark` fill (a flat gray unrelated to the app's
+   palette). A component that sets its own bg-* class (e.g. bg-transparent
+   inside a row) still wins — Tailwind's class specificity beats this. */
+input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]),
+textarea,
+select {
+  background-color: rgb(var(--surface-input));
 }
