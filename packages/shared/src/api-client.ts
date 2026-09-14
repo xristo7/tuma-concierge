@@ -176,6 +176,22 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
         body: JSON.stringify({ approve }),
       });
     },
+    /** Bundles several item changes (unavailable / price change) into one customer approval instead of many. */
+    async proposeSubstitutionBatch(
+      orderId: string,
+      changes: Array<{ itemId?: string; originalName: string; substituteName: string; priceDelta?: number }>,
+    ) {
+      return request<{ batchId: string; order: OrderRow }>(`/v1/orders/${orderId}/substitutions/batch`, {
+        method: "POST",
+        body: JSON.stringify({ changes }),
+      });
+    },
+    async decideSubstitutionBatch(orderId: string, batchId: string, approve: boolean) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/substitutions/batch/${batchId}/decision`, {
+        method: "POST",
+        body: JSON.stringify({ approve }),
+      });
+    },
     async deliverOrder(orderId: string, etaMinutes?: number) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/deliver`, {
         method: "POST",

@@ -73,6 +73,8 @@ app.get("/v1", (c) =>
       "POST /v1/orders/:id/fund",
       "POST /v1/orders/:id/substitutions",
       "POST /v1/orders/:id/substitutions/:subId/decision",
+      "POST /v1/orders/:id/substitutions/batch",
+      "POST /v1/orders/:id/substitutions/batch/:batchId/decision",
       "POST /v1/orders/:id/deliver",
       "POST /v1/orders/:id/handover",
       "POST /v1/orders/:id/settle",

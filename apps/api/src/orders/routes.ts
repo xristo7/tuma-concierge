@@ -462,6 +462,109 @@ orderRoutes.post("/orders/:id/substitutions", async (c) => {
   return c.json({ substitution: subId }, 201);
 });
 
+const batchSubstituteSchema = z.object({
+  changes: z
+    .array(
+      z.object({
+        itemId: z.string().optional(),
+        originalName: z.string().min(1).max(120),
+        substituteName: z.string().min(1).max(120),
+        priceDelta: z.number().int().default(0),
+      }),
+    )
+    .min(1)
+    .max(50),
+});
+
+/** Same as POST /substitutions, but for several items at once — one review for the customer instead of many. */
+orderRoutes.post("/orders/:id/substitutions/batch", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertRider(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  if (order.stage !== "Shop" && order.stage !== "Substitute") {
+    return c.json({ error: "invalid_stage", message: `Cannot propose changes from stage ${order.stage}` }, 409);
+  }
+
+  const parsed = batchSubstituteSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  const batchId = newId("batch");
+  for (const change of parsed.data.changes) {
+    await db.execute({
+      sql: `INSERT INTO substitutions (id, order_id, item_id, original_name, substitute_name, price_delta, batch_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      args: [newId("sub"), id, change.itemId ?? null, change.originalName, change.substituteName, change.priceDelta, batchId],
+    });
+  }
+  await touchOrder(id, { stage: "Substitute" });
+  const netDelta = parsed.data.changes.reduce((sum, ch) => sum + ch.priceDelta, 0);
+  await logEvent(
+    id,
+    "Substitute",
+    `Proposed ${parsed.data.changes.length} change(s) for approval (${netDelta >= 0 ? "+" : ""}${netDelta})`,
+    user.sub,
+  );
+
+  return c.json({ batchId, order: await getOrder(id) }, 201);
+});
+
+orderRoutes.post("/orders/:id/substitutions/batch/:batchId/decision", async (c) => {
+  const id = c.req.param("id");
+  const batchId = c.req.param("batchId");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+
+  const parsed = decisionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  const batchRes = await db.execute({
+    sql: "SELECT * FROM substitutions WHERE order_id = ? AND batch_id = ? AND status = 'pending'",
+    args: [id, batchId],
+  });
+  const rows = batchRes.rows as Row[];
+  if (rows.length === 0) return c.json({ error: "not_found" }, 404);
+
+  const status = parsed.data.approve ? "approved" : "rejected";
+  await db.execute({
+    sql: "UPDATE substitutions SET status = ?, updated_at = datetime('now') WHERE order_id = ? AND batch_id = ?",
+    args: [status, id, batchId],
+  });
+
+  if (parsed.data.approve) {
+    const netDelta = rows.reduce((sum, r) => sum + ((r.price_delta as number) ?? 0), 0);
+    if (netDelta) {
+      const currentTotal = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
+      await touchOrder(id, { final_total: currentTotal + netDelta });
+    }
+  }
+
+  await logEvent(id, "Approve", `Batch of ${rows.length} change(s) ${status}`, user.sub);
+
+  const remaining = await db.execute({
+    sql: "SELECT COUNT(*) as n FROM substitutions WHERE order_id = ? AND status = 'pending'",
+    args: [id],
+  });
+  if ((remaining.rows[0]?.n as number) === 0) {
+    await touchOrder(id, { stage: "Approve" });
+  }
+
+  return c.json({ order: await getOrder(id) });
+});
+
 const decisionSchema = z.object({ approve: z.boolean() });
 
 orderRoutes.post("/orders/:id/substitutions/:subId/decision", async (c) => {

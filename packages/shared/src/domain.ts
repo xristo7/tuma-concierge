@@ -87,6 +87,7 @@ export type Substitution = {
   substitute_name: string;
   price_delta: number;
   status: "pending" | "approved" | "rejected";
+  batch_id: string | null;
   created_at: string;
 };
 

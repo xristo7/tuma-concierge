@@ -60,6 +60,25 @@ export default function OrderDetailPage() {
 
   const { order, items, substitutions } = detail;
   const pendingSubs = substitutions.filter((s) => s.status === "pending");
+  // Group by batch so a rider's multi-item edit shows as one card with one
+  // approve/reject action; older single-item proposals (no batch_id) each
+  // just form a group of their own, decided via the original endpoint.
+  const pendingGroups = Object.values(
+    pendingSubs.reduce<Record<string, { key: string; batchId: string | null; subs: typeof pendingSubs }>>(
+      (groups, sub) => {
+        const key = sub.batch_id ?? sub.id;
+        (groups[key] ??= { key, batchId: sub.batch_id, subs: [] }).subs.push(sub);
+        return groups;
+      },
+      {},
+    ),
+  );
+
+  function decideGroup(group: { batchId: string | null; subs: typeof pendingSubs }, approve: boolean) {
+    return group.batchId
+      ? api.decideSubstitutionBatch(orderId, group.batchId, approve)
+      : api.decideSubstitution(orderId, group.subs[0].id, approve);
+  }
 
   return (
     <div className="space-y-6 px-4 pb-24 pt-4">
@@ -129,34 +148,54 @@ export default function OrderDetailPage() {
             <p className="text-sm text-ink-500">
               {order.type === "parcel" ? "Your rider is picking up the parcel." : "Your rider is shopping."}
             </p>
-            {pendingSubs.length > 0 && (
+            {pendingGroups.length > 0 && (
               <ul className="space-y-2">
-                {pendingSubs.map((sub) => (
-                  <li key={sub.id} className="rounded-xl border border-[var(--border-faint)] p-3">
-                    <p className="text-sm text-ink">
-                      Swap <strong>{sub.original_name}</strong> for <strong>{sub.substitute_name}</strong>
-                      {sub.price_delta !== 0 && (
-                        <span className="text-ink-500"> ({sub.price_delta > 0 ? "+" : ""}{formatUgx(sub.price_delta)})</span>
+                {pendingGroups.map((group) => {
+                  const netDelta = group.subs.reduce((sum, s) => sum + s.price_delta, 0);
+                  return (
+                    <li key={group.key} className="rounded-xl border border-[var(--border-faint)] p-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                        Your rider proposed a change
+                      </p>
+                      <ul className="mt-1.5 space-y-1">
+                        {group.subs.map((sub) => (
+                          <li key={sub.id} className="text-sm text-ink">
+                            <strong>{sub.original_name}</strong> → <strong>{sub.substitute_name}</strong>
+                            {sub.price_delta !== 0 && (
+                              <span className="text-ink-500">
+                                {" "}
+                                ({sub.price_delta > 0 ? "+" : ""}
+                                {formatUgx(sub.price_delta)})
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {group.subs.length > 1 && (
+                        <p className="mt-1.5 text-sm font-semibold text-ink">
+                          Net change: {netDelta >= 0 ? "+" : ""}
+                          {formatUgx(netDelta)}
+                        </p>
                       )}
-                    </p>
-                    <div className="mt-2 flex gap-2">
-                      <button
-                        disabled={busy}
-                        onClick={() => run(() => api.decideSubstitution(orderId, sub.id, true))}
-                        className="flex-1 rounded-full bg-green px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => run(() => api.decideSubstitution(orderId, sub.id, false))}
-                        className="flex-1 rounded-full bg-[#ECE8E2] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          disabled={busy}
+                          onClick={() => run(() => decideGroup(group, true))}
+                          className="flex-1 rounded-full bg-green px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => run(() => decideGroup(group, false))}
+                          className="flex-1 rounded-full bg-[#ECE8E2] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </>
