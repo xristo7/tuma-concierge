@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { db } from "../db/client.js";
 import { requireAuth } from "../auth/middleware.js";
-import { getRequestToPayStatus, getTransferStatus } from "../momo/client.js";
+import { checkPaymentStatus } from "./service.js";
 
 export const paymentRoutes = new Hono();
 
@@ -15,9 +15,9 @@ async function logEvent(orderId: string, stage: string, note: string, actorId: s
 }
 
 /**
- * Poll a payment's status against MoMo. Sandbox testing has no public
- * webhook target, so the client polls this instead of relying solely on
- * /payments/momo/callback.
+ * Poll a payment's status against the mobile money provider (mock or live
+ * Yo! Payments). Sandbox/mock testing has no public webhook target, so the
+ * client polls this instead of relying solely on /payments/yo/callback.
  */
 paymentRoutes.get("/payments/:id/refresh", requireAuth, async (c) => {
   const id = c.req.param("id") as string;
@@ -38,12 +38,13 @@ paymentRoutes.get("/payments/:id/refresh", requireAuth, async (c) => {
   }
 
   try {
-    const status =
-      payment.type === "collection"
-        ? await getRequestToPayStatus(payment.provider_ref as string)
-        : await getTransferStatus(payment.provider_ref as string);
+    const status = await checkPaymentStatus({
+      provider: payment.provider as string,
+      provider_ref: payment.provider_ref as string | null,
+      created_at: payment.created_at as string,
+    });
 
-    if (status === "SUCCESSFUL") {
+    if (status === "successful") {
       await db.execute({
         sql: "UPDATE payments SET status = 'successful', updated_at = datetime('now') WHERE id = ?",
         args: [id],
@@ -55,7 +56,7 @@ paymentRoutes.get("/payments/:id/refresh", requireAuth, async (c) => {
         });
         await logEvent(order.id as string, "Shop", "Escrow funded — shopping started", user.sub);
       }
-    } else if (status === "FAILED") {
+    } else if (status === "failed") {
       await db.execute({
         sql: "UPDATE payments SET status = 'failed', updated_at = datetime('now') WHERE id = ?",
         args: [id],
@@ -65,13 +66,13 @@ paymentRoutes.get("/payments/:id/refresh", requireAuth, async (c) => {
     const updated = await db.execute({ sql: "SELECT * FROM payments WHERE id = ?", args: [id] });
     return c.json({ payment: updated.rows[0] });
   } catch (err) {
-    return c.json({ error: "momo_status_check_failed", message: String(err) }, 502);
+    return c.json({ error: "payment_status_check_failed", message: String(err) }, 502);
   }
 });
 
-/** Real MoMo webhook target (requires MOMO_CALLBACK_URL to be a public HTTPS endpoint). */
-paymentRoutes.post("/payments/momo/callback", async (c) => {
+/** Real Yo! Payments webhook target (requires YO_CALLBACK_URL to be a public HTTPS endpoint). */
+paymentRoutes.post("/payments/yo/callback", async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  console.log("MoMo callback received:", JSON.stringify(body));
+  console.log("Yo! Payments callback received:", JSON.stringify(body));
   return c.json({ received: true });
 });

@@ -97,7 +97,7 @@ export default function RiderDetailPage() {
         <Row label="Email" value={rider.email} />
         <Row label="Area" value={rider.area} />
         <Row label="Vehicle" value={rider.vehicle_info} />
-        <Row label="MoMo number" value={rider.momo_msisdn} />
+        <Row label="Mobile money number" value={rider.momo_msisdn} />
       </section>
 
       <section className="home-card space-y-2">

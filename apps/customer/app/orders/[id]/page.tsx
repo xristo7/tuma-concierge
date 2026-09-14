@@ -1,9 +1,10 @@
 "use client";
 
-import type { OrderDetail, OrderRating } from "@tuma/shared";
+import type { MobileMoneyNetwork, OrderDetail, OrderRating } from "@tuma/shared";
+import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel } from "@tuma/shared";
 import { MapPin, TriangleAlert } from "lucide-react";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
 import { OrderTimeline } from "../../../components/OrderTimeline";
 import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
@@ -18,6 +19,7 @@ export default function OrderDetailPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msisdn, setMsisdn] = useState("");
+  const detectedNetwork = useMemo(() => detectMobileMoneyNetwork(msisdn), [msisdn]);
   const matching = useRef(false);
 
   const load = useCallback(async () => {
@@ -245,7 +247,9 @@ export default function OrderDetailPage() {
           {order.rider_id && pendingPayment && (
             <div className="flex items-center gap-3 py-2">
               <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-              <p className="text-sm text-ink-500">Confirming your MoMo payment…</p>
+              <p className="text-sm text-ink-500">
+                Confirming your {mobileMoneyNetworkLabel((pendingPayment?.network as MobileMoneyNetwork | undefined) ?? null)} payment…
+              </p>
             </div>
           )}
 
@@ -260,19 +264,26 @@ export default function OrderDetailPage() {
                   }}
                   className="space-y-2"
                 >
-                  <input
-                    required
-                    value={msisdn}
-                    onChange={(e) => setMsisdn(e.target.value)}
-                    placeholder="MoMo number (e.g. 256700000099)"
-                    className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-                  />
+                  <div className="space-y-1">
+                    <input
+                      required
+                      value={msisdn}
+                      onChange={(e) => setMsisdn(e.target.value)}
+                      placeholder="Mobile money number (e.g. 0772345678)"
+                      className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                    />
+                    {detectedNetwork && (
+                      <p className="px-1 text-xs font-semibold text-ink-500">
+                        {mobileMoneyNetworkLabel(detectedNetwork)} detected
+                      </p>
+                    )}
+                  </div>
                   <button
                     type="submit"
                     disabled={busy}
                     className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
                   >
-                    Pay via MoMo
+                    Pay via {mobileMoneyNetworkLabel(detectedNetwork)}
                   </button>
                 </form>
               ) : (

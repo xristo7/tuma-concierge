@@ -56,7 +56,7 @@ app.get("/v1", (c) =>
     name: "tuma-api",
     version: "0.1.0",
     status: "live",
-    note: "Auth, orders, matching, MoMo escrow (sandbox-ready), chat, rider verification",
+    note: "Auth, orders, matching, mobile money escrow via Yo! Payments (mock by default), chat, rider verification",
     endpoints: [
       "POST /v1/auth/register",
       "POST /v1/auth/login",
@@ -90,7 +90,7 @@ app.get("/v1", (c) =>
       "GET /v1/orders/:id/chat",
       "POST /v1/orders/:id/chat",
       "GET /v1/payments/:id/refresh",
-      "POST /v1/payments/momo/callback",
+      "POST /v1/payments/yo/callback",
       "POST /v1/riders/apply",
       "POST /v1/riders/status",
       "GET /v1/riders/me",

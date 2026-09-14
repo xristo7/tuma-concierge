@@ -99,6 +99,7 @@ export type Payment = {
   provider: string;
   provider_ref: string | null;
   msisdn: string | null;
+  network: string | null;
   amount: number;
   currency: string;
   status: "pending" | "successful" | "failed";
@@ -218,7 +219,7 @@ export type AdminStats = {
 };
 
 export type IntegrationsStatus = {
-  momo: { configured: boolean; targetEnv: string; baseUrl: string };
+  mobileMoney: { provider: string; live: boolean; aggregator: string; networks: string[] };
   storage: { configured: boolean };
 };
 

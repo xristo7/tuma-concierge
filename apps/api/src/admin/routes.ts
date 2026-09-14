@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { InArgs } from "@libsql/client";
 import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
-import { isMomoConfigured } from "../momo/client.js";
+import { paymentsIntegrationStatus } from "../payments/service.js";
 import { getR2Bucket } from "../storage/r2.js";
 
 export const adminRoutes = new Hono();
@@ -73,11 +73,7 @@ adminRoutes.get("/admin/integrations", async (c) => {
 
   return c.json({
     integrations: {
-      momo: {
-        configured: isMomoConfigured(),
-        targetEnv: process.env.MOMO_TARGET_ENV ?? "sandbox",
-        baseUrl: process.env.MOMO_BASE_URL ?? "https://sandbox.momodeveloper.mtn.com",
-      },
+      mobileMoney: paymentsIntegrationStatus(),
       storage: { configured: storageConfigured },
     },
     recentFailedPayments: failed.rows,

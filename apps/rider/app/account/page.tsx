@@ -1,9 +1,9 @@
 "use client";
 
-import { isRiderProfileComplete, type Rider } from "@tuma/shared";
+import { detectMobileMoneyNetwork, isRiderProfileComplete, mobileMoneyNetworkLabel, type Rider } from "@tuma/shared";
 import { CheckCircle2, LogOut, MapPin, Upload, User } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
@@ -62,6 +62,8 @@ export default function AccountPage() {
   const [stageChairmanContact, setStageChairmanContact] = useState("");
   const [emergencyContactName, setEmergencyContactName] = useState("");
   const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
+  const [momoMsisdn, setMomoMsisdn] = useState("");
+  const detectedNetwork = useMemo(() => detectMobileMoneyNetwork(momoMsisdn), [momoMsisdn]);
 
   const [showMap, setShowMap] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -93,6 +95,7 @@ export default function AccountPage() {
     setStageChairmanContact(r.stage_chairman_contact ?? "");
     setEmergencyContactName(r.emergency_contact_name ?? "");
     setEmergencyContactPhone(r.emergency_contact_phone ?? "");
+    setMomoMsisdn(r.momo_msisdn ?? "");
   }
 
   const complete = isRiderProfileComplete(rider);
@@ -119,6 +122,7 @@ export default function AccountPage() {
         stageChairmanContact: stageChairmanContact || undefined,
         emergencyContactName: emergencyContactName || undefined,
         emergencyContactPhone: emergencyContactPhone || undefined,
+        momoMsisdn: momoMsisdn || undefined,
       });
       applyRider(res.rider);
       setSaved(true);
@@ -267,6 +271,20 @@ export default function AccountPage() {
               required
             />
           </div>
+        </section>
+
+        <section className="home-card space-y-3">
+          <h2 className="text-sm font-semibold text-ink">Payout</h2>
+          <Field
+            label="Mobile money number (optional)"
+            value={momoMsisdn}
+            onChange={setMomoMsisdn}
+            placeholder="0772345678"
+          />
+          {detectedNetwork && (
+            <p className="px-1 text-xs font-semibold text-ink-500">{mobileMoneyNetworkLabel(detectedNetwork)} detected</p>
+          )}
+          <p className="text-xs text-ink-500">This is where your delivery payouts are sent once a job settles.</p>
         </section>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

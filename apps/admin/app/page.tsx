@@ -80,13 +80,14 @@ export default function OverviewPage() {
       <section className="home-card space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Integrations</h2>
         <div className="flex items-center gap-2 text-sm">
-          {integrations.momo.configured ? (
+          {integrations.mobileMoney.live ? (
             <CheckCircle2 className="h-4 w-4 shrink-0 text-green" strokeWidth={2} aria-hidden />
           ) : (
-            <XCircle className="h-4 w-4 shrink-0 text-red-600" strokeWidth={2} aria-hidden />
+            <span className="h-4 w-4 shrink-0 rounded-full bg-gold/70" aria-hidden />
           )}
           <span className="text-ink">
-            MTN MoMo — {integrations.momo.configured ? `configured (${integrations.momo.targetEnv})` : "not configured"}
+            Mobile money ({integrations.mobileMoney.aggregator}, MTN MoMo + Airtel Money) —{" "}
+            {integrations.mobileMoney.live ? "live" : "demo / simulated"}
           </span>
         </div>
         <div className="flex items-center gap-2 text-sm">

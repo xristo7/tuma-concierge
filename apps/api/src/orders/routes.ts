@@ -6,7 +6,14 @@ import { requireAuth } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
 import { getDeliverySettings } from "../lib/settings.js";
-import { isMomoConfigured, requestToPay, transfer } from "../momo/client.js";
+import type { MobileMoneyNetwork } from "@tuma/shared";
+import {
+  activeProvider,
+  initiateCollection,
+  initiateDisbursement,
+  mobileMoneyNetworkLabel,
+  UnsupportedNetworkError,
+} from "../payments/service.js";
 import { getR2Bucket } from "../storage/r2.js";
 
 export const orderRoutes = new Hono();
@@ -465,7 +472,7 @@ orderRoutes.post("/orders/:id/cancel", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// Fund (escrow via MoMo Collections, or float)
+// Fund (escrow via mobile money collection, or float)
 // ---------------------------------------------------------------------------
 
 const fundSchema = z.object({ msisdn: z.string().min(6).max(20) });
@@ -501,45 +508,29 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
   const paymentId = newId("pay");
+  let providerRef: string;
+  let network: MobileMoneyNetwork;
+  try {
+    const initiated = await initiateCollection({ referenceId: paymentId, msisdn: parsed.data.msisdn, amount });
+    providerRef = initiated.providerRef;
+    network = initiated.network;
+  } catch (err) {
+    if (err instanceof UnsupportedNetworkError) {
+      return c.json({ error: "unsupported_network", message: err.message }, 400);
+    }
+    return c.json({ error: "payment_request_failed", message: String(err) }, 502);
+  }
+
   await db.execute({
-    sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, msisdn, amount, currency, status)
-          VALUES (?, ?, 'collection', 'momo', ?, ?, ?, 'UGX', 'pending')`,
-    args: [paymentId, id, paymentId, parsed.data.msisdn, amount],
+    sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, msisdn, network, amount, currency, status)
+          VALUES (?, ?, 'collection', ?, ?, ?, ?, ?, 'UGX', 'pending')`,
+    args: [paymentId, id, activeProvider(), providerRef, parsed.data.msisdn, network, amount],
   });
 
-  if (!isMomoConfigured()) {
-    return c.json(
-      {
-        error: "momo_not_configured",
-        message:
-          "MoMo API credentials are not set. Run provision-sandbox (see apps/api/src/momo/provision-sandbox.ts) or set MOMO_* env vars.",
-        payment: { id: paymentId, status: "pending" },
-      },
-      503,
-    );
-  }
-
-  try {
-    await requestToPay({
-      referenceId: paymentId,
-      amount,
-      currency: process.env.MOMO_CURRENCY ?? "UGX",
-      msisdn: parsed.data.msisdn,
-      externalId: id,
-      payerMessage: "Tuma order escrow funding",
-    });
-  } catch (err) {
-    await db.execute({
-      sql: "UPDATE payments SET status = 'failed', raw_payload = ?, updated_at = datetime('now') WHERE id = ?",
-      args: [String(err), paymentId],
-    });
-    return c.json({ error: "momo_request_failed", message: String(err) }, 502);
-  }
-
   await touchOrder(id, { stage: "Fund" });
-  await logEvent(id, "Fund", "MoMo collection requested", user.sub);
+  await logEvent(id, "Fund", `${mobileMoneyNetworkLabel(network)} collection requested`, user.sub);
 
-  return c.json({ order: await getOrder(id), payment: { id: paymentId, status: "pending" } });
+  return c.json({ order: await getOrder(id), payment: { id: paymentId, status: "pending", network } });
 });
 
 // ---------------------------------------------------------------------------
@@ -906,35 +897,28 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
     const msisdn = riderRow.rows[0]?.momo_msisdn as string | undefined;
 
     if (!msisdn) {
-      return c.json({ error: "rider_missing_momo", message: "Rider has no MoMo number on file" }, 409);
-    }
-    if (!isMomoConfigured()) {
-      return c.json({ error: "momo_not_configured" }, 503);
+      return c.json({ error: "rider_missing_mobile_money", message: "Rider has no mobile money number on file" }, 409);
     }
 
     const paymentId = newId("pay");
-    await db.execute({
-      sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, msisdn, amount, currency, status)
-            VALUES (?, ?, 'disbursement', 'momo', ?, ?, ?, 'UGX', 'pending')`,
-      args: [paymentId, id, paymentId, msisdn, total],
-    });
-
+    let providerRef: string;
+    let network: MobileMoneyNetwork;
     try {
-      await transfer({
-        referenceId: paymentId,
-        amount: total,
-        currency: process.env.MOMO_CURRENCY ?? "UGX",
-        msisdn,
-        externalId: id,
-        payerMessage: "Tuma rider payout",
-      });
+      const initiated = await initiateDisbursement({ referenceId: paymentId, msisdn, amount: total });
+      providerRef = initiated.providerRef;
+      network = initiated.network;
     } catch (err) {
-      await db.execute({
-        sql: "UPDATE payments SET status = 'failed', raw_payload = ?, updated_at = datetime('now') WHERE id = ?",
-        args: [String(err), paymentId],
-      });
-      return c.json({ error: "momo_transfer_failed", message: String(err) }, 502);
+      if (err instanceof UnsupportedNetworkError) {
+        return c.json({ error: "unsupported_network", message: err.message }, 400);
+      }
+      return c.json({ error: "payout_request_failed", message: String(err) }, 502);
     }
+
+    await db.execute({
+      sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, msisdn, network, amount, currency, status)
+            VALUES (?, ?, 'disbursement', ?, ?, ?, ?, ?, 'UGX', 'pending')`,
+      args: [paymentId, id, activeProvider(), providerRef, msisdn, network, total],
+    });
   }
 
   await touchOrder(id, { stage: "Settle", final_total: total });

@@ -5,6 +5,12 @@ export type { PaymentRail as PaymentRailValue } from "./payment-rail.js";
 export { createApiClient } from "./api-client.js";
 export type { CreateApiClientOptions, ApiClient } from "./api-client.js";
 export { isRiderProfileComplete, isUserVerified } from "./domain.js";
+export {
+  detectMobileMoneyNetwork,
+  mobileMoneyNetworkLabel,
+  mobileMoneyCurrencyCode,
+} from "./mobile-money.js";
+export type { MobileMoneyNetwork } from "./mobile-money.js";
 export type {
   ListStatus,
   ListSummary,
