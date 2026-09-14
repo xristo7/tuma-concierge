@@ -1,14 +1,15 @@
 "use client";
 
 import type { OrderRow } from "@tuma/shared";
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { OrderChat } from "../../components/OrderChat";
+import { ShoppingListModal } from "../../components/home/ShoppingListModal";
 import { api } from "../../lib/api";
 import { stageLabel } from "../../lib/order-display";
 
 export default function ChatPage() {
   const [order, setOrder] = useState<OrderRow | null | undefined>(undefined);
+  const [showNewList, setShowNewList] = useState(false);
 
   useEffect(() => {
     api
@@ -26,9 +27,10 @@ export default function ChatPage() {
       <div className="flex min-h-dvh flex-col items-center justify-center space-y-3 p-4 text-center">
         <h1 className="text-xl font-bold text-ink">Chat</h1>
         <p className="text-sm text-ink-500">You have no active order to chat about.</p>
-        <Link href="/orders/new" className="text-sm font-semibold text-gold">
+        <button type="button" onClick={() => setShowNewList(true)} className="text-sm font-semibold text-gold">
           Send a shopping list
-        </Link>
+        </button>
+        {showNewList && <ShoppingListModal onClose={() => setShowNewList(false)} />}
       </div>
     );
   }
