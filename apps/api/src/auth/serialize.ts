@@ -1,6 +1,6 @@
 type UserRow = {
   id: string;
-  phone: string;
+  phone: string | null;
   email: string | null;
   name: string;
   role: "customer" | "rider" | "admin";

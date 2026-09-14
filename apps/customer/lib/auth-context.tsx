@@ -7,8 +7,8 @@ import { api, TOKEN_KEY, USER_KEY } from "./api";
 type AuthState = {
   user: AuthUser | null;
   ready: boolean;
-  login: (phone: string, password: string) => Promise<void>;
-  register: (input: { phone: string; email?: string; name: string; password: string }) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
+  register: (input: { phone?: string; email?: string; name: string; password: string }) => Promise<void>;
   logout: () => void;
   /** Patches the persisted user in place (e.g. after OTP verification succeeds) without a new token. */
   updateUser: (user: AuthUser) => void;
@@ -38,15 +38,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(
-    async (phone: string, password: string) => {
-      const res = await api.login({ phone, password });
+    async (identifier: string, password: string) => {
+      const res = await api.login({ identifier, password });
       persist(res.token, res.user);
     },
     [persist],
   );
 
   const register = useCallback(
-    async (input: { phone: string; email?: string; name: string; password: string }) => {
+    async (input: { phone?: string; email?: string; name: string; password: string }) => {
       const res = await api.register({ ...input, role: "customer" });
       persist(res.token, res.user);
     },

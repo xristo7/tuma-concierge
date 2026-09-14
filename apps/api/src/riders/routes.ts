@@ -178,7 +178,7 @@ riderRoutes.get("/riders/me/orders", requireAuth, requireRole("rider"), async (c
 
 riderRoutes.get("/admin/riders", requireAuth, requireRole("admin"), async (c) => {
   const res = await db.execute(
-    `SELECT u.id, u.name, u.phone, u.email, r.*
+    `SELECT u.id, u.name, u.phone, u.email, u.status, r.*
      FROM riders r JOIN users u ON u.id = r.user_id ORDER BY r.created_at DESC`,
   );
   return c.json({ riders: res.rows });

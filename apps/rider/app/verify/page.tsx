@@ -11,7 +11,7 @@ type Channel = "sms" | "email";
 export default function VerifyPage() {
   const { user, updateUser, logout } = useAuth();
   const router = useRouter();
-  const [channel, setChannel] = useState<Channel>("sms");
+  const [channel, setChannel] = useState<Channel>("email");
   const [code, setCode] = useState("");
   const [sentTarget, setSentTarget] = useState<string | null>(null);
   const [devCode, setDevCode] = useState<string | null>(null);
@@ -31,9 +31,12 @@ export default function VerifyPage() {
 
   // A code was already sent at registration — this just covers the case of
   // returning to /verify later (e.g. after logging back in unverified).
+  // Email is the default channel; phone-only accounts fall back to SMS.
   useEffect(() => {
     if (!user || isUserVerified(user)) return;
-    void sendCode("sms", { silent: true });
+    const defaultChannel: Channel = user.email ? "email" : "sms";
+    setChannel(defaultChannel);
+    void sendCode(defaultChannel, { silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 

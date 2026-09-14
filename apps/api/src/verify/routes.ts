@@ -43,7 +43,7 @@ verifyRoutes.post("/verify/request", async (c) => {
   const row = userRes.rows[0] as Row | undefined;
   if (!row) return c.json({ error: "not_found" }, 404);
 
-  const target = channel === "sms" ? (row.phone as string) : (row.email as string | null);
+  const target = channel === "sms" ? (row.phone as string | null) : (row.email as string | null);
   if (!target) {
     return c.json({ error: channel === "email" ? "no_email_on_file" : "no_phone_on_file" }, 400);
   }

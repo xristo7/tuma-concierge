@@ -13,11 +13,11 @@ function secretKey() {
 export type AuthTokenPayload = {
   sub: string;
   role: "customer" | "rider" | "admin";
-  phone: string;
+  phone: string | null;
 };
 
-export async function signToken(payload: AuthTokenPayload): Promise<string> {
-  return new SignJWT({ role: payload.role, phone: payload.phone })
+export async function signToken(payload: { sub: string; role: AuthTokenPayload["role"]; phone?: string | null }): Promise<string> {
+  return new SignJWT({ role: payload.role, phone: payload.phone ?? null })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
     .setIssuedAt()
@@ -30,6 +30,6 @@ export async function verifyToken(token: string): Promise<AuthTokenPayload> {
   return {
     sub: payload.sub as string,
     role: payload.role as AuthTokenPayload["role"],
-    phone: payload.phone as string,
+    phone: (payload.phone as string | null | undefined) ?? null,
   };
 }

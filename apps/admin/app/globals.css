@@ -1,0 +1,117 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  /* Palette — stored as "R G B" triples (no commas, no rgb() wrapper) so
+     Tailwind's rgb(var(--x) / <alpha-value>) pattern in tailwind.config.ts
+     can apply opacity modifiers (bg-gold/10 etc.) to a themeable value. */
+  --color-gold: 201 162 39;
+  --color-gold-400: 224 185 61;
+  --color-gold-500: 201 162 39;
+  --color-black: 10 10 10;
+  --color-black-700: 26 26 26;
+  --color-black-900: 10 10 10;
+  --color-ink: 10 10 10;
+  --color-ink-500: 92 102 112;
+  --color-ink-900: 10 10 10;
+  --color-green: 27 122 78;
+  --color-green-400: 47 168 106;
+  --color-green-600: 27 122 78;
+  --color-cream: 247 243 238;
+  --color-cream-50: 247 243 238;
+  --color-cream-100: 237 230 220;
+  --color-navy: 21 58 117;
+  --color-navy-400: 61 102 166;
+  --color-navy-700: 15 42 87;
+  /* Card surface — separate from --color-cream (the page background) so
+     dark mode can give cards visible elevation against a darker page. */
+  --surface-card: 255 255 255;
+  /* Surface tokens (SURFACE-TOKENS.md) */
+  --radius-card: 24px;
+  --border-faint: rgba(10, 10, 10, 0.08);
+  --border-faint-on-dark: rgba(247, 243, 238, 0.12);
+  --shadow-card: 0 4px 16px rgba(10, 10, 10, 0.06), 0 1px 2px rgba(10, 10, 10, 0.04);
+  --shadow-card-hover: 0 12px 28px rgba(10, 10, 10, 0.10), 0 4px 8px rgba(10, 10, 10, 0.06);
+  --pad-card: 30px;
+  --transition-raise: 200ms ease;
+}
+
+/* Dark mode — navy as the page background, gold stays the one constant
+   accent. Applies both to an explicit toggle (data-theme="dark") and,
+   absent one, to the OS preference. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --color-black: 6 14 28;
+    --color-black-700: 12 24 46;
+    --color-black-900: 6 14 28;
+    --color-ink: 247 243 238;
+    --color-ink-500: 168 180 200;
+    --color-ink-900: 247 243 238;
+    --color-green: 47 168 106;
+    --color-green-400: 62 196 128;
+    --color-cream: 13 32 61;
+    --color-cream-50: 13 32 61;
+    --color-cream-100: 19 44 82;
+    --color-navy: 90 130 196;
+    --color-navy-400: 120 155 214;
+    --color-navy-700: 150 180 224;
+    --surface-card: 22 48 88;
+    --border-faint: rgba(247, 243, 238, 0.1);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-black: 6 14 28;
+  --color-black-700: 12 24 46;
+  --color-black-900: 6 14 28;
+  --color-ink: 247 243 238;
+  --color-ink-500: 168 180 200;
+  --color-ink-900: 247 243 238;
+  --color-green: 47 168 106;
+  --color-green-400: 62 196 128;
+  --color-cream: 13 32 61;
+  --color-cream-50: 13 32 61;
+  --color-cream-100: 19 44 82;
+  --color-navy: 90 130 196;
+  --color-navy-400: 120 155 214;
+  --color-navy-700: 150 180 224;
+  --surface-card: 22 48 88;
+  --border-faint: rgba(247, 243, 238, 0.1);
+}
+
+body {
+  @apply antialiased text-ink;
+  background-color: rgb(var(--color-cream));
+}
+
+.card {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-faint);
+  box-shadow: var(--shadow-card);
+  padding: var(--pad-card);
+  background: rgb(var(--surface-card));
+  transition: box-shadow var(--transition-raise), transform var(--transition-raise), background-color var(--transition-raise);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+/* Dense list / glance cards — soft shadow, no hover lift */
+.home-card {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-faint);
+  box-shadow: var(--shadow-card);
+  padding: var(--pad-card);
+  background: rgb(var(--surface-card));
+  transition: background-color var(--transition-raise);
+}
+
+.card-on-dark {
+  border: 1px solid var(--border-faint-on-dark);
+}

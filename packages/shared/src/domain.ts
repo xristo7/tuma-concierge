@@ -163,7 +163,7 @@ export function isRiderProfileComplete(rider: Rider | null | undefined): boolean
 export type AdminRider = Rider & {
   id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   email: string | null;
   status: UserStatus;
 };
@@ -181,7 +181,7 @@ export type UserStatus = "active" | "suspended";
 
 export type AuthUser = {
   id: string;
-  phone: string;
+  phone: string | null;
   email: string | null;
   name: string;
   role: "customer" | "rider" | "admin";
@@ -199,7 +199,7 @@ export function isUserVerified(user: AuthUser | null | undefined): boolean {
 export type AdminCustomer = {
   id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   email: string | null;
   status: UserStatus;
   created_at: string;

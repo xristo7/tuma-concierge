@@ -97,11 +97,11 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
 
   async function submit() {
     const selected = locations.find((l) => l.id === selectedLocationId);
-    const destinationArea = selected?.area || mapArea || manualArea.trim() || undefined;
+    const destinationArea = selected?.area || manualArea.trim() || mapArea || undefined;
     const destinationAddress =
       selected?.address ||
-      mapAddress ||
       manualAddress.trim() ||
+      mapAddress ||
       (geoCoords ? `Current location (${geoCoords.lat.toFixed(4)}, ${geoCoords.lng.toFixed(4)})` : undefined);
 
     if (!destinationArea && !destinationAddress) {
@@ -286,15 +286,15 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
           )}
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Or enter an address</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+              Add address details <span className="font-normal normal-case text-ink-500/70">(optional)</span>
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <input
                 value={manualArea}
                 onChange={(e) => {
                   setManualArea(e.target.value);
                   setSelectedLocationId(null);
-                  setMapArea(null);
-                  setMapAddress(null);
                 }}
                 placeholder="Area (e.g. Kololo)"
                 className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
@@ -304,13 +304,14 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
                 onChange={(e) => {
                   setManualAddress(e.target.value);
                   setSelectedLocationId(null);
-                  setMapArea(null);
-                  setMapAddress(null);
                 }}
-                placeholder="Address / landmark"
+                placeholder="Landmark / house detail"
                 className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
               />
             </div>
+            <p className="text-xs text-ink-500">
+              Riders find you faster when you add a landmark or house detail along with your map pin.
+            </p>
           </div>
 
           <div className="space-y-2">

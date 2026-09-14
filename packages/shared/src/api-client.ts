@@ -69,9 +69,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
       return json(await f(`${root}/health`));
     },
 
-    // Auth
+    // Auth — registration accepts either a phone number or an email (at
+    // least one is required); login accepts either as the identifier.
     async register(input: {
-      phone: string;
+      phone?: string;
       email?: string;
       name: string;
       password: string;
@@ -82,7 +83,7 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
         { method: "POST", body: JSON.stringify(input) },
       );
     },
-    async login(input: { phone: string; password: string }) {
+    async login(input: { identifier: string; password: string }) {
       return request<{ token: string; user: AuthUser }>("/v1/auth/login", {
         method: "POST",
         body: JSON.stringify(input),

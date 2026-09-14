@@ -39,7 +39,7 @@ type PointState = {
 };
 
 const emptyPoint: PointState = {
-  mode: "text",
+  mode: "map",
   area: "",
   address: "",
   selectedLocationId: null,
@@ -143,6 +143,30 @@ function PointEditor({
                 : "Use my current location instead"}
           </button>
           {point.geoStatus === "error" && <p className="text-xs text-red-600">Couldn&apos;t get your location.</p>}
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+              Add address details <span className="font-normal normal-case text-ink-500/70">(optional)</span>
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                value={point.area}
+                onChange={(e) => setPoint({ ...point, area: e.target.value })}
+                placeholder="Area (e.g. Kololo)"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+              <input
+                value={point.address}
+                onChange={(e) => setPoint({ ...point, address: e.target.value })}
+                placeholder="Landmark / house detail"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+            </div>
+            <p className="text-xs text-ink-500">
+              Riders find you faster when you add a landmark or house detail along with your map pin.
+            </p>
+          </div>
+
           {showPicker && (
             <LocationMapPicker
               initial={point.geoCoords ?? undefined}
@@ -209,23 +233,25 @@ function resolvePoint(
   const selected = locations.find((l) => l.id === point.selectedLocationId);
   if (selected) return { area: selected.area ?? undefined, address: selected.address ?? undefined };
   if (point.mode === "map") {
+    const typedArea = point.area.trim() || undefined;
+    const typedAddress = point.address.trim() || undefined;
     if (point.mapArea || point.mapAddress) {
       return {
-        area: point.mapArea ?? undefined,
-        address: point.mapAddress ?? undefined,
+        area: typedArea ?? point.mapArea ?? undefined,
+        address: typedAddress ?? point.mapAddress ?? undefined,
         lat: point.geoCoords?.lat,
         lng: point.geoCoords?.lng,
       };
     }
     if (point.geoCoords) {
       return {
-        area: undefined,
-        address: `Current location (${point.geoCoords.lat.toFixed(4)}, ${point.geoCoords.lng.toFixed(4)})`,
+        area: typedArea,
+        address: typedAddress ?? `Current location (${point.geoCoords.lat.toFixed(4)}, ${point.geoCoords.lng.toFixed(4)})`,
         lat: point.geoCoords.lat,
         lng: point.geoCoords.lng,
       };
     }
-    return { area: undefined, address: undefined };
+    return { area: typedArea, address: typedAddress };
   }
   return { area: point.area.trim() || undefined, address: point.address.trim() || undefined };
 }
