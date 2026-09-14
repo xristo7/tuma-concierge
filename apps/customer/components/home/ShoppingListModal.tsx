@@ -133,7 +133,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
         estimatedTotal: total || undefined,
       });
       onClose();
-      router.push(`/orders/${order.id}/pay`);
+      router.push(`/orders/${order.id}`);
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);

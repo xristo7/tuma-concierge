@@ -55,7 +55,7 @@ export default function NewOrderPage() {
         paymentRail,
         estimatedTotal: estimatedTotal ? Number(estimatedTotal) : undefined,
       });
-      router.push(`/orders/${order.id}/pay`);
+      router.push(`/orders/${order.id}`);
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);

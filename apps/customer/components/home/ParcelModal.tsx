@@ -298,7 +298,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
         estimatedTotal: liveEstimate ?? (estimatedTotal ? Number(estimatedTotal) : undefined),
       });
       onClose();
-      router.push(`/orders/${order.id}/pay`);
+      router.push(`/orders/${order.id}`);
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);

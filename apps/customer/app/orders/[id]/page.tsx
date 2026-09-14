@@ -2,8 +2,8 @@
 
 import type { OrderDetail, OrderRating } from "@tuma/shared";
 import { MapPin, TriangleAlert } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
 import { OrderTimeline } from "../../../components/OrderTimeline";
 import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
@@ -13,10 +13,11 @@ import { formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
-  const router = useRouter();
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [msisdn, setMsisdn] = useState("");
+  const matching = useRef(false);
 
   const load = useCallback(async () => {
     const res = await api.getOrder(orderId);
@@ -34,14 +35,44 @@ export default function OrderDetailPage() {
     return () => clearInterval(interval);
   }, [load]);
 
-  // Creating/matching/funding are handled on the payment screen — if a
-  // customer lands here before that's done, send them back to finish it.
+  // Silently find a rider as soon as an unmatched order lands here, then
+  // keep retrying on a fixed 4s cadence until one is found. Depends only on
+  // stable primitives (stage, rider_id) rather than `detail` itself —
+  // `detail` is a brand-new object on every load(), so keying on it re-fires
+  // this effect on every poll tick, and a failed matchOrder's `finally`
+  // calling load() would immediately re-trigger another matchOrder with no
+  // delay at all: an unbounded, zero-delay retry loop whenever no rider is
+  // available yet (this is what took the API down — see incident notes).
+  // Also covers a funded order whose rider cancelled — it's left in "Match"
+  // with rider_id cleared rather than rewound to "Create", since rewinding
+  // would re-expose the funding step after money already moved.
+  const stage = detail?.order.stage;
+  const riderId = detail?.order.rider_id;
   useEffect(() => {
-    if (!detail) return;
-    if (["Create", "Match", "Fund"].includes(detail.order.stage)) {
-      router.replace(`/orders/${orderId}/pay`);
+    if (!detail || riderId || (stage !== "Create" && stage !== "Match")) return;
+    let cancelled = false;
+
+    async function attempt() {
+      if (matching.current) return;
+      matching.current = true;
+      try {
+        await api.matchOrder(orderId);
+      } catch {
+        // no rider available yet — the interval below retries in 4s
+      } finally {
+        matching.current = false;
+        if (!cancelled) load().catch(() => {});
+      }
     }
-  }, [detail, orderId, router]);
+
+    attempt();
+    const interval = setInterval(attempt, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId, stage, riderId]);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -56,12 +87,27 @@ export default function OrderDetailPage() {
     }
   }
 
+  async function doFund() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.fundOrder(orderId, detail?.order.payment_rail === "escrow" ? { msisdn } : {});
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!detail) {
     return <div className="p-4 text-sm text-ink-500">Loading order…</div>;
   }
 
   const { order, items, substitutions, feeProposals } = detail;
   const pendingFeeProposal = feeProposals.find((f) => f.status === "pending");
+  const pendingPayment = detail.payments.find((p) => p.status === "pending");
+  const awaitingRiderOrPayment = ["Create", "Match", "Fund"].includes(order.stage);
   const pendingSubs = substitutions.filter((s) => s.status === "pending");
   // Group by batch so a rider's multi-item edit shows as one card with one
   // approve/reject action; older single-item proposals (no batch_id) each
@@ -177,6 +223,70 @@ export default function OrderDetailPage() {
         </section>
       )}
 
+      {order.type === "parcel" && (
+        <section className="home-card flex justify-between text-sm font-semibold">
+          <span>Delivery fee</span>
+          <span>{formatUgx(order.final_total ?? order.estimated_total)}</span>
+        </section>
+      )}
+
+      {awaitingRiderOrPayment && (
+        <section className="home-card space-y-3">
+          {!order.rider_id && (
+            <div className="flex items-center gap-3 py-2">
+              <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+              <p className="text-sm text-ink-500">Finding a nearby verified rider…</p>
+            </div>
+          )}
+
+          {order.rider_id && pendingPayment && (
+            <div className="flex items-center gap-3 py-2">
+              <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+              <p className="text-sm text-ink-500">Confirming your MoMo payment…</p>
+            </div>
+          )}
+
+          {order.rider_id && !pendingPayment && (
+            <>
+              <p className="text-sm text-ink-500">A rider is ready. Pay to send your {order.type === "parcel" ? "parcel" : "list"}.</p>
+              {order.payment_rail === "escrow" ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    doFund();
+                  }}
+                  className="space-y-2"
+                >
+                  <input
+                    required
+                    value={msisdn}
+                    onChange={(e) => setMsisdn(e.target.value)}
+                    placeholder="MoMo number (e.g. 256700000099)"
+                    className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+                  >
+                    Pay via MoMo
+                  </button>
+                </form>
+              ) : (
+                <button
+                  onClick={doFund}
+                  disabled={busy}
+                  className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+                >
+                  Confirm — rider fronts the cash
+                </button>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {!awaitingRiderOrPayment && (
       <section className="home-card space-y-3">
         {(order.stage === "Shop" || order.stage === "Substitute") && (
           <>
@@ -276,6 +386,7 @@ export default function OrderDetailPage() {
           <RateDeliveryCard orderId={orderId} rating={detail.rating} onRated={handleRated} />
         )}
       </section>
+      )}
 
       <OrderChat orderId={orderId} />
     </div>
