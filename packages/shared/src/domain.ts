@@ -176,6 +176,8 @@ export type SavedLocation = {
   label: string;
   area: string | null;
   address: string | null;
+  lat: number | null;
+  lng: number | null;
   created_at: string;
 };
 

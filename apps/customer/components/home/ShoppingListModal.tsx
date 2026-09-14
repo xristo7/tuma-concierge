@@ -1,19 +1,14 @@
 "use client";
 
 import type { SavedLocation } from "@tuma/shared";
-import { LocateFixed, Map, MapPin, Plus, Trash2 } from "lucide-react";
-import dynamic from "next/dynamic";
+import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LocationPicker, emptyPoint, resolvePoint, type PointState } from "../LocationPicker";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
 import { OrderVoiceNoteRecorder } from "./OrderVoiceNoteRecorder";
 import { VoiceNoteRecorder } from "./VoiceNoteRecorder";
-
-const LocationMapPicker = dynamic(
-  () => import("../LocationMapPicker").then((m) => m.LocationMapPicker),
-  { ssr: false },
-);
 
 type Item = { name: string; quantity: string; unitCost: string };
 
@@ -27,14 +22,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   const [items, setItems] = useState<Item[]>([{ name: "", quantity: "1", unitCost: "" }]);
 
   const [locations, setLocations] = useState<SavedLocation[]>([]);
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
-  const [manualArea, setManualArea] = useState("");
-  const [manualAddress, setManualAddress] = useState("");
-  const [geoStatus, setGeoStatus] = useState<"idle" | "locating" | "done" | "error">("idle");
-  const [geoCoords, setGeoCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [mapArea, setMapArea] = useState<string | null>(null);
-  const [mapAddress, setMapAddress] = useState<string | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
+  const [delivery, setDelivery] = useState<PointState>(emptyPoint);
   const [paymentRail, setPaymentRail] = useState<"escrow" | "float">("escrow");
   const [voiceNote, setVoiceNote] = useState<Blob | null>(null);
 
@@ -78,35 +66,9 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
     setStep("location");
   }
 
-  function useMyLocation() {
-    setGeoStatus("locating");
-    setSelectedLocationId(null);
-    setMapArea(null);
-    setMapAddress(null);
-    if (!navigator.geolocation) {
-      setGeoStatus("error");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGeoCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setGeoStatus("done");
-      },
-      () => setGeoStatus("error"),
-      { timeout: 10000 },
-    );
-  }
-
   async function submit() {
-    const selected = locations.find((l) => l.id === selectedLocationId);
-    const destinationArea = selected?.area || manualArea.trim() || mapArea || undefined;
-    const destinationAddress =
-      selected?.address ||
-      manualAddress.trim() ||
-      mapAddress ||
-      (geoCoords ? `Current location (${geoCoords.lat.toFixed(4)}, ${geoCoords.lng.toFixed(4)})` : undefined);
-
-    if (!destinationArea && !destinationAddress) {
+    const d = resolvePoint(delivery, locations);
+    if (!d.area && !d.address) {
       setError("Choose a delivery location.");
       return;
     }
@@ -127,10 +89,10 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
       const { order } = await api.createOrder({
         listId: list.listId,
         type: "shopping",
-        destinationArea,
-        destinationAddress,
-        destinationLat: geoCoords?.lat,
-        destinationLng: geoCoords?.lng,
+        destinationArea: d.area,
+        destinationAddress: d.address,
+        destinationLat: d.lat,
+        destinationLng: d.lng,
         paymentRail,
         estimatedTotal: total || undefined,
       });
@@ -211,113 +173,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
         </div>
       ) : (
         <div className="space-y-4">
-          {mapAddress || mapArea ? (
-            <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-ink">{mapAddress || mapArea}</p>
-                <button onClick={() => setShowPicker(true)} className="mt-1 text-xs font-bold text-gold underline">
-                  Change pin
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowPicker(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-faint)] py-3 text-sm font-bold text-ink"
-            >
-              <Map className="h-4 w-4 text-gold" strokeWidth={2.25} aria-hidden />
-              Choose on map
-            </button>
-          )}
-          <button
-            onClick={useMyLocation}
-            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-3 text-sm font-semibold ${
-              geoStatus === "done" && !mapAddress && !mapArea
-                ? "border-gold bg-gold/10 text-ink"
-                : "border-[var(--border-faint)] text-ink"
-            }`}
-          >
-            <LocateFixed className="h-4 w-4 text-gold" strokeWidth={2.25} aria-hidden />
-            {geoStatus === "locating"
-              ? "Locating…"
-              : geoStatus === "done" && !mapAddress && !mapArea
-                ? "Using current location"
-                : "Use my current location instead"}
-          </button>
-          {geoStatus === "error" && (
-            <p className="text-xs text-red-600">Couldn&apos;t get your location — enable location access or enter an address below.</p>
-          )}
-          {showPicker && (
-            <LocationMapPicker
-              initial={geoCoords ?? undefined}
-              onCancel={() => setShowPicker(false)}
-              onConfirm={(loc) => {
-                setGeoCoords({ lat: loc.lat, lng: loc.lng });
-                setGeoStatus("done");
-                setSelectedLocationId(null);
-                setMapArea(loc.area);
-                setMapAddress(loc.address);
-                setShowPicker(false);
-              }}
-            />
-          )}
-
-          {locations.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Saved locations</p>
-              <div className="flex flex-wrap gap-2">
-                {locations.map((loc) => (
-                  <button
-                    key={loc.id}
-                    onClick={() => {
-                      setSelectedLocationId(loc.id);
-                      setGeoStatus("idle");
-                      setGeoCoords(null);
-                      setMapArea(null);
-                      setMapAddress(null);
-                    }}
-                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                      selectedLocationId === loc.id
-                        ? "border-gold bg-gold/10 text-ink"
-                        : "border-[var(--border-faint)] text-ink-500"
-                    }`}
-                  >
-                    {loc.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-              Add address details <span className="font-normal normal-case text-ink-500/70">(optional)</span>
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                value={manualArea}
-                onChange={(e) => {
-                  setManualArea(e.target.value);
-                  setSelectedLocationId(null);
-                }}
-                placeholder="Area (e.g. Kololo)"
-                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-              />
-              <input
-                value={manualAddress}
-                onChange={(e) => {
-                  setManualAddress(e.target.value);
-                  setSelectedLocationId(null);
-                }}
-                placeholder="Landmark / house detail"
-                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-              />
-            </div>
-            <p className="text-xs text-ink-500">
-              Riders find you faster when you add a landmark or house detail along with your map pin.
-            </p>
-          </div>
+          <LocationPicker point={delivery} setPoint={setDelivery} locations={locations} />
 
           <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />
 

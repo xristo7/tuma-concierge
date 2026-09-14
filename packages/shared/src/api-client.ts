@@ -345,7 +345,7 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     async getLocations() {
       return request<{ locations: SavedLocation[] }>("/v1/locations");
     },
-    async saveLocation(input: { label: string; area?: string; address?: string }) {
+    async saveLocation(input: { label: string; area?: string; address?: string; lat?: number; lng?: number }) {
       return request<{ location: SavedLocation }>("/v1/locations", {
         method: "POST",
         body: JSON.stringify(input),

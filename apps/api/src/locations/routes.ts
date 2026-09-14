@@ -22,6 +22,8 @@ const saveLocationSchema = z.object({
   label: z.string().min(1).max(60),
   area: z.string().max(120).optional(),
   address: z.string().max(240).optional(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
 });
 
 locationRoutes.post("/locations", async (c) => {
@@ -31,8 +33,16 @@ locationRoutes.post("/locations", async (c) => {
 
   const id = newId("loc");
   await db.execute({
-    sql: "INSERT INTO saved_locations (id, user_id, label, area, address) VALUES (?, ?, ?, ?, ?)",
-    args: [id, user.sub, parsed.data.label, parsed.data.area ?? null, parsed.data.address ?? null],
+    sql: "INSERT INTO saved_locations (id, user_id, label, area, address, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    args: [
+      id,
+      user.sub,
+      parsed.data.label,
+      parsed.data.area ?? null,
+      parsed.data.address ?? null,
+      parsed.data.lat ?? null,
+      parsed.data.lng ?? null,
+    ],
   });
   const res = await db.execute({ sql: "SELECT * FROM saved_locations WHERE id = ?", args: [id] });
   return c.json({ location: res.rows[0] }, 201);

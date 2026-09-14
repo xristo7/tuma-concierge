@@ -1,5 +1,6 @@
 import { ActiveOrderCard } from "../components/home/ActiveOrderCard";
 import { Greeting } from "../components/home/Greeting";
+import { LocationOnboarding } from "../components/home/LocationOnboarding";
 import { OrderTypeCards } from "../components/home/OrderTypeCards";
 import { RecentLists } from "../components/home/RecentLists";
 
@@ -10,6 +11,7 @@ export default function HomePage() {
       <OrderTypeCards />
       <ActiveOrderCard />
       <RecentLists />
+      <LocationOnboarding />
     </div>
   );
 }

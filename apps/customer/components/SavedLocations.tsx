@@ -3,14 +3,15 @@
 import type { SavedLocation } from "@tuma/shared";
 import { MapPin, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { emptyPoint, resolvePoint, type PointState } from "./LocationPicker";
+import { LocationPicker } from "./LocationPicker";
 import { api, errorMessage } from "../lib/api";
 
 export function SavedLocations() {
   const [locations, setLocations] = useState<SavedLocation[]>([]);
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
-  const [area, setArea] = useState("");
-  const [address, setAddress] = useState("");
+  const [point, setPoint] = useState<PointState>(emptyPoint);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,13 +29,23 @@ export function SavedLocations() {
       setError("Give it a name, e.g. Home or Office.");
       return;
     }
+    const resolved = resolvePoint(point, []);
+    if (!resolved.area && !resolved.address) {
+      setError("Pin it on the map or type an address.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      await api.saveLocation({ label: label.trim(), area: area.trim() || undefined, address: address.trim() || undefined });
+      await api.saveLocation({
+        label: label.trim(),
+        area: resolved.area,
+        address: resolved.address,
+        lat: resolved.lat,
+        lng: resolved.lng,
+      });
       setLabel("");
-      setArea("");
-      setAddress("");
+      setPoint(emptyPoint);
       setAdding(false);
       load();
     } catch (err) {
@@ -88,31 +99,22 @@ export function SavedLocations() {
       </ul>
 
       {adding && (
-        <div className="space-y-2 border-t border-[var(--border-faint)] pt-3">
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Name (e.g. Home)"
-              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
-            />
-            <input
-              value={area}
-              onChange={(e) => setArea(e.target.value)}
-              placeholder="Area (e.g. Kololo)"
-              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
-            />
-          </div>
+        <div className="space-y-3 border-t border-[var(--border-faint)] pt-3">
           <input
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="Address / landmark (optional)"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Name (e.g. Home)"
             className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
           />
+          <LocationPicker point={point} setPoint={setPoint} locations={[]} />
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{error}</p>}
           <div className="flex gap-2">
             <button
-              onClick={() => setAdding(false)}
+              onClick={() => {
+                setAdding(false);
+                setPoint(emptyPoint);
+                setError(null);
+              }}
               className="flex-1 rounded-full border border-[var(--border-faint)] py-2 text-sm font-bold text-ink"
             >
               Cancel
