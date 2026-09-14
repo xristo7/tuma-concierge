@@ -35,7 +35,9 @@ export default function LoginPage() {
     <div className="flex min-h-dvh flex-col justify-center px-6 py-10">
       <div className="mx-auto w-full max-w-sm space-y-6">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/tuma-logo-helmet-wordmark.svg" alt="Tuma" className="mx-auto h-9 w-auto" />
+        <img src="/brand/tuma-logo-navy.png" alt="Tuma" className="mx-auto h-9 w-auto dark:hidden" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/tuma-logo-white.png" alt="Tuma" className="mx-auto hidden h-9 w-auto dark:block" />
 
         <div className="flex rounded-full bg-[#ECE8E2] p-1">
           {(["login", "register"] as const).map((m) => (
@@ -44,7 +46,7 @@ export default function LoginPage() {
               type="button"
               onClick={() => setMode(m)}
               className={`flex-1 rounded-full py-2 text-sm font-semibold transition-colors ${
-                mode === m ? "bg-white text-ink shadow-sm" : "text-ink-500"
+                mode === m ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
               }`}
             >
               {m === "login" ? "Log in" : "Sign up"}

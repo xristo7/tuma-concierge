@@ -185,7 +185,7 @@ export default function JobDetailPage() {
                       <button
                         type="button"
                         onClick={() => markUnavailable(item)}
-                        className="w-full rounded-lg bg-white py-1.5 text-xs font-bold text-ink"
+                        className="w-full rounded-lg bg-[rgb(var(--surface-card))] py-1.5 text-xs font-bold text-ink"
                       >
                         Not available — remove from list
                       </button>

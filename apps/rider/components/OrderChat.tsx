@@ -91,7 +91,7 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
                 className={`px-4 py-2.5 text-[14px] leading-snug shadow-sm ${
                   mine
                     ? "rounded-[20px] rounded-br-md bg-gold text-ink"
-                    : "rounded-[20px] rounded-bl-md bg-white text-ink"
+                    : "rounded-[20px] rounded-bl-md bg-[rgb(var(--surface-card))] text-ink"
                 }`}
               >
                 {m.body}
@@ -111,7 +111,7 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         placeholder="Message…"
-        className="w-full rounded-full border border-[var(--border-faint)] bg-white py-3.5 pl-4 pr-14 text-sm outline-none focus:border-gold"
+        className="w-full rounded-full border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] py-3.5 pl-4 pr-14 text-sm outline-none focus:border-gold"
       />
       <button
         type="submit"

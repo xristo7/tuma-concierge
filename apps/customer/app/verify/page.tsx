@@ -84,7 +84,9 @@ export default function VerifyPage() {
     <div className="flex min-h-dvh flex-col justify-center px-6 py-10">
       <div className="mx-auto w-full max-w-sm space-y-6">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/tuma-logo-helmet-wordmark.svg" alt="Tuma" className="mx-auto h-9 w-auto" />
+        <img src="/brand/tuma-logo-navy.png" alt="Tuma" className="mx-auto h-9 w-auto dark:hidden" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/tuma-logo-white.png" alt="Tuma" className="mx-auto hidden h-9 w-auto dark:block" />
 
         <div className="space-y-1 text-center">
           <h1 className="text-xl font-bold text-ink">Verify your account</h1>
@@ -103,7 +105,7 @@ export default function VerifyPage() {
                 type="button"
                 onClick={() => switchChannel(c)}
                 className={`flex-1 rounded-full py-2 text-sm font-semibold transition-colors ${
-                  channel === c ? "bg-white text-ink shadow-sm" : "text-ink-500"
+                  channel === c ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
                 }`}
               >
                 {c === "sms" ? "By SMS" : "By email"}

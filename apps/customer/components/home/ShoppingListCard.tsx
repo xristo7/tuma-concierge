@@ -4,7 +4,7 @@ export function ShoppingListCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="relative flex h-40 flex-col overflow-hidden rounded-2xl border border-[var(--border-faint)] bg-white p-4 text-left shadow-sm transition-transform active:scale-[0.98]"
+      className="relative flex h-40 flex-col overflow-hidden rounded-2xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] p-4 text-left shadow-sm transition-transform active:scale-[0.98]"
       style={{
         backgroundImage:
           "repeating-linear-gradient(to bottom, transparent, transparent 21px, var(--border-faint) 22px)",

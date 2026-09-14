@@ -89,7 +89,7 @@ function PointEditor({
         <button
           onClick={() => setPoint({ ...point, mode: "text" })}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-bold ${
-            point.mode === "text" ? "bg-white text-ink shadow-sm" : "text-ink-500"
+            point.mode === "text" ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
           }`}
         >
           <Type className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
@@ -98,7 +98,7 @@ function PointEditor({
         <button
           onClick={() => setPoint({ ...point, mode: "map" })}
           className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-xs font-bold ${
-            point.mode === "map" ? "bg-white text-ink shadow-sm" : "text-ink-500"
+            point.mode === "map" ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
           }`}
         >
           <Map className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />

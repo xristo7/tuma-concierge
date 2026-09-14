@@ -1,4 +1,5 @@
 import { ChevronDown, MapPin } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function BrandHeader() {
   return (
@@ -6,31 +7,42 @@ export function BrandHeader() {
       <div className="mx-auto flex max-w-lg items-center justify-between gap-3 px-4 pb-1 pt-3">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/brand/tuma-logo-helmet-wordmark.svg"
+          src="/brand/tuma-logo-navy.png"
           alt="Tuma"
           width={120}
-          height={28}
-          className="h-7 w-auto"
+          height={45}
+          className="h-7 w-auto dark:hidden"
         />
-        <button
-          type="button"
-          className="inline-flex max-w-[58%] items-center gap-1.5 rounded-full border border-[var(--border-faint)] bg-white px-3 py-1.5 text-left shadow-sm"
-          aria-label="Change location"
-        >
-          <MapPin
-            className="h-3.5 w-3.5 shrink-0 text-gold"
-            strokeWidth={2.25}
-            aria-hidden
-          />
-          <span className="truncate text-xs font-medium text-ink">
-            Kampala · within 5 km
-          </span>
-          <ChevronDown
-            className="h-3.5 w-3.5 shrink-0 text-ink-500"
-            strokeWidth={2}
-            aria-hidden
-          />
-        </button>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/brand/tuma-logo-white.png"
+          alt="Tuma"
+          width={120}
+          height={45}
+          className="hidden h-7 w-auto dark:block"
+        />
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex max-w-[calc(100vw-9rem)] items-center gap-1.5 rounded-full border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-1.5 text-left shadow-sm"
+            aria-label="Change location"
+          >
+            <MapPin
+              className="h-3.5 w-3.5 shrink-0 text-gold"
+              strokeWidth={2.25}
+              aria-hidden
+            />
+            <span className="truncate text-xs font-medium text-ink">
+              Kampala · within 5 km
+            </span>
+            <ChevronDown
+              className="h-3.5 w-3.5 shrink-0 text-ink-500"
+              strokeWidth={2}
+              aria-hidden
+            />
+          </button>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

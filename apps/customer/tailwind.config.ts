@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: ["selector", '[data-theme="dark"]'],
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -9,37 +10,37 @@ const config: Config = {
     extend: {
       colors: {
         cream: {
-          DEFAULT: "#FDFBF7",
-          50: "#FDFBF7",
-          100: "#F7F3EE",
+          DEFAULT: "rgb(var(--color-cream) / <alpha-value>)",
+          50: "rgb(var(--color-cream-50) / <alpha-value>)",
+          100: "rgb(var(--color-cream-100) / <alpha-value>)",
         },
         gold: {
-          DEFAULT: "#C9A227",
-          400: "#E0B93D",
-          500: "#C9A227",
+          DEFAULT: "rgb(var(--color-gold) / <alpha-value>)",
+          400: "rgb(var(--color-gold-400) / <alpha-value>)",
+          500: "rgb(var(--color-gold-500) / <alpha-value>)",
         },
         ink: {
-          DEFAULT: "#0A0A0A",
-          500: "#5C6670",
-          900: "#0A0A0A",
+          DEFAULT: "rgb(var(--color-ink) / <alpha-value>)",
+          500: "rgb(var(--color-ink-500) / <alpha-value>)",
+          900: "rgb(var(--color-ink-900) / <alpha-value>)",
         },
         black: {
-          DEFAULT: "#0A0A0A",
-          700: "#1A1A1A",
-          900: "#0A0A0A",
+          DEFAULT: "rgb(var(--color-black) / <alpha-value>)",
+          700: "rgb(var(--color-black-700) / <alpha-value>)",
+          900: "rgb(var(--color-black-900) / <alpha-value>)",
         },
         green: {
-          DEFAULT: "#1B7A4E",
-          400: "#2FA86A",
-          600: "#1B7A4E",
+          DEFAULT: "rgb(var(--color-green) / <alpha-value>)",
+          400: "rgb(var(--color-green-400) / <alpha-value>)",
+          600: "rgb(var(--color-green-600) / <alpha-value>)",
         },
         // From the Tuma wordmark — used for brand chrome (header accents,
         // headings-as-brand, trust badges), kept separate from `gold`
         // which stays the one CTA/interactive accent.
         navy: {
-          DEFAULT: "#153A75",
-          400: "#3D66A6",
-          700: "#0F2A57",
+          DEFAULT: "rgb(var(--color-navy) / <alpha-value>)",
+          400: "rgb(var(--color-navy-400) / <alpha-value>)",
+          700: "rgb(var(--color-navy-700) / <alpha-value>)",
         },
       },
     },

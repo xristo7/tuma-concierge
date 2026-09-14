@@ -148,7 +148,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-2">
             {items.map((item, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-xl border border-[var(--border-faint)] bg-white p-2.5">
+              <div key={i} className="flex items-center gap-2 rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] p-2.5">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#ECE8E2] text-xs font-bold text-ink-500">
                   {i + 1}
                 </span>
