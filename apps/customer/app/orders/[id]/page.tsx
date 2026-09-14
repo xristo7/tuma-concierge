@@ -1,10 +1,12 @@
 "use client";
 
-import type { OrderDetail } from "@tuma/shared";
+import type { OrderDetail, OrderRating } from "@tuma/shared";
 import { MapPin, TriangleAlert } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
+import { OrderTimeline } from "../../../components/OrderTimeline";
+import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
 import { api, errorMessage } from "../../../lib/api";
 import { formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
 
@@ -80,6 +82,10 @@ export default function OrderDetailPage() {
       : api.decideSubstitution(orderId, group.subs[0].id, approve);
   }
 
+  function handleRated(newRating: OrderRating) {
+    setDetail((prev) => (prev ? { ...prev, rating: newRating } : prev));
+  }
+
   return (
     <div className="space-y-6 px-4 pb-24 pt-4">
       <header className="space-y-1">
@@ -101,6 +107,8 @@ export default function OrderDetailPage() {
           </p>
         )}
       </header>
+
+      <OrderTimeline order={order} events={detail.events} statusLabel={stageLabel(order.stage, order.type)} />
 
       {!!order.matched_out_of_range && order.rider_id && (
         <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
@@ -237,7 +245,9 @@ export default function OrderDetailPage() {
           </>
         )}
 
-        {order.stage === "Settle" && <p className="text-sm font-semibold text-green">Delivered — thank you!</p>}
+        {order.stage === "Settle" && (
+          <RateDeliveryCard orderId={orderId} rating={detail.rating} onRated={handleRated} />
+        )}
       </section>
 
       <OrderChat orderId={orderId} />

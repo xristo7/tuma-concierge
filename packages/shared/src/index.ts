@@ -29,6 +29,7 @@ export type {
   AdminOrderRow,
   DeliverySettings,
   OrderDetail,
+  OrderRating,
   CreateListBody,
   CreateListResponse,
 } from "./domain.js";

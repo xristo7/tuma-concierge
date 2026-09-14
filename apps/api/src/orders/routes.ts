@@ -236,11 +236,12 @@ orderRoutes.get("/orders/:id", async (c) => {
     return c.json({ error: "forbidden" }, 403);
   }
 
-  const [items, events, substitutions, payments] = await Promise.all([
+  const [items, events, substitutions, payments, rating] = await Promise.all([
     db.execute({ sql: "SELECT * FROM list_items WHERE list_id = ?", args: [order.list_id as string] }),
     db.execute({ sql: "SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
     db.execute({ sql: "SELECT * FROM substitutions WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
     db.execute({ sql: "SELECT * FROM payments WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
+    db.execute({ sql: "SELECT rating, comment FROM order_ratings WHERE order_id = ?", args: [id] }),
   ]);
 
   return c.json({
@@ -249,6 +250,7 @@ orderRoutes.get("/orders/:id", async (c) => {
     events: events.rows,
     substitutions: substitutions.rows,
     payments: payments.rows,
+    rating: rating.rows[0] ?? null,
   });
 });
 
@@ -737,6 +739,53 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
   await logEvent(id, "Settle", "Order settled", user.sub);
 
   return c.json({ order: await getOrder(id) });
+});
+
+// ---------------------------------------------------------------------------
+// Rating — customer rates the rider once an order is delivered
+// ---------------------------------------------------------------------------
+
+const rateSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().max(500).optional(),
+});
+
+orderRoutes.post("/orders/:id/rate", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  if (order.stage !== "Settle") {
+    return c.json({ error: "invalid_stage", message: "Can only rate a delivered order" }, 409);
+  }
+  if (!order.rider_id) {
+    return c.json({ error: "no_rider" }, 409);
+  }
+
+  const parsed = rateSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  const existing = await db.execute({ sql: "SELECT id FROM order_ratings WHERE order_id = ?", args: [id] });
+  if (existing.rows.length > 0) {
+    return c.json({ error: "already_rated" }, 409);
+  }
+
+  await db.execute({
+    sql: `INSERT INTO order_ratings (id, order_id, customer_id, rider_id, rating, comment) VALUES (?, ?, ?, ?, ?, ?)`,
+    args: [newId("rat"), id, user.sub, order.rider_id as string, parsed.data.rating, parsed.data.comment ?? null],
+  });
+  await db.execute({
+    sql: `UPDATE riders SET rating = (SELECT AVG(rating) FROM order_ratings WHERE rider_id = ?), updated_at = datetime('now') WHERE user_id = ?`,
+    args: [order.rider_id as string, order.rider_id as string],
+  });
+
+  return c.json({ ok: true, rating: parsed.data.rating, comment: parsed.data.comment ?? null });
 });
 
 // ---------------------------------------------------------------------------

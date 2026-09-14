@@ -234,12 +234,18 @@ export type FailedPayment = {
 /** `OrderRow` joined with the assigned rider's name, as returned by admin listings. */
 export type AdminOrderRow = OrderRow & { rider_name: string | null };
 
+export type OrderRating = {
+  rating: number;
+  comment: string | null;
+};
+
 export type OrderDetail = {
   order: OrderRow;
   items: ListItem[];
   events: OrderEvent[];
   substitutions: Substitution[];
   payments: Payment[];
+  rating: OrderRating | null;
 };
 
 export type CreateListBody = {

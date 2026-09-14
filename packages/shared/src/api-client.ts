@@ -207,6 +207,12 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     async settleOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/settle`, { method: "POST" });
     },
+    async rateOrder(orderId: string, input: { rating: number; comment?: string }) {
+      return request<{ ok: true; rating: number; comment: string | null }>(`/v1/orders/${orderId}/rate`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
 
     // Chat
     async getChat(orderId: string) {
