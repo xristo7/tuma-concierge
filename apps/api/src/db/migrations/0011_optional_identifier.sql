@@ -4,6 +4,10 @@
 -- (Comments in these files must avoid the semicolon character entirely --
 -- migrate.ts splits each file on it without understanding SQL comments.)
 
+PRAGMA foreign_keys=OFF;
+
+DROP TABLE IF EXISTS users_new;
+
 CREATE TABLE users_new (
   id TEXT PRIMARY KEY,
   phone TEXT UNIQUE,
@@ -26,3 +30,5 @@ DROP TABLE users;
 ALTER TABLE users_new RENAME TO users;
 
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+PRAGMA foreign_keys=ON;
