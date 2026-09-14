@@ -71,7 +71,7 @@ export default function SettingsPage() {
                 className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
               />
               <p className="text-xs text-ink-500">
-                A parcel's cost is distance (pickup → drop-off) × this rate, calculated automatically when
+                A parcel&apos;s cost is distance (pickup → drop-off) × this rate, calculated automatically when
                 both points are pinned on the map.
               </p>
             </div>
