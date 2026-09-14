@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../lib/auth-context";
 
@@ -37,8 +38,9 @@ export function Greeting() {
       <p className="text-[15px] leading-snug text-ink-500">
         Ready to shop? Send the list — we handle the rest.
       </p>
-      <p className="text-sm font-medium text-green">
-        [LG] Webale. Verified riders near you.
+      <p className="flex items-center gap-1.5 text-sm font-medium text-green">
+        <ShieldCheck className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+        Webale. Verified riders near you.
       </p>
     </header>
   );

@@ -11,7 +11,7 @@ export function OrderTypeCards() {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="flex flex-col gap-3">
         <ShoppingListCard onClick={() => setOpen("shopping")} />
         <ParcelCard onClick={() => setOpen("parcel")} />
       </div>
