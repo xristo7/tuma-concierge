@@ -15,6 +15,8 @@ type AuthState = {
   logout: () => void;
   /** Patches the persisted user in place (e.g. after OTP verification succeeds) without a new token. */
   updateUser: (user: AuthUser) => void;
+  /** Signs the browser in directly with an already-issued token (e.g. after a password reset). */
+  setSession: (token: string, user: AuthUser) => void;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -91,8 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, ready, rider, riderReady, refreshRider, login, register, logout, updateUser }),
-    [user, ready, rider, riderReady, refreshRider, login, register, logout, updateUser],
+    () => ({ user, ready, rider, riderReady, refreshRider, login, register, logout, updateUser, setSession: persist }),
+    [user, ready, rider, riderReady, refreshRider, login, register, logout, updateUser, persist],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

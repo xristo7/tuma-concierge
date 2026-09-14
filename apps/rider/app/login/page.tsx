@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
@@ -164,13 +165,19 @@ export default function LoginPage() {
           >
             {busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
           </button>
+
+          {mode === "login" && (
+            <Link href="/forgot-password" className="block text-center text-sm font-semibold text-gold">
+              Forgot password?
+            </Link>
+          )}
         </form>
 
-        <p className="text-center text-xs text-ink-500">
-          New riders need admin verification before they can be matched.
-          <br />
-          Demo rider: +256700000002 / password123 (pre-verified)
-        </p>
+        {mode === "register" && (
+          <p className="text-center text-xs text-ink-500">
+            New riders need admin verification before they can be matched.
+          </p>
+        )}
       </div>
     </div>
   );

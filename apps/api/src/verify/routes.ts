@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { toAuthUser } from "../auth/serialize.js";
 import { requireAuth } from "../auth/middleware.js";
-import { createAndSendOtp } from "./service.js";
+import { createAndSendOtp, maskTarget } from "./service.js";
 import { hashCode } from "./otp.js";
 
 export const verifyRoutes = new Hono();
@@ -20,15 +20,6 @@ type Row = Record<string, unknown>;
  * proper ISO strings and should be passed to `Date` as-is. */
 function parseSqliteTimestamp(value: string): Date {
   return new Date(`${value.replace(" ", "T")}Z`);
-}
-
-function maskTarget(channel: "sms" | "email", target: string): string {
-  if (channel === "email") {
-    const [local, domain] = target.split("@");
-    if (!domain) return target;
-    return `${local.slice(0, 2)}***@${domain}`;
-  }
-  return target.length > 4 ? `${"•".repeat(target.length - 4)}${target.slice(-4)}` : target;
 }
 
 const requestSchema = z.object({ channel: z.enum(["sms", "email"]) });
@@ -49,7 +40,7 @@ verifyRoutes.post("/verify/request", async (c) => {
   }
 
   const recent = await db.execute({
-    sql: `SELECT created_at FROM otp_codes WHERE user_id = ? AND channel = ? ORDER BY created_at DESC LIMIT 1`,
+    sql: `SELECT created_at FROM otp_codes WHERE user_id = ? AND channel = ? AND purpose = 'verify' ORDER BY created_at DESC LIMIT 1`,
     args: [user.sub, channel],
   });
   const lastCreatedAt = recent.rows[0]?.created_at as string | undefined;
@@ -79,7 +70,7 @@ verifyRoutes.post("/verify/confirm", async (c) => {
   const { channel, code } = parsed.data;
 
   const res = await db.execute({
-    sql: `SELECT * FROM otp_codes WHERE user_id = ? AND channel = ? AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+    sql: `SELECT * FROM otp_codes WHERE user_id = ? AND channel = ? AND purpose = 'verify' AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1`,
     args: [user.sub, channel],
   });
   const otp = res.rows[0] as Row | undefined;

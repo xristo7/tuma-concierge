@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "../../lib/auth-context";
 import { errorMessage } from "../../lib/api";
@@ -174,11 +175,13 @@ export default function LoginPage() {
           >
             {busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
           </button>
-        </form>
 
-        <p className="text-center text-xs text-ink-500">
-          Demo customer: +256700000001 / password123
-        </p>
+          {mode === "login" && (
+            <Link href="/forgot-password" className="block text-center text-sm font-semibold text-gold">
+              Forgot password?
+            </Link>
+          )}
+        </form>
       </div>
     </div>
   );

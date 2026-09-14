@@ -107,6 +107,20 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
       });
     },
 
+    // Forgot password — public, works while signed out.
+    async requestPasswordReset(identifier: string) {
+      return request<{ sent: true; channel?: "sms" | "email"; target?: string; devCode?: string; retryAfterSeconds?: number }>(
+        "/v1/auth/password/reset/request",
+        { method: "POST", body: JSON.stringify({ identifier }) },
+      );
+    },
+    async confirmPasswordReset(identifier: string, code: string, newPassword: string) {
+      return request<{ token: string; user: AuthUser }>("/v1/auth/password/reset/confirm", {
+        method: "POST",
+        body: JSON.stringify({ identifier, code, newPassword }),
+      });
+    },
+
     // Lists
     async createList(body: CreateListBody = {}) {
       return request<CreateListResponse>("/v1/lists", { method: "POST", body: JSON.stringify(body) });
