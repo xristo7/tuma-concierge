@@ -82,6 +82,8 @@ export default function VerifyPage() {
   }
 
   const hasEmail = !!user?.email;
+  const hasPhone = !!user?.phone;
+  const hasBothChannels = hasEmail && hasPhone;
 
   return (
     <div className="flex min-h-dvh flex-col justify-center px-6 py-10">
@@ -100,7 +102,7 @@ export default function VerifyPage() {
           </p>
         </div>
 
-        {hasEmail && (
+        {hasBothChannels && (
           <div className="flex rounded-full bg-[#ECE8E2] p-1">
             {(["sms", "email"] as const).map((c) => (
               <button
