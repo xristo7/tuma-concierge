@@ -29,26 +29,38 @@ export type CreateApiClientOptions = {
   fetchImpl?: typeof fetch;
   /** Bearer token for authenticated requests. */
   getToken?: () => string | null | undefined;
+  /**
+   * Called when a request made *with* a token comes back 401 — the session
+   * ended somewhere other than this browser. That happens on a normal
+   * expiry, but also when the account is suspended, the password is reset,
+   * or the session is signed out from another device.
+   *
+   * Without this the app keeps rendering the cached user while every call
+   * behind it fails, which looks like the app is broken rather than like
+   * being logged out. Not called for a failed sign-in (no token was sent).
+   */
+  onUnauthorized?: () => void;
 };
 
-async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(
-      `API ${res.status}: ${(body as { message?: string; error?: string }).message ?? (body as { error?: string }).error ?? res.statusText}`,
-    );
-  }
-  return (await res.json()) as T;
-}
-
 /** API client for tuma-api (apps/api on Render). */
-export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClientOptions) {
+export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }: CreateApiClientOptions) {
   const root = baseUrl.replace(/\/$/, "");
   const f = fetchImpl ?? fetch;
 
   function authHeaders(): Record<string, string> {
     const token = getToken?.();
     return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  async function json<T>(res: Response): Promise<T> {
+    if (!res.ok) {
+      if (res.status === 401 && getToken?.()) onUnauthorized?.();
+      const body = await res.json().catch(() => ({}));
+      throw new Error(
+        `API ${res.status}: ${(body as { message?: string; error?: string }).message ?? (body as { error?: string }).error ?? res.statusText}`,
+      );
+    }
+    return (await res.json()) as T;
   }
 
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -333,6 +345,23 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
         body: form,
       });
       return json<{ rider: Rider }>(res);
+    },
+    /** Uploads the rider's own face photo — shown to customers once matched, mandatory for profile completion. */
+    async uploadRiderProfilePhoto(file: Blob) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await f(`${root}/v1/riders/profile-photo`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ rider: Rider }>(res);
+    },
+    /** Fetches a rider's profile photo as a Blob (not JSON — raw fetch; caller builds an object URL). */
+    async riderPhotoBlob(userId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/riders/${userId}/photo`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load rider photo`);
+      return res.blob();
     },
     async setRiderOnline(online: boolean) {
       return request<{ rider: Rider }>("/v1/riders/status", { method: "POST", body: JSON.stringify({ online }) });
