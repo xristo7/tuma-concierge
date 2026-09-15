@@ -62,6 +62,20 @@ export default function JobsHomePage() {
     }
   }
 
+  /** "nearest_window"/"customer_selects" jobs don't assign outright — applying just enters the running. */
+  async function applyToJob(id: string) {
+    setClaimingId(id);
+    setError(null);
+    try {
+      await api.applyForOrder(id);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setClaimingId(null);
+    }
+  }
+
   const activeOrders = orders.filter((o) => o.stage !== "Settle");
 
   return (
@@ -145,13 +159,25 @@ export default function JobsHomePage() {
                     </p>
                   </div>
                 )}
-                <button
-                  onClick={() => claimJob(job.id)}
-                  disabled={claimingId === job.id}
-                  className="min-h-10 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
-                >
-                  {claimingId === job.id ? "Claiming…" : "Claim job"}
-                </button>
+                {job.matching_mode === "first_to_claim" ? (
+                  <button
+                    onClick={() => claimJob(job.id)}
+                    disabled={claimingId === job.id}
+                    className="min-h-10 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
+                  >
+                    {claimingId === job.id ? "Claiming…" : "Claim job"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => applyToJob(job.id)}
+                    disabled={claimingId === job.id || job.applied}
+                    className={`min-h-10 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
+                      job.applied ? "bg-[rgb(var(--surface-muted))] text-ink-500" : "bg-gold text-ink"
+                    }`}
+                  >
+                    {claimingId === job.id ? "Applying…" : job.applied ? "Applied ✓" : "Apply"}
+                  </button>
+                )}
               </li>
             ))}
           </ul>

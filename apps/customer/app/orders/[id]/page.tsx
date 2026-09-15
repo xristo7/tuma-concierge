@@ -1,8 +1,8 @@
 "use client";
 
-import type { MobileMoneyNetwork, OrderDetail, OrderRating } from "@tuma/shared";
+import type { MobileMoneyNetwork, OrderDetail, OrderRating, RiderApplicant } from "@tuma/shared";
 import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel } from "@tuma/shared";
-import { MapPin, MessageCircle, TriangleAlert, User } from "lucide-react";
+import { MapPin, MessageCircle, Star, ThumbsUp, TriangleAlert, User } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
@@ -74,6 +74,89 @@ function RiderSummaryCard({
         Chat
       </button>
     </section>
+  );
+}
+
+/** For a "customer_selects" order still unmatched — each applicant's distance and track record, and a pick button. */
+function ApplicantPicker({ orderId, onSelected }: { orderId: string; onSelected: () => void }) {
+  const [applicants, setApplicants] = useState<RiderApplicant[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api
+      .getApplicants(orderId)
+      .then((res) => setApplicants(res.applicants))
+      .catch(() => {});
+  }, [orderId]);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 4000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  async function choose(riderId: string) {
+    setBusyId(riderId);
+    setError(null);
+    try {
+      await api.selectApplicant(orderId, riderId);
+      onSelected();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (applicants.length === 0) {
+    return (
+      <div className="flex items-center gap-3 py-2">
+        <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+        <p className="text-sm text-ink-500">Waiting for riders to offer…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2.5">
+      <p className="text-sm font-semibold text-ink">Choose your rider</p>
+      {applicants.map((a) => (
+        <div key={a.riderId} className="space-y-1.5 rounded-xl border border-[var(--border-faint)] p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-bold text-ink">{a.riderName}</span>
+            {a.distanceKm != null && <span className="text-xs text-ink-500">{a.distanceKm} km away</span>}
+          </div>
+          <div className="flex items-center gap-3 text-xs text-ink-500">
+            {a.avgRating != null && (
+              <span className="flex items-center gap-1">
+                <Star className="h-3.5 w-3.5 fill-gold text-gold" strokeWidth={1.5} aria-hidden />
+                {a.avgRating} ({a.reviewCount})
+              </span>
+            )}
+            {a.recommendCount > 0 && (
+              <span className="flex items-center gap-1 text-green">
+                <ThumbsUp className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                {a.recommendCount} recommend{a.recommendCount === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+          {a.outOfServiceRange && <p className="text-xs text-gold">Outside normal range — may cost a bit more.</p>}
+          {a.recentComments.length > 0 && (
+            <p className="text-xs italic text-ink-500">&ldquo;{a.recentComments[0]}&rdquo;</p>
+          )}
+          <button
+            type="button"
+            onClick={() => choose(a.riderId)}
+            disabled={busyId === a.riderId}
+            className="min-h-9 w-full rounded-full bg-gold px-3 text-xs font-bold text-ink disabled:opacity-60"
+          >
+            {busyId === a.riderId ? "Choosing…" : "Choose this rider"}
+          </button>
+        </div>
+      ))}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </div>
   );
 }
 
@@ -312,11 +395,15 @@ export default function OrderDetailPage() {
 
       {awaitingRiderOrPayment && (
         <section className="home-card space-y-3">
-          {!order.rider_id && (
-            <div className="flex items-center gap-3 py-2">
-              <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-              <p className="text-sm text-ink-500">Finding a nearby verified rider…</p>
-            </div>
+          {!order.rider_id && order.matching_mode === "customer_selects" ? (
+            <ApplicantPicker orderId={orderId} onSelected={() => load()} />
+          ) : (
+            !order.rider_id && (
+              <div className="flex items-center gap-3 py-2">
+                <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+                <p className="text-sm text-ink-500">Finding a nearby verified rider…</p>
+              </div>
+            )
           )}
 
           {order.rider_id && pendingPayment && (
