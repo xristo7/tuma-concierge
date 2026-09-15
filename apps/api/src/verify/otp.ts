@@ -3,8 +3,10 @@
  * deliberate slowness here). Works unchanged on Node and Workers via the
  * standard Web Crypto `crypto.subtle` global. */
 
+import { randomInt } from "../lib/random.js";
+
 export function generateCode(): string {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(100000 + randomInt(900000));
 }
 
 /** Long opaque token for the one-click "Verify Email Address" link — unlike

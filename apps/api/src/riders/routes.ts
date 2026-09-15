@@ -208,6 +208,20 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
     return c.json({ error: "no_mobile_money", message: "Add a mobile money number in your profile first" }, 409);
   }
 
+  // Debit FIRST, conditional on the balance still being exactly what we just
+  // read, and treat the row count as the lock. Two withdrawals racing each
+  // other both see the same balance on the read above, but only one of them
+  // can win this update — the loser is turned away having moved no money.
+  // Doing it the other way round (disburse, then zero) lets both requests
+  // pay out against the same balance, since Workers serves them concurrently.
+  const debit = await db.execute({
+    sql: "UPDATE riders SET wallet_balance = 0, updated_at = datetime('now') WHERE user_id = ? AND wallet_balance = ?",
+    args: [user.sub, balance],
+  });
+  if (debit.rowsAffected === 0) {
+    return c.json({ error: "balance_changed", message: "Your balance just changed — reopen the wallet and try again" }, 409);
+  }
+
   const withdrawalId = newId("wd");
   let providerRef: string;
   let network: MobileMoneyNetwork;
@@ -216,19 +230,18 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
     providerRef = initiated.providerRef;
     network = initiated.network;
   } catch (err) {
+    // The debit already went through, so hand the money back before failing.
+    await db.execute({
+      sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
+      args: [balance, user.sub],
+    });
     if (err instanceof UnsupportedNetworkError) {
       return c.json({ error: "unsupported_network", message: err.message }, 400);
     }
-    return c.json({ error: "withdrawal_request_failed", message: String(err) }, 502);
+    console.error("Withdrawal request failed:", err);
+    return c.json({ error: "withdrawal_request_failed", message: "Couldn't reach mobile money. Please try again." }, 502);
   }
 
-  // Zero the balance immediately so it can't be withdrawn twice while this
-  // one is still pending; a failed withdrawal refunds it back (see refresh
-  // below), mirroring how a failed escrow collection just never funds.
-  await db.execute({
-    sql: "UPDATE riders SET wallet_balance = 0, updated_at = datetime('now') WHERE user_id = ?",
-    args: [user.sub],
-  });
   await db.execute({
     sql: `INSERT INTO wallet_withdrawals (id, rider_id, amount, provider, provider_ref, msisdn, network, status)
           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,

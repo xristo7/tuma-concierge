@@ -45,7 +45,7 @@ export default function LoginPage() {
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-              placeholder="+256700000003"
+              placeholder="Phone or email"
             />
           </div>
           <div className="space-y-1">

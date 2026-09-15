@@ -2,8 +2,21 @@ import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import { db } from "./client.js";
 
-/** Local/staging demo data: one customer, one verified+online rider, one admin. Password for all: "password123". */
+/** Local demo data: one customer, one verified+online rider, one admin. Password for all: "password123". */
 async function run() {
+  // These are throwaway accounts with a password everyone can guess, and one
+  // of them is an admin. Seeding them anywhere real hands over the platform,
+  // so refuse outright rather than trusting whoever runs this to have checked
+  // which database their env points at.
+  const environment = process.env.ENVIRONMENT ?? "development";
+  if (environment !== "development") {
+    console.error(
+      `Refusing to seed demo accounts: ENVIRONMENT is "${environment}", not "development".\n` +
+        "These accounts all share the password \"password123\" and include an admin.",
+    );
+    process.exit(1);
+  }
+
   const passwordHash = await bcrypt.hash("password123", 10);
 
   const customerId = randomUUID();

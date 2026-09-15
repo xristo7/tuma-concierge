@@ -904,11 +904,36 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
 
   const total = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
 
+  let released = 0;
   if (order.payment_rail === "escrow" && order.rider_id) {
-    await db.execute({
-      sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
-      args: [total, order.rider_id as string],
+    // Release only what escrow actually holds, never `final_total`. An
+    // approved fee proposal or substitution raises `final_total` after the
+    // collection has already happened, with no top-up charged — paying that
+    // out would hand the rider money the platform never received, which is
+    // exactly the hole a rider colluding with a throwaway customer account
+    // would mint from. Anything agreed above what was collected is a debt to
+    // settle out of band, so it's logged rather than silently paid.
+    const collectedRes = await db.execute({
+      sql: `SELECT COALESCE(SUM(amount), 0) as collected FROM payments
+            WHERE order_id = ? AND type = 'collection' AND status = 'successful'`,
+      args: [id],
     });
+    released = Number((collectedRes.rows[0] as Row)?.collected ?? 0);
+
+    if (released > 0) {
+      await db.execute({
+        sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
+        args: [released, order.rider_id as string],
+      });
+    }
+    if (released < total) {
+      await logEvent(
+        id,
+        "Settle",
+        `Shortfall — ${formatAmount(total - released)} of the agreed total was never collected into escrow and was not paid out`,
+        user.sub,
+      );
+    }
   }
 
   await touchOrder(id, { stage: "Settle", final_total: total });
@@ -919,7 +944,7 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
   await logEvent(
     id,
     "Settle",
-    order.payment_rail === "escrow" ? `Order settled — ${formatAmount(total)} credited to rider wallet` : "Order settled",
+    order.payment_rail === "escrow" ? `Order settled — ${formatAmount(released)} released to rider wallet` : "Order settled",
     user.sub,
   );
 
