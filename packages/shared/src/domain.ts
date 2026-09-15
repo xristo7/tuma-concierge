@@ -299,6 +299,12 @@ export type AuthUser = {
   phoneVerifiedAt: string | null;
   emailVerifiedAt: string | null;
   defaultMatchingMode: MatchingMode | null;
+  /** False only for a Google-only account that has never reset its password
+   * — its password_hash is a random value nobody was ever shown, so a
+   * "change password" form has nothing valid to check the current one
+   * against. Such an account gains one through "forgot password" instead
+   * (an OTP to its verified email, same as any other reset). */
+  passwordSet: boolean;
 };
 
 /** True once either phone or email has been confirmed via OTP — the two

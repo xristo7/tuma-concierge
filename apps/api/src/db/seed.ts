@@ -24,15 +24,18 @@ async function run() {
   const adminId = randomUUID();
 
   await db.execute({
-    sql: `INSERT OR IGNORE INTO users (id, phone, name, password_hash, role) VALUES (?, ?, ?, ?, 'customer')`,
+    sql: `INSERT OR IGNORE INTO users (id, phone, name, password_hash, role, password_set_at)
+          VALUES (?, ?, ?, ?, 'customer', datetime('now'))`,
     args: [customerId, "+256700000001", "Sharon", passwordHash],
   });
   await db.execute({
-    sql: `INSERT OR IGNORE INTO users (id, phone, name, password_hash, role) VALUES (?, ?, ?, ?, 'rider')`,
+    sql: `INSERT OR IGNORE INTO users (id, phone, name, password_hash, role, password_set_at)
+          VALUES (?, ?, ?, ?, 'rider', datetime('now'))`,
     args: [riderId, "+256700000002", "Juma", passwordHash],
   });
   await db.execute({
-    sql: `INSERT OR IGNORE INTO users (id, phone, name, password_hash, role) VALUES (?, ?, ?, ?, 'admin')`,
+    sql: `INSERT OR IGNORE INTO users (id, phone, name, password_hash, role, password_set_at)
+          VALUES (?, ?, ?, ?, 'admin', datetime('now'))`,
     args: [adminId, "+256700000003", "Admin", passwordHash],
   });
   await db.execute({

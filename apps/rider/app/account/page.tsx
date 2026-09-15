@@ -4,6 +4,7 @@ import { detectMobileMoneyNetwork, isRiderProfileComplete, mobileMoneyNetworkLab
 import { CheckCircle2, LogOut, MapPin, Upload, User } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
@@ -210,6 +211,8 @@ export default function AccountPage() {
           </span>
         )}
       </section>
+
+      <ChangePasswordPanel />
 
       {!complete && (
         <div className="home-card flex items-center gap-3 !border-l-4 !border-l-gold">

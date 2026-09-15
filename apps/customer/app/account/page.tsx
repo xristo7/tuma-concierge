@@ -4,6 +4,7 @@ import { MATCHING_MODE_DESCRIPTIONS, MATCHING_MODE_LABELS, type MatchingMode } f
 import { LogOut, Shield, User } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
 import { SavedLocations } from "../../components/SavedLocations";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
@@ -86,6 +87,8 @@ export default function AccountPage() {
       </section>
 
       <MatchingPreference />
+
+      <ChangePasswordPanel />
 
       <SavedLocations />
 

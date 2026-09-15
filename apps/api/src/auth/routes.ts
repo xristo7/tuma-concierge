@@ -109,7 +109,8 @@ authRoutes.post("/register", async (c) => {
   const id = crypto.randomUUID();
   const passwordHash = await bcrypt.hash(password, 10);
   await db.execute({
-    sql: "INSERT INTO users (id, phone, email, name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)",
+    sql: `INSERT INTO users (id, phone, email, name, password_hash, role, password_set_at)
+          VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
     args: [id, phone ?? null, email ?? null, name, passwordHash, role],
   });
 
@@ -450,8 +451,11 @@ authRoutes.post("/password/reset/confirm", async (c) => {
   // their account was taken needs the intruder's existing session to stop
   // working, not just their next login attempt to fail. The token issued
   // below shares this second, and requireAuth treats equal as still valid.
+  // password_set_at also moves forward here — this is a Google-only
+  // account's route to gaining a password it actually knows (see 0020).
   await db.execute({
-    sql: `UPDATE users SET password_hash = ?, sessions_valid_from = datetime('now'), updated_at = datetime('now')
+    sql: `UPDATE users SET password_hash = ?, sessions_valid_from = datetime('now'),
+                 password_set_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ?`,
     args: [passwordHash, row.id],
   });
@@ -513,7 +517,8 @@ authRoutes.post("/password/change", requireAuth, async (c) => {
   // this request's own session survives — changing your password from
   // Settings shouldn't log you out mid-flow.
   await db.execute({
-    sql: `UPDATE users SET password_hash = ?, sessions_valid_from = datetime('now'), updated_at = datetime('now')
+    sql: `UPDATE users SET password_hash = ?, sessions_valid_from = datetime('now'),
+                 password_set_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ?`,
     args: [passwordHash, user.sub],
   });

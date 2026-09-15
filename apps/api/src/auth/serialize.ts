@@ -7,6 +7,7 @@ type UserRow = {
   phone_verified_at: string | null;
   email_verified_at: string | null;
   default_matching_mode: string | null;
+  password_set_at: string | null;
 };
 
 /** Shapes a raw `users` row into the public `AuthUser` DTO. */
@@ -21,5 +22,9 @@ export function toAuthUser(row: Record<string, unknown>) {
     phoneVerifiedAt: r.phone_verified_at ?? null,
     emailVerifiedAt: r.email_verified_at ?? null,
     defaultMatchingMode: r.default_matching_mode ?? null,
+    // False only for a Google-only account that has never reset its
+    // password — the random value set at creation was never shown to
+    // anyone, so "change password" would have nothing to check it against.
+    passwordSet: r.password_set_at != null,
   };
 }
