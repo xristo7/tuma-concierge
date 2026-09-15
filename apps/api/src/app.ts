@@ -110,6 +110,8 @@ app.get("/v1", (c) =>
       "GET /v1/riders/me",
       "GET /v1/riders/me/orders",
       "GET /v1/riders/jobs/available",
+      "POST /v1/riders/profile-photo",
+      "GET /v1/riders/:userId/photo",
       "GET /v1/admin/riders",
       "GET /v1/admin/riders/:userId/id-document",
       "POST /v1/admin/riders/:userId/verify",

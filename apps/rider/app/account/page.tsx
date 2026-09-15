@@ -68,9 +68,12 @@ export default function AccountPage() {
   const [showMap, setShowMap] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploadingId, setUploadingId] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api
@@ -78,6 +81,27 @@ export default function AccountPage() {
       .then((res) => applyRider(res.rider))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!user || !rider?.profile_photo_key) {
+      setPhotoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    api
+      .riderPhotoBlob(user.id)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPhotoUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [user, rider?.profile_photo_key]);
 
   function applyRider(r: Rider | null) {
     setRider(r);
@@ -146,6 +170,21 @@ export default function AccountPage() {
     } finally {
       setUploadingId(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function onPickPhotoFile(file: File) {
+    setUploadingPhoto(true);
+    setError(null);
+    try {
+      const res = await api.uploadRiderProfilePhoto(file);
+      applyRider(res.rider);
+      await refreshRider();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
     }
   }
 
@@ -298,6 +337,53 @@ export default function AccountPage() {
           {busy ? "Saving…" : "Save profile"}
         </button>
       </form>
+
+      <section className="home-card space-y-3">
+        <h2 className="text-sm font-semibold text-ink">
+          Profile photo <span className="text-red-500">*</span>
+        </h2>
+        <p className="text-xs text-ink-500">
+          A clear photo of your face — this is what customers see once you take their order, so they know
+          who&apos;s arriving.
+        </p>
+        <div className="flex items-center gap-3">
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={photoUrl}
+              alt="Your profile photo"
+              className="h-16 w-16 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-ink-500">
+              <User className="h-7 w-7" strokeWidth={1.5} aria-hidden />
+            </span>
+          )}
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void onPickPhotoFile(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={uploadingPhoto}
+            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-full border border-[var(--border-faint)] px-4 text-sm font-bold text-ink disabled:opacity-60"
+          >
+            {rider?.profile_photo_key ? (
+              <CheckCircle2 className="h-4 w-4 text-green" strokeWidth={2} aria-hidden />
+            ) : (
+              <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />
+            )}
+            {uploadingPhoto ? "Uploading…" : rider?.profile_photo_key ? "Uploaded — tap to replace" : "Add profile photo"}
+          </button>
+        </div>
+      </section>
 
       <section className="home-card space-y-3">
         <h2 className="text-sm font-semibold text-ink">

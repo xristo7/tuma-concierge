@@ -161,19 +161,35 @@ orderRoutes.get("/lists/recent", async (c) => {
   const user = c.get("user");
   const limit = Math.max(1, Math.min(Number(c.req.query("limit") ?? "10") || 10, 50));
   const res = await db.execute({
-    sql: `SELECT l.*, (SELECT COUNT(*) FROM list_items WHERE list_id = l.id) as item_count
-          FROM lists l WHERE l.customer_id = ? ORDER BY l.updated_at DESC LIMIT ?`,
+    sql: `SELECT l.*, (SELECT COUNT(*) FROM list_items WHERE list_id = l.id) as item_count,
+                 o.id as order_id, o.rider_id as rider_id, o.destination_area as destination_area,
+                 r.first_name as rider_first_name, r.profile_photo_key as rider_photo_key,
+                 u.name as rider_full_name
+          FROM lists l
+          LEFT JOIN orders o ON o.id = (SELECT id FROM orders WHERE list_id = l.id ORDER BY updated_at DESC LIMIT 1)
+          LEFT JOIN riders r ON r.user_id = o.rider_id
+          LEFT JOIN users u ON u.id = o.rider_id
+          WHERE l.customer_id = ? ORDER BY l.updated_at DESC LIMIT ?`,
     args: [user.sub, limit],
   });
   return c.json({
-    lists: res.rows.map((r) => ({
-      id: r.id,
-      listId: r.id,
-      title: r.title,
-      status: r.status,
-      itemCount: r.item_count,
-      updatedAt: r.updated_at,
-    })),
+    lists: res.rows.map((r) => {
+      const fullName = (r.rider_full_name as string | null)?.trim();
+      const riderFirstName = (r.rider_first_name as string | null) ?? (fullName ? fullName.split(/\s+/)[0] : null);
+      return {
+        id: r.id,
+        listId: r.id,
+        title: r.title,
+        status: r.status,
+        itemCount: r.item_count,
+        updatedAt: r.updated_at,
+        orderId: r.order_id ?? null,
+        riderId: r.rider_id ?? null,
+        riderFirstName: r.rider_id ? riderFirstName : null,
+        riderHasPhoto: !!r.rider_photo_key,
+        area: r.destination_area ?? null,
+      };
+    }),
   });
 });
 

@@ -146,6 +146,79 @@ riderRoutes.post("/riders/id-document", requireAuth, requireRole("rider"), async
   return c.json({ rider });
 });
 
+const MAX_PROFILE_PHOTO_BYTES = 4 * 1024 * 1024;
+const ALLOWED_PHOTO_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+/**
+ * Uploads the rider's own face photo — mandatory for profile completion
+ * (see isRiderProfileComplete in @tuma/shared). Unlike the National ID scan,
+ * this one is meant to be seen: it's what a customer sees on their order
+ * once a rider takes it, so it builds the same trust a driver photo does in
+ * any ride-hailing app. Served back via GET /riders/:userId/photo, not
+ * fully public.
+ */
+riderRoutes.post("/riders/profile-photo", requireAuth, requireRole("rider"), async (c) => {
+  const user = c.get("user");
+  const form = await c.req.formData().catch(() => null);
+  const file = form?.get("file");
+  if (!(file instanceof File)) return c.json({ error: "missing_file" }, 400);
+  if (!ALLOWED_PHOTO_MIME.has(file.type)) return c.json({ error: "unsupported_file_type" }, 400);
+  if (file.size > MAX_PROFILE_PHOTO_BYTES) return c.json({ error: "file_too_large" }, 400);
+
+  const ext = file.type.split("/")[1];
+  const key = `riders/${user.sub}/profile-photo.${ext}`;
+  const bucket = getR2Bucket();
+  await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+
+  await db.execute({
+    sql: "UPDATE riders SET profile_photo_key = ?, updated_at = datetime('now') WHERE user_id = ?",
+    args: [key, user.sub],
+  });
+
+  const res = await db.execute({ sql: "SELECT * FROM riders WHERE user_id = ?", args: [user.sub] });
+  const rider = res.rows[0] as unknown as Rider;
+  if (isRiderProfileComplete(rider) && !rider.profile_completed_at) {
+    await db.execute({
+      sql: "UPDATE riders SET profile_completed_at = datetime('now') WHERE user_id = ?",
+      args: [user.sub],
+    });
+    rider.profile_completed_at = new Date().toISOString();
+  }
+
+  return c.json({ rider });
+});
+
+/**
+ * Streams a rider's profile photo. Broader than the National ID endpoint on
+ * purpose — a face photo is meant to build trust, not stay hidden — but
+ * still not open to just anyone: the rider themself, admins, and a customer
+ * who has (or has had) an order matched to this rider.
+ */
+riderRoutes.get("/riders/:userId/photo", requireAuth, async (c) => {
+  const userId = c.req.param("userId") as string;
+  const user = c.get("user");
+
+  if (user.sub !== userId && user.role !== "admin") {
+    const related = await db.execute({
+      sql: "SELECT 1 FROM orders WHERE customer_id = ? AND rider_id = ? LIMIT 1",
+      args: [user.sub, userId],
+    });
+    if (related.rows.length === 0) return c.json({ error: "forbidden" }, 403);
+  }
+
+  const res = await db.execute({ sql: "SELECT profile_photo_key FROM riders WHERE user_id = ?", args: [userId] });
+  const key = res.rows[0]?.profile_photo_key as string | null | undefined;
+  if (!key) return c.json({ error: "not_found" }, 404);
+
+  const bucket = getR2Bucket();
+  const object = await bucket.get(key);
+  if (!object) return c.json({ error: "not_found" }, 404);
+
+  return new Response(object.body, {
+    headers: { "Content-Type": object.httpMetadata?.contentType ?? "image/jpeg", "Cache-Control": "private, max-age=3600" },
+  });
+});
+
 const statusSchema = z.object({ online: z.boolean() });
 
 riderRoutes.post("/riders/status", requireAuth, requireRole("rider"), async (c) => {

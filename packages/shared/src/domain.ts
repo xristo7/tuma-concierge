@@ -9,6 +9,19 @@ export type ListSummary = {
   status: ListStatus;
   itemCount: number;
   updatedAt: string;
+  /**
+   * Set once this list's order has a rider assigned — the customer home
+   * screen prefers "{riderFirstName} · {area}" over the list's own `title`
+   * so recent orders read as "who delivered this and where" rather than a
+   * generic "New shopping list". Null on a list with no order yet, or one
+   * still waiting to be matched.
+   */
+  riderFirstName: string | null;
+  riderId: string | null;
+  riderHasPhoto: boolean;
+  area: string | null;
+  /** The order this list turned into, if any — links to the full order/delivery detail page instead of the bare item list. */
+  orderId: string | null;
 };
 
 export type ListItem = {
