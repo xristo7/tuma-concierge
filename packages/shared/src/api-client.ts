@@ -91,6 +91,15 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
         body: JSON.stringify(input),
       });
     },
+    /**
+     * Ends the current session server-side. Dropping the token from local
+     * storage only hides it from this browser — until the server records it
+     * as revoked, a copy taken beforehand still works. Callers should clear
+     * local storage regardless of whether this succeeds.
+     */
+    async logout() {
+      return request<{ ok: true }>("/v1/auth/logout", { method: "POST" });
+    },
     /** Sign in/up with Google — `idToken` is the credential Google Identity Services hands the client. */
     async googleAuth(idToken: string, role?: "customer" | "rider") {
       return request<{ token: string; user: AuthUser; riderStatus?: "pending_verification" }>("/v1/auth/google", {

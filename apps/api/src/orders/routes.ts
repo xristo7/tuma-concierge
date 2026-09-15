@@ -5,8 +5,9 @@ import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
-import { getDeliverySettings } from "../lib/settings.js";
+import { getDeliverySettings, getMaxOrderValue } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "./matching.js";
+import { redactOrder } from "./visibility.js";
 import type { MobileMoneyNetwork } from "@tuma/shared";
 import {
   activeProvider,
@@ -65,6 +66,46 @@ function assertCustomer(order: Row, userId: string) {
 function assertRider(order: Row, userId: string) {
   if (order.rider_id !== userId) throw new HttpError(403, "Not your assigned order");
 }
+
+/**
+ * Strips the handover PIN out of every order this router returns, for
+ * everyone except the order's own customer (and admins).
+ *
+ * Done here rather than at each `c.json({ order })` because there are a
+ * dozen of those and the next route someone adds would quietly leak it
+ * again. The PIN is the customer's proof that they physically received the
+ * goods — a rider who can read it can claim a handover that never happened,
+ * which is the single thing the PIN exists to prevent.
+ */
+orderRoutes.use("*", async (c, next) => {
+  await next();
+  const user = c.get("user");
+  if (!user || user.role === "admin") return;
+  if (!c.res.headers.get("content-type")?.includes("application/json")) return;
+
+  const body = (await c.res
+    .clone()
+    .json()
+    .catch(() => null)) as { order?: Row; orders?: Row[] } | null;
+  if (!body || typeof body !== "object") return;
+
+  const strip = (order: Row | undefined) => {
+    if (!order || order.customer_id === user.sub || !("pin_code" in order)) return order;
+    const { pin_code: _pin, ...rest } = order;
+    return rest;
+  };
+
+  const hadOrder = body.order !== undefined;
+  const hadOrders = Array.isArray(body.orders);
+  if (!hadOrder && !hadOrders) return;
+
+  const next_ = {
+    ...body,
+    ...(hadOrder ? { order: strip(body.order) } : {}),
+    ...(hadOrders ? { orders: (body.orders as Row[]).map((o) => strip(o) as Row) } : {}),
+  };
+  c.res = new Response(JSON.stringify(next_), c.res);
+});
 
 // ---------------------------------------------------------------------------
 // Lists
@@ -181,15 +222,48 @@ orderRoutes.post("/orders", async (c) => {
 
   // A parcel ride's cost is distance × the admin-set rate per km, computed
   // from pickup/destination coords whenever both were pinned on the map —
-  // this always wins over any client-supplied estimate. Shopping orders have
-  // no pickup point (the "shop" is wherever the rider goes), so there's no
-  // ride distance to price this way; they keep the customer's own estimate.
+  // this always wins over any client-supplied estimate.
+  //
+  // Shopping orders have no pickup point (the "shop" is wherever the rider
+  // goes), so there's no ride distance to price this way. The customer's own
+  // estimate stands — but it becomes the amount escrow charges their mobile
+  // money, so the server doesn't simply write down whatever arrived in the
+  // request: it prefers the priced list when there is one, and refuses a
+  // figure above the platform ceiling either way.
   let distanceKm: number | null = null;
   let estimatedTotal = d.estimatedTotal ?? null;
   if (d.type === "parcel" && d.pickupLat != null && d.pickupLng != null && d.destinationLat != null && d.destinationLng != null) {
     distanceKm = haversineKm(d.pickupLat, d.pickupLng, d.destinationLat, d.destinationLng);
     const { deliveryRatePerKm } = await getDeliverySettings();
     estimatedTotal = Math.round(distanceKm * deliveryRatePerKm);
+  } else if (d.type === "shopping") {
+    const priced = await db.execute({
+      sql: `SELECT COUNT(*) AS total, COUNT(unit_price) AS priced,
+                   COALESCE(SUM(quantity * unit_price), 0) AS sum_priced
+            FROM list_items WHERE list_id = ?`,
+      args: [d.listId],
+    });
+    const row = priced.rows[0] as Row | undefined;
+    const itemCount = Number(row?.total ?? 0);
+    const pricedCount = Number(row?.priced ?? 0);
+    // Every item carries a price → the list itself is the quote, and the
+    // client's separate estimate is redundant at best.
+    if (itemCount > 0 && pricedCount === itemCount) {
+      estimatedTotal = Number(row?.sum_priced ?? 0);
+    }
+  }
+
+  if (estimatedTotal != null) {
+    const maxOrderValue = await getMaxOrderValue();
+    if (estimatedTotal > maxOrderValue) {
+      return c.json(
+        {
+          error: "order_value_too_high",
+          message: `Orders are capped at ${formatAmount(maxOrderValue)}. Please split this into smaller orders.`,
+        },
+        400,
+      );
+    }
   }
 
   const orderId = newId("ord");
@@ -258,7 +332,7 @@ orderRoutes.get("/orders/:id", async (c) => {
   ]);
 
   return c.json({
-    order,
+    order: redactOrder(order, user),
     items: items.rows,
     events: events.rows,
     substitutions: substitutions.rows,
@@ -598,7 +672,11 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
     if (err instanceof UnsupportedNetworkError) {
       return c.json({ error: "unsupported_network", message: err.message }, 400);
     }
-    return c.json({ error: "payment_request_failed", message: String(err) }, 502);
+    console.error("Escrow collection request failed:", err);
+    return c.json(
+      { error: "payment_request_failed", message: "Couldn't reach mobile money just now. Please try again." },
+      502,
+    );
   }
 
   await db.execute({

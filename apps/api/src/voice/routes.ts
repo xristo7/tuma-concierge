@@ -1,11 +1,19 @@
 import { Hono } from "hono";
 import { getAiBinding } from "../ai/binding.js";
 import { requireAuth } from "../auth/middleware.js";
+import { consume, tooManyRequests } from "../lib/ratelimit.js";
 
 export const voiceRoutes = new Hono();
 voiceRoutes.use("*", requireAuth);
 
 const MAX_AUDIO_BYTES = 15 * 1024 * 1024; // ~15MB, comfortably covers a couple minutes of speech
+
+/** Every call here runs Whisper and usually Llama too, on up to 15MB of
+ * audio — this is the most expensive thing an ordinary signed-in account can
+ * ask the platform to do, and nothing about it is worth doing in a loop.
+ * Dictating a shopping list a few times an hour is normal use, so an hourly
+ * ceiling catches runaway scripts without ever touching a real customer. */
+const TRANSCRIBE_PER_HOUR = 30;
 
 type WhisperResponse = { text?: string };
 
@@ -36,6 +44,12 @@ function parseItemsFromModelText(text: string): ExtractedItem[] {
 }
 
 voiceRoutes.post("/voice/transcribe", async (c) => {
+  const user = c.get("user");
+  const quota = await consume(`voice:${user.sub}`, TRANSCRIBE_PER_HOUR, 60 * 60);
+  if (!quota.allowed) {
+    return tooManyRequests(c, quota, "You've hit the voice-note limit for now. Please try again later.");
+  }
+
   const form = await c.req.formData().catch(() => null);
   const file = form?.get("audio");
   if (!(file instanceof File)) return c.json({ error: "missing_audio" }, 400);

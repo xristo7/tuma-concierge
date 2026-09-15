@@ -7,6 +7,7 @@ import { haversineKm } from "../lib/geo.js";
 import { newId } from "../lib/ids.js";
 import { getDeliverySettings } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
+import { redactOrders, toOpenJob } from "../orders/visibility.js";
 import { activeProvider, checkPaymentStatus, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
 import { getR2Bucket } from "../storage/r2.js";
 
@@ -176,7 +177,7 @@ riderRoutes.get("/riders/me/orders", requireAuth, requireRole("rider"), async (c
           WHERE o.rider_id = ? ORDER BY o.updated_at DESC`,
     args: [user.sub],
   });
-  return c.json({ orders: res.rows });
+  return c.json({ orders: redactOrders(res.rows as Row[], user) });
 });
 
 /**
@@ -220,16 +221,18 @@ riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), asy
       const visibleRadiusKm = currentVisibilityRadiusKm(order.updated_at as string);
       const visible = distanceKm == null || visibleRadiusKm == null || distanceKm <= visibleRadiusKm;
       return {
-        ...order,
-        distanceKm: distanceKm != null ? Math.round(distanceKm * 10) / 10 : null,
-        outOfServiceRange: distanceKm != null && distanceKm > serviceRangeKm,
+        job: toOpenJob(order, {
+          distanceKm: distanceKm != null ? Math.round(distanceKm * 10) / 10 : null,
+          outOfServiceRange: distanceKm != null && distanceKm > serviceRangeKm,
+        }),
+        sortKey: distanceKm ?? Infinity,
         visible,
       };
     })
-    .filter((job) => job.visible)
-    .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+    .filter((entry) => entry.visible)
+    .sort((a, b) => a.sortKey - b.sortKey);
 
-  return c.json({ jobs: jobs.map(({ visible: _visible, ...job }) => job) });
+  return c.json({ jobs: jobs.map((entry) => entry.job) });
 });
 
 // ---------------------------------------------------------------------------
@@ -343,7 +346,11 @@ riderRoutes.get("/riders/me/wallet/withdrawals/:id/refresh", requireAuth, requir
     const updated = await db.execute({ sql: "SELECT * FROM wallet_withdrawals WHERE id = ?", args: [id] });
     return c.json({ withdrawal: updated.rows[0] });
   } catch (err) {
-    return c.json({ error: "status_check_failed", message: String(err) }, 502);
+    console.error("Withdrawal status check failed:", err);
+    return c.json(
+      { error: "status_check_failed", message: "Couldn't check the payout status just now. Please try again." },
+      502,
+    );
   }
 });
 

@@ -52,6 +52,28 @@ export default function OverviewPage() {
     <div className="space-y-5 px-4 pb-6 pt-4">
       <h1 className="text-xl font-bold text-ink">Overview</h1>
 
+      {/* The single most dangerous thing about this deployment is someone
+          treating a wallet balance or a GMV figure as real money while
+          payments are mocked. It gets a banner, not a line item. */}
+      {!integrations.mobileMoney.live && (
+        <section
+          role="alert"
+          className="flex items-start gap-2.5 rounded-xl border-2 border-red-500 bg-red-50 px-3.5 py-3 dark:bg-red-950/40"
+        >
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" strokeWidth={2.25} aria-hidden />
+          <div className="space-y-1">
+            <p className="text-sm font-bold uppercase tracking-wide text-red-700 dark:text-red-400">
+              Simulated payments
+            </p>
+            <p className="text-xs leading-relaxed text-red-700 dark:text-red-300">
+              No real money moves. Escrow collections succeed without charging anyone, rider wallet balances are
+              fictional, and withdrawals pay out nothing. Every figure below is test data — don&apos;t onboard real
+              riders or settle real orders until mobile money is live.
+            </p>
+          </div>
+        </section>
+      )}
+
       <section className="grid grid-cols-2 gap-3">
         <StatCard label="Customers" value={stats.totalCustomers} />
         <StatCard label="Riders" value={stats.totalRiders} />

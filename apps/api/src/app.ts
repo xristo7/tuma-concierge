@@ -13,20 +13,32 @@ import { voiceRoutes } from "./voice/routes.js";
 /** Hono app shared by the Node entry (local dev) and the Cloudflare Worker entry. */
 const app = new Hono();
 
-const defaultOrigins = [
-  "https://tuma-customer-staging.onrender.com",
-  "https://tuma-rider-staging.onrender.com",
+const devOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:3002", // apps/admin dev server
 ];
 
+const defaultOrigins = ["https://tuma-customer-staging.onrender.com", "https://tuma-rider-staging.onrender.com"];
+
+/** Anything a developer runs on their own machine can call the API from the
+ * browser — which is exactly what you want locally, and exactly what you
+ * don't want in production, where it means any page a victim opens on their
+ * own laptop can talk to the live API as them. Localhost is allowed only
+ * when ENVIRONMENT says development, whatever CORS_ORIGINS happens to list. */
+function isLocalhost(origin: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(origin.trim());
+}
+
 app.use("*", (c, next) => {
-  const corsOrigins = (process.env.CORS_ORIGINS ?? "")
+  const isDev = (process.env.ENVIRONMENT ?? "development") === "development";
+  const configured = (process.env.CORS_ORIGINS ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const allowOrigins = corsOrigins.length > 0 ? corsOrigins : defaultOrigins;
+  const base = configured.length > 0 ? configured : defaultOrigins;
+  const allowOrigins = isDev ? [...new Set([...base, ...devOrigins])] : base.filter((o) => !isLocalhost(o));
+
   return cors({
     origin: allowOrigins,
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -60,6 +72,7 @@ app.get("/v1", (c) =>
     endpoints: [
       "POST /v1/auth/register",
       "POST /v1/auth/login",
+      "POST /v1/auth/logout",
       "GET /v1/auth/me",
       "POST /v1/auth/verify/request",
       "POST /v1/auth/verify/confirm",
@@ -123,10 +136,10 @@ app.route("/v1", paymentRoutes);
 app.route("/v1", riderRoutes);
 app.route("/v1", locationRoutes);
 app.route("/v1", settingsRoutes);
-// voiceRoutes before adminRoutes: adminRoutes' blanket requireRole("admin")
-// middleware is registered as "*" within the shared /v1 router, so it would
-// otherwise intercept voiceRoutes' /voice/transcribe too (same Hono gotcha
-// documented above for callRoutes vs orderRoutes).
+// adminRoutes' admin gate is scoped to /admin/* (see admin/routes.ts), so
+// mount order here is no longer load-bearing — it used to be registered as
+// "*" on this shared /v1 router, which meant anything mounted after it
+// inherited the admin-only check.
 app.route("/v1", voiceRoutes);
 app.route("/v1", adminRoutes);
 

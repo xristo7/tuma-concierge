@@ -3,13 +3,37 @@ import { Hono } from "hono";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { hashCode } from "../verify/otp.js";
+import {
+  checkLockout,
+  clearFailures,
+  clientIp,
+  consume,
+  hashKey,
+  recordFailure,
+  sweepExpired,
+  tooManyRequests,
+} from "../lib/ratelimit.js";
+import { hashCode, timingSafeEqual } from "../verify/otp.js";
 import { appBaseUrl, createAndSendOtp, maskTarget } from "../verify/service.js";
 import { toAuthUser } from "./serialize.js";
-import { signToken } from "./jwt.js";
+import { signToken, TOKEN_TTL_SECONDS } from "./jwt.js";
 import { requireAuth } from "./middleware.js";
 
 export const authRoutes = new Hono();
+
+/** Per-IP ceilings. Generous enough that a household or office sharing one
+ * address never notices, low enough that scripted abuse stalls immediately. */
+const IP_LIMITS = {
+  login: { limit: 20, windowSeconds: 60 },
+  register: { limit: 5, windowSeconds: 60 },
+  reset: { limit: 10, windowSeconds: 60 },
+} as const;
+
+async function ipLimited(c: Parameters<typeof clientIp>[0], bucket: keyof typeof IP_LIMITS) {
+  const { limit, windowSeconds } = IP_LIMITS[bucket];
+  const key = `ip:${bucket}:${await hashKey(clientIp(c))}`;
+  return consume(key, limit, windowSeconds);
+}
 
 const registerSchema = z
   .object({
@@ -59,23 +83,27 @@ authRoutes.post("/register", async (c) => {
   }
   const { phone, email, name, password, role } = parsed.data;
 
-  if (phone) {
-    const existing = await db.execute({
-      sql: "SELECT id FROM users WHERE phone = ?",
-      args: [phone],
-    });
-    if (existing.rows.length > 0) {
-      return c.json({ error: "phone_taken", message: "Phone already registered" }, 409);
-    }
+  const ipCheck = await ipLimited(c, "register");
+  if (!ipCheck.allowed) {
+    return tooManyRequests(c, ipCheck, "Too many sign-up attempts. Please wait a moment and try again.");
   }
-  if (email) {
-    const existingEmail = await db.execute({
-      sql: "SELECT id FROM users WHERE email = ?",
-      args: [email],
-    });
-    if (existingEmail.rows.length > 0) {
-      return c.json({ error: "email_taken", message: "Email already registered" }, 409);
-    }
+
+  // A "taken" answer tells whoever asked that this number or address has a
+  // Tuma account, which is why the rate limit above matters: the leak only
+  // pays off when you can test thousands of identifiers, and five a minute
+  // per address makes that pointless. The response deliberately doesn't say
+  // *which* field clashed. Closing the leak completely means not returning a
+  // session until the code is confirmed — a signup flow change, not just an
+  // API one.
+  const clash = await db.execute({
+    sql: "SELECT id FROM users WHERE (? IS NOT NULL AND phone = ?) OR (? IS NOT NULL AND email = ?)",
+    args: [phone ?? null, phone ?? null, email ?? null, email ?? null],
+  });
+  if (clash.rows.length > 0) {
+    return c.json(
+      { error: "account_exists", message: "An account already exists with these details. Try signing in instead." },
+      409,
+    );
   }
 
   const id = crypto.randomUUID();
@@ -116,27 +144,66 @@ authRoutes.post("/login", async (c) => {
   }
   const { identifier, password } = parsed.data;
 
+  void sweepExpired();
+
+  const ipCheck = await ipLimited(c, "login");
+  if (!ipCheck.allowed) {
+    return tooManyRequests(c, ipCheck, "Too many sign-in attempts. Please wait a moment and try again.");
+  }
+
+  // Locked out per account as well as per IP: the IP ceiling alone does
+  // nothing against an attacker spread across many addresses guessing one
+  // person's password, which is the case that actually loses an account.
+  const accountKey = `login:${await hashKey(identifier)}`;
+  const lock = await checkLockout(accountKey);
+  if (!lock.allowed) {
+    return tooManyRequests(c, lock, "Too many failed attempts for this account. Please try again shortly.");
+  }
+
   const result = await db.execute({
     sql: "SELECT * FROM users WHERE phone = ? OR email = ?",
     args: [identifier, identifier],
   });
   const row = result.rows[0] as unknown as (UserRow & Record<string, unknown>) | undefined;
   if (!row) {
+    // Still counted, so probing many passwords against an address that
+    // doesn't exist is no cheaper than probing one that does.
+    await recordFailure(accountKey);
     return c.json({ error: "invalid_credentials" }, 401);
   }
   const ok = await bcrypt.compare(password, row.password_hash);
   if (!ok) {
+    await recordFailure(accountKey);
     return c.json({ error: "invalid_credentials" }, 401);
   }
   if (row.status === "suspended") {
     return c.json({ error: "account_suspended", message: "This account has been suspended" }, 403);
   }
 
+  await clearFailures(accountKey);
   const token = await signToken({ sub: row.id, role: row.role, phone: row.phone });
   return c.json({
     token,
     user: toAuthUser(row),
   });
+});
+
+/**
+ * Sign out for real. Clearing the token client-side leaves it valid until it
+ * expires, so anyone who copied it keeps the session — recording the token's
+ * jti here is what actually ends it. Only this one token dies, so signing out
+ * on a borrowed laptop doesn't log you out on your phone.
+ */
+authRoutes.post("/logout", requireAuth, async (c) => {
+  const user = c.get("user");
+  if (user.jti) {
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO revoked_sessions (jti, user_id, expires_at)
+            VALUES (?, ?, datetime('now', ?))`,
+      args: [user.jti, user.sub, `+${TOKEN_TTL_SECONDS} seconds`],
+    });
+  }
+  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -160,6 +227,11 @@ authRoutes.post("/google", async (c) => {
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
   const { idToken, role } = parsed.data;
 
+  const ipCheck = await ipLimited(c, "login");
+  if (!ipCheck.allowed) {
+    return tooManyRequests(c, ipCheck, "Too many sign-in attempts. Please wait a moment and try again.");
+  }
+
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) return c.json({ error: "google_not_configured" }, 501);
 
@@ -174,7 +246,11 @@ authRoutes.post("/google", async (c) => {
     email = payload.email as string | undefined;
     name = payload.name as string | undefined;
   } catch (err) {
-    return c.json({ error: "invalid_google_token", message: String(err) }, 401);
+    // Whatever jose objected to (clock skew, wrong audience, a malformed
+    // key set) is useful to us and useful to an attacker mapping our setup.
+    // It goes to the log, not to the caller.
+    console.error("Google ID token rejected:", err);
+    return c.json({ error: "invalid_google_token", message: "Google sign-in failed. Please try again." }, 401);
   }
   if (!email) return c.json({ error: "google_email_missing" }, 400);
 
@@ -292,6 +368,11 @@ authRoutes.post("/password/reset/request", async (c) => {
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
   const { identifier } = parsed.data;
 
+  const ipCheck = await ipLimited(c, "reset");
+  if (!ipCheck.allowed) {
+    return tooManyRequests(c, ipCheck, "Too many reset requests. Please wait a moment and try again.");
+  }
+
   const result = await db.execute({
     sql: "SELECT id, phone, email FROM users WHERE phone = ? OR email = ?",
     args: [identifier, identifier],
@@ -355,7 +436,7 @@ authRoutes.post("/password/reset/confirm", async (c) => {
   if (otp.attempts >= RESET_MAX_ATTEMPTS) return c.json({ error: "too_many_attempts" }, 429);
 
   const codeHash = await hashCode(code);
-  if (codeHash !== otp.code_hash) {
+  if (!timingSafeEqual(codeHash, otp.code_hash)) {
     await db.execute({ sql: "UPDATE otp_codes SET attempts = attempts + 1 WHERE id = ?", args: [otp.id] });
     return c.json({ error: "invalid_code" }, 400);
   }
@@ -365,10 +446,17 @@ authRoutes.post("/password/reset/confirm", async (c) => {
     sql: "UPDATE otp_codes SET consumed_at = datetime('now') WHERE id = ?",
     args: [otp.id],
   });
+  // sessions_valid_from is the point of a reset: someone resetting because
+  // their account was taken needs the intruder's existing session to stop
+  // working, not just their next login attempt to fail. The token issued
+  // below shares this second, and requireAuth treats equal as still valid.
   await db.execute({
-    sql: "UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?",
+    sql: `UPDATE users SET password_hash = ?, sessions_valid_from = datetime('now'), updated_at = datetime('now')
+          WHERE id = ?`,
     args: [passwordHash, row.id],
   });
+  // A fresh password also means the old failed-attempt tally is meaningless.
+  await clearFailures(`login:${await hashKey(identifier)}`);
 
   if (row.status === "suspended") {
     return c.json({ error: "account_suspended", message: "This account has been suspended" }, 403);

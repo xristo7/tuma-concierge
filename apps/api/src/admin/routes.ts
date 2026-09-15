@@ -7,7 +7,13 @@ import { paymentsIntegrationStatus } from "../payments/service.js";
 import { getR2Bucket } from "../storage/r2.js";
 
 export const adminRoutes = new Hono();
-adminRoutes.use("*", requireAuth, requireRole("admin"));
+// Scoped to /admin/* rather than "*" on purpose. This router is mounted on
+// the shared /v1 prefix, so a "*" middleware here applies to every route
+// registered after it — which made mount order in app.ts load-bearing, and
+// a blanket admin gate landing on someone else's routes is a locked door
+// in the wrong doorway. Every route in this file lives under /admin, so
+// scoping the guard costs nothing and makes reordering harmless.
+adminRoutes.use("/admin/*", requireAuth, requireRole("admin"));
 
 type Row = Record<string, unknown>;
 
@@ -172,9 +178,18 @@ adminRoutes.post("/admin/users/:id/status", async (c) => {
     return c.json({ error: "cannot_manage_admin", message: "Admin accounts can't be suspended here" }, 400);
   }
 
+  // Suspending has to end sessions that already exist, not just block the
+  // next login — otherwise someone signed in on their phone keeps working
+  // normally for the rest of the token's life. requireAuth checks status on
+  // every request, and sessions_valid_from covers the reinstate-then-suspend
+  // case where an old token would otherwise come back to life.
   await db.execute({
-    sql: "UPDATE users SET status = ?, updated_at = datetime('now') WHERE id = ?",
-    args: [parsed.data.status, id],
+    sql: `UPDATE users
+          SET status = ?,
+              sessions_valid_from = CASE WHEN ? = 'suspended' THEN datetime('now') ELSE sessions_valid_from END,
+              updated_at = datetime('now')
+          WHERE id = ?`,
+    args: [parsed.data.status, parsed.data.status, id],
   });
   const res = await db.execute({
     sql: "SELECT id, name, phone, email, role, status FROM users WHERE id = ?",

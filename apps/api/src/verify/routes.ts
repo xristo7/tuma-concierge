@@ -4,7 +4,7 @@ import { db } from "../db/client.js";
 import { toAuthUser } from "../auth/serialize.js";
 import { requireAuth } from "../auth/middleware.js";
 import { createAndSendOtp, maskTarget } from "./service.js";
-import { hashCode } from "./otp.js";
+import { hashCode, timingSafeEqual } from "./otp.js";
 
 export const verifyRoutes = new Hono();
 verifyRoutes.use("*", requireAuth);
@@ -84,7 +84,7 @@ verifyRoutes.post("/verify/confirm", async (c) => {
   }
 
   const codeHash = await hashCode(code);
-  if (codeHash !== otp.code_hash) {
+  if (!timingSafeEqual(codeHash, otp.code_hash as string)) {
     await db.execute({
       sql: "UPDATE otp_codes SET attempts = attempts + 1 WHERE id = ?",
       args: [otp.id as string],

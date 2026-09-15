@@ -81,10 +81,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    // Order matters: this call reads the token out of local storage to
+    // authenticate itself, so it has to be started before the token is
+    // removed. Signing out doesn't wait on it or fail with it — the local
+    // session goes either way — but without it the token stays valid on the
+    // server for the rest of its life.
+    const revoked = api.logout().catch(() => undefined);
     window.localStorage.removeItem(TOKEN_KEY);
     window.localStorage.removeItem(USER_KEY);
     setUser(null);
     setRider(null);
+    void revoked;
   }, []);
 
   const updateUser = useCallback((nextUser: AuthUser) => {

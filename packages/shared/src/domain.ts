@@ -74,7 +74,34 @@ export type OrderRow = {
  * coordinates); `outOfServiceRange` flags a job worth warning the rider
  * (and, once claimed, the customer) may cost more than the normal rate.
  */
-export type AvailableJob = OrderRow & {
+export type AvailableJob = Pick<
+  OrderRow,
+  | "id"
+  | "type"
+  | "stage"
+  | "payment_rail"
+  | "currency"
+  | "estimated_total"
+  | "final_total"
+  | "pickup_area"
+  | "destination_area"
+  | "pickup_lat"
+  | "pickup_lng"
+  | "destination_lat"
+  | "destination_lng"
+  | "distance_km"
+  | "matched_out_of_range"
+  | "created_at"
+  | "updated_at"
+> & {
+  /**
+   * Deliberately narrower than a full OrderRow. This feed goes to every
+   * online rider, including all the ones who never take the job, so it
+   * withholds what only the rider who claims it needs: `customer_name` is
+   * the first name alone, street addresses are omitted entirely, and the
+   * coordinates are rounded to roughly 100m. The full record arrives from
+   * GET /v1/orders/:id once the job is claimed.
+   */
   customer_name: string | null;
   distanceKm: number | null;
   outOfServiceRange: boolean;
@@ -151,12 +178,13 @@ export type Rider = {
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   national_id_key: string | null;
+  profile_photo_key: string | null;
   profile_completed_at: string | null;
 };
 
 /** The fields a rider must fill in (incl. their motorcycle reg. via `vehicle_info`,
- * a National ID scan, and a stage location picked on the map) before they're
- * eligible for admin verification/approval to take jobs. */
+ * a National ID scan, a face photo, and a stage location picked on the map)
+ * before they're eligible for admin verification/approval to take jobs. */
 export function isRiderProfileComplete(rider: Rider | null | undefined): boolean {
   if (!rider) return false;
   return Boolean(
@@ -172,7 +200,8 @@ export function isRiderProfileComplete(rider: Rider | null | undefined): boolean
       rider.stage_chairman_contact &&
       rider.emergency_contact_name &&
       rider.emergency_contact_phone &&
-      rider.national_id_key,
+      rider.national_id_key &&
+      rider.profile_photo_key,
   );
 }
 
