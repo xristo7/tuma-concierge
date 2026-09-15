@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, Navigation, User, Wallet } from "lucide-react";
+import { Briefcase, MessageCircle, Navigation, User, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
@@ -8,6 +8,7 @@ import type { LucideIcon } from "lucide-react";
 const tabs: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Jobs", icon: Briefcase },
   { href: "/active", label: "Active", icon: Navigation },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/wallet", label: "Wallet", icon: Wallet },
   { href: "/account", label: "Account", icon: User },
 ];

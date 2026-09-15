@@ -490,13 +490,15 @@ export default function JobDetailPage() {
         </section>
       )}
 
-      <Link
-        href={`/jobs/${orderId}/chat`}
-        className="home-card flex items-center gap-2 !rounded-2xl !py-3 text-sm font-bold text-ink"
-      >
-        <MessageCircle className="h-4 w-4 text-gold" strokeWidth={2} aria-hidden />
-        Open full-screen chat
-      </Link>
+      {order.customer_id && (
+        <Link
+          href={`/chat/${order.customer_id}`}
+          className="home-card flex items-center gap-2 !rounded-2xl !py-3 text-sm font-bold text-ink"
+        >
+          <MessageCircle className="h-4 w-4 text-gold" strokeWidth={2} aria-hidden />
+          Open full-screen chat
+        </Link>
+      )}
       <OrderChat orderId={orderId} />
     </div>
   );

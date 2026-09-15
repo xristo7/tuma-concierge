@@ -8,7 +8,9 @@ import { BrandHeader } from "./BrandHeader";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname === "/login" || pathname === "/forgot-password" || pathname.startsWith("/verify");
-  const isFullScreenPage = pathname === "/chat";
+  // "/chat" itself is a normal list screen (conversations); a specific
+  // thread ("/chat/<counterpartId>") is the full-screen takeover.
+  const isFullScreenPage = pathname.startsWith("/chat/");
 
   return (
     <AuthGate>

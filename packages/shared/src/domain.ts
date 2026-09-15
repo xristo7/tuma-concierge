@@ -202,6 +202,23 @@ export type ChatMessage = {
   created_at: string;
 };
 
+/** One row in the Chat tab's conversation list — the other party in a customer/rider pair, and their last message. */
+export type ChatThread = {
+  counterpartId: string;
+  counterpartName: string;
+  counterpartHasPhoto: boolean;
+  lastMessagePreview: string;
+  lastMessageAt: string;
+};
+
+/** Opening a conversation by counterpart (not by a specific order) — the whole shared history, plus which order a new message attaches to. */
+export type ChatThreadDetail = {
+  orderId: string;
+  counterpartName: string;
+  counterpartHasPhoto: boolean;
+  messages: ChatMessage[];
+};
+
 export type Rider = {
   user_id: string;
   verified: number;

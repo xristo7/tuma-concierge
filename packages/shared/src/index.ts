@@ -44,4 +44,6 @@ export type {
   AvailableJob,
   MatchingMode,
   RiderApplicant,
+  ChatThread,
+  ChatThreadDetail,
 } from "./domain.js";

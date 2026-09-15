@@ -1458,6 +1458,13 @@ orderRoutes.post("/orders/:id/rate", async (c) => {
 // Chat
 // ---------------------------------------------------------------------------
 
+/**
+ * The full conversation with this order's rider, not just this one order's
+ * slice of it — a customer and rider who've shared several orders see one
+ * continued thread, the way the messaging in any app they'd recognize
+ * works. Falls back to just this order's own (likely empty) messages when
+ * there's no rider assigned yet to pair with.
+ */
 orderRoutes.get("/orders/:id/chat", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
@@ -1466,10 +1473,15 @@ orderRoutes.get("/orders/:id/chat", async (c) => {
   if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
     return c.json({ error: "forbidden" }, 403);
   }
-  const res = await db.execute({
-    sql: "SELECT * FROM chat_messages WHERE order_id = ? ORDER BY created_at ASC",
-    args: [id],
-  });
+  const res = order.rider_id
+    ? await db.execute({
+        sql: "SELECT * FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at ASC",
+        args: [order.customer_id as string, order.rider_id as string],
+      })
+    : await db.execute({
+        sql: "SELECT * FROM chat_messages WHERE order_id = ? ORDER BY created_at ASC",
+        args: [id],
+      });
   return c.json({ messages: res.rows });
 });
 
@@ -1511,8 +1523,9 @@ orderRoutes.post("/orders/:id/chat", async (c) => {
     await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
 
     await db.execute({
-      sql: "INSERT INTO chat_messages (id, order_id, sender_id, sender_role, body, type, media_key) VALUES (?, ?, ?, ?, '', ?, ?)",
-      args: [messageId, id, user.sub, user.role, type, key],
+      sql: `INSERT INTO chat_messages (id, order_id, sender_id, sender_role, body, type, media_key, customer_id, rider_id)
+            VALUES (?, ?, ?, ?, '', ?, ?, ?, ?)`,
+      args: [messageId, id, user.sub, user.role, type, key, order.customer_id as string, order.rider_id as string | null],
     });
     return c.json({ id: messageId }, 201);
   }
@@ -1522,28 +1535,34 @@ orderRoutes.post("/orders/:id/chat", async (c) => {
 
   const messageId = newId("msg");
   await db.execute({
-    sql: "INSERT INTO chat_messages (id, order_id, sender_id, sender_role, body, type) VALUES (?, ?, ?, ?, ?, 'text')",
-    args: [messageId, id, user.sub, user.role, parsed.data.body],
+    sql: `INSERT INTO chat_messages (id, order_id, sender_id, sender_role, body, type, customer_id, rider_id)
+          VALUES (?, ?, ?, ?, ?, 'text', ?, ?)`,
+    args: [messageId, id, user.sub, user.role, parsed.data.body, order.customer_id as string, order.rider_id as string | null],
   });
   return c.json({ id: messageId }, 201);
 });
 
-/** Streams a chat photo or voice note from R2 — same access rule as the chat thread itself. */
-orderRoutes.get("/orders/:id/chat/:messageId/media", async (c) => {
-  const id = c.req.param("id");
+/**
+ * Streams a chat photo or voice note from R2. Not scoped to a particular
+ * order in the URL — a message shown in a thread view may belong to an
+ * older order than whichever one's currently open (see GET /orders/:id/chat
+ * above) — so access is checked against the message's own denormalized
+ * customer_id/rider_id instead.
+ */
+orderRoutes.get("/chat/media/:messageId", async (c) => {
   const messageId = c.req.param("messageId") as string;
   const user = c.get("user");
-  const order = await getOrder(id);
-  if (!order) return c.json({ error: "not_found" }, 404);
-  if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
-    return c.json({ error: "forbidden" }, 403);
-  }
 
   const res = await db.execute({
-    sql: "SELECT media_key FROM chat_messages WHERE id = ? AND order_id = ?",
-    args: [messageId, id],
+    sql: "SELECT media_key, customer_id, rider_id FROM chat_messages WHERE id = ?",
+    args: [messageId],
   });
-  const key = res.rows[0]?.media_key as string | null | undefined;
+  const row = res.rows[0] as Row | undefined;
+  if (!row) return c.json({ error: "not_found" }, 404);
+  if (row.customer_id !== user.sub && row.rider_id !== user.sub && user.role !== "admin") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+  const key = row.media_key as string | null;
   if (!key) return c.json({ error: "not_found" }, 404);
 
   const bucket = getR2Bucket();
@@ -1552,5 +1571,104 @@ orderRoutes.get("/orders/:id/chat/:messageId/media", async (c) => {
 
   return new Response(object.body, {
     headers: { "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream" },
+  });
+});
+
+function chatPreview(type: unknown, body: unknown): string {
+  if (type === "image") return "📷 Photo";
+  if (type === "voice") return "🎤 Voice message";
+  return (body as string | null) ?? "";
+}
+
+/** Every counterpart this user has ever exchanged chat messages with, most recent first — powers the Chat tab's conversation list. */
+orderRoutes.get("/chat/threads", async (c) => {
+  const user = c.get("user");
+  const isCustomer = user.role === "customer";
+
+  const res = await db.execute(
+    isCustomer
+      ? {
+          sql: `SELECT r.user_id as counterpart_id, u.name as counterpart_name, r.profile_photo_key,
+                       MAX(cm.created_at) as last_at
+                FROM chat_messages cm
+                JOIN riders r ON r.user_id = cm.rider_id
+                JOIN users u ON u.id = r.user_id
+                WHERE cm.customer_id = ?
+                GROUP BY r.user_id
+                ORDER BY last_at DESC`,
+          args: [user.sub],
+        }
+      : {
+          sql: `SELECT cm.customer_id as counterpart_id, u.name as counterpart_name, NULL as profile_photo_key,
+                       MAX(cm.created_at) as last_at
+                FROM chat_messages cm
+                JOIN users u ON u.id = cm.customer_id
+                WHERE cm.rider_id = ?
+                GROUP BY cm.customer_id
+                ORDER BY last_at DESC`,
+          args: [user.sub],
+        },
+  );
+
+  const threads = await Promise.all(
+    (res.rows as Row[]).map(async (row) => {
+      const counterpartId = row.counterpart_id as string;
+      const lastRes = await db.execute({
+        sql: isCustomer
+          ? "SELECT type, body FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at DESC LIMIT 1"
+          : "SELECT type, body FROM chat_messages WHERE rider_id = ? AND customer_id = ? ORDER BY created_at DESC LIMIT 1",
+        args: [user.sub, counterpartId],
+      });
+      const last = lastRes.rows[0] as Row | undefined;
+      return {
+        counterpartId,
+        counterpartName: row.counterpart_name as string,
+        counterpartHasPhoto: !!row.profile_photo_key,
+        lastMessagePreview: chatPreview(last?.type, last?.body),
+        lastMessageAt: row.last_at as string,
+      };
+    }),
+  );
+
+  return c.json({ threads });
+});
+
+/**
+ * Opens a conversation by counterpart rather than by order — resolves the
+ * most recent order shared with them (where any new message gets attached)
+ * plus their display info and the full cross-order message history.
+ */
+orderRoutes.get("/chat/threads/:counterpartId", async (c) => {
+  const counterpartId = c.req.param("counterpartId") as string;
+  const user = c.get("user");
+  const isCustomer = user.role === "customer";
+  const customerId = isCustomer ? user.sub : counterpartId;
+  const riderId = isCustomer ? counterpartId : user.sub;
+
+  const orderRes = await db.execute({
+    sql: "SELECT id FROM orders WHERE customer_id = ? AND rider_id = ? ORDER BY updated_at DESC LIMIT 1",
+    args: [customerId, riderId],
+  });
+  const orderId = orderRes.rows[0]?.id as string | undefined;
+  if (!orderId) return c.json({ error: "not_found" }, 404);
+
+  const counterpartRes = await db.execute(
+    isCustomer
+      ? { sql: "SELECT u.name, r.profile_photo_key FROM users u LEFT JOIN riders r ON r.user_id = u.id WHERE u.id = ?", args: [counterpartId] }
+      : { sql: "SELECT name FROM users WHERE id = ?", args: [counterpartId] },
+  );
+  const counterpart = counterpartRes.rows[0] as Row | undefined;
+  if (!counterpart) return c.json({ error: "not_found" }, 404);
+
+  const messages = await db.execute({
+    sql: "SELECT * FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at ASC",
+    args: [customerId, riderId],
+  });
+
+  return c.json({
+    orderId,
+    counterpartName: counterpart.name,
+    counterpartHasPhoto: isCustomer ? !!counterpart.profile_photo_key : false,
+    messages: messages.rows,
   });
 });

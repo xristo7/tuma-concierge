@@ -6,6 +6,8 @@ import type {
   AuthUser,
   AvailableJob,
   ChatMessage,
+  ChatThread,
+  ChatThreadDetail,
   CreateListBody,
   CreateListResponse,
   DeliverySettings,
@@ -342,10 +344,18 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       return json<{ id: string }>(res);
     },
     /** Fetches a chat message's photo/voice note as a Blob (not JSON — raw fetch). */
-    async chatMediaBlob(orderId: string, messageId: string): Promise<Blob> {
-      const res = await f(`${root}/v1/orders/${orderId}/chat/${messageId}/media`, { headers: authHeaders() });
+    async chatMediaBlob(messageId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/chat/media/${messageId}`, { headers: authHeaders() });
       if (!res.ok) throw new Error(`API ${res.status}: failed to load chat media`);
       return res.blob();
+    },
+    /** The Chat tab's conversation list — every counterpart this user has ever messaged, most recent first. */
+    async getChatThreads() {
+      return request<{ threads: ChatThread[] }>("/v1/chat/threads");
+    },
+    /** Opens a conversation by counterpart — resolves the order to send through plus the full shared history. */
+    async getChatThread(counterpartId: string) {
+      return request<ChatThreadDetail>(`/v1/chat/threads/${counterpartId}`);
     },
 
     // Payments

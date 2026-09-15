@@ -18,14 +18,14 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-function ImageBubble({ orderId, messageId, dark }: { orderId: string; messageId: string; dark: boolean }) {
+function ImageBubble({ messageId, dark }: { messageId: string; dark: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let objectUrl: string | null = null;
     api
-      .chatMediaBlob(orderId, messageId)
+      .chatMediaBlob(messageId)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
@@ -36,7 +36,7 @@ function ImageBubble({ orderId, messageId, dark }: { orderId: string; messageId:
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [orderId, messageId]);
+  }, [messageId]);
 
   if (!url) return <div className={`h-40 w-48 animate-pulse rounded-2xl ${dark ? "bg-white/10" : "bg-black/5"}`} />;
   // eslint-disable-next-line @next/next/no-img-element
@@ -44,12 +44,10 @@ function ImageBubble({ orderId, messageId, dark }: { orderId: string; messageId:
 }
 
 function VoiceBubble({
-  orderId,
   messageId,
   mine,
   dark,
 }: {
-  orderId: string;
   messageId: string;
   mine: boolean;
   dark: boolean;
@@ -78,7 +76,7 @@ function VoiceBubble({
     }
     setStatus("loading");
     try {
-      const blob = await api.chatMediaBlob(orderId, messageId);
+      const blob = await api.chatMediaBlob(messageId);
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
       const audio = new Audio(url);
@@ -247,8 +245,8 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
                   mine ? "rounded-[20px] rounded-br-md bg-gold text-ink" : `rounded-[20px] rounded-bl-md ${incomingBubble}`
                 }`}
               >
-                {m.type === "image" && <ImageBubble orderId={orderId} messageId={m.id} dark={dark} />}
-                {m.type === "voice" && <VoiceBubble orderId={orderId} messageId={m.id} mine={mine} dark={dark} />}
+                {m.type === "image" && <ImageBubble messageId={m.id} dark={dark} />}
+                {m.type === "voice" && <VoiceBubble messageId={m.id} mine={mine} dark={dark} />}
                 {m.type === "text" && m.body}
               </div>
               <span className={`mt-1 px-1 text-[10px] ${timeText}`}>{formatTime(m.created_at)}</span>
