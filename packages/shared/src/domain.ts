@@ -55,6 +55,7 @@ export type OrderRow = {
   customer_id: string;
   customer_name: string | null;
   rider_id: string | null;
+  rider_name: string | null;
   stage: string;
   type: OrderType;
   payment_rail: "escrow" | "float" | null;

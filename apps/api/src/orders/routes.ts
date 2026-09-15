@@ -35,8 +35,9 @@ async function logEvent(orderId: string, stage: string, note: string, actorId: s
 
 async function getOrder(orderId: string): Promise<Row | undefined> {
   const res = await db.execute({
-    sql: `SELECT o.*, u.name as customer_name FROM orders o
-          LEFT JOIN users u ON u.id = o.customer_id
+    sql: `SELECT o.*, c.name as customer_name, r.name as rider_name FROM orders o
+          LEFT JOIN users c ON c.id = o.customer_id
+          LEFT JOIN users r ON r.id = o.rider_id
           WHERE o.id = ?`,
     args: [orderId],
   });

@@ -2,7 +2,7 @@
 
 import type { MobileMoneyNetwork, OrderDetail, OrderRating } from "@tuma/shared";
 import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel } from "@tuma/shared";
-import { MapPin, TriangleAlert } from "lucide-react";
+import { MapPin, MessageCircle, TriangleAlert, User } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
@@ -10,7 +10,72 @@ import { OrderTimeline } from "../../../components/OrderTimeline";
 import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { api, errorMessage } from "../../../lib/api";
-import { formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
+import { formatDateTime, formatDuration, formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
+
+/** Photo + name of the rider handling this order, and (once settled) when it was delivered and how long it took. */
+function RiderSummaryCard({
+  riderId,
+  riderName,
+  settled,
+  createdAt,
+  settledAt,
+}: {
+  riderId: string;
+  riderName: string | null;
+  settled: boolean;
+  createdAt: string;
+  settledAt: string;
+}) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    api
+      .riderPhotoBlob(riderId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPhotoUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [riderId]);
+
+  return (
+    <section className="home-card flex items-center gap-3">
+      {photoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photoUrl} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" />
+      ) : (
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+          <User className="h-6 w-6" strokeWidth={1.75} aria-hidden />
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[15px] font-bold text-ink">{riderName ?? "Your rider"}</span>
+        {settled ? (
+          <span className="block text-xs text-ink-500">
+            Delivered {formatDateTime(settledAt)} · Took {formatDuration(createdAt, settledAt)}
+          </span>
+        ) : (
+          <span className="block text-xs text-ink-500">Your rider</span>
+        )}
+      </span>
+      <button
+        type="button"
+        onClick={() => document.getElementById("order-chat")?.scrollIntoView({ behavior: "smooth" })}
+        className="flex shrink-0 items-center gap-1.5 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink"
+      >
+        <MessageCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        Chat
+      </button>
+    </section>
+  );
+}
 
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
@@ -159,6 +224,16 @@ export default function OrderDetailPage() {
       </header>
 
       <OrderTimeline order={order} events={detail.events} statusLabel={stageLabel(order.stage, order.type)} />
+
+      {order.rider_id && (
+        <RiderSummaryCard
+          riderId={order.rider_id}
+          riderName={order.rider_name}
+          settled={order.stage === "Settle"}
+          createdAt={order.created_at}
+          settledAt={order.updated_at}
+        />
+      )}
 
       {order.voice_note_key && <VoiceNotePlayer orderId={orderId} />}
 
@@ -395,7 +470,9 @@ export default function OrderDetailPage() {
       </section>
       )}
 
-      <OrderChat orderId={orderId} />
+      <div id="order-chat">
+        <OrderChat orderId={orderId} />
+      </div>
     </div>
   );
 }
