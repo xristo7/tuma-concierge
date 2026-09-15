@@ -10,8 +10,11 @@ async function fullSettings() {
   return { ...delivery, ...matching };
 }
 
-/** Public — the customer app needs the current rate/range (to show a live estimate) and which
- * matching modes are on offer (to build the preference picker). None of this is sensitive. */
+/** Any signed-in user: the customer app needs the current rate/range (to show
+ * a live estimate) and which matching modes are on offer (to build the
+ * preference picker). None of it is sensitive, but it isn't reachable while
+ * signed out either — orderRoutes registers requireAuth as "*" on the shared
+ * /v1 router, which covers everything mounted after it, this included. */
 settingsRoutes.get("/settings", async (c) => {
   return c.json({ settings: await fullSettings() });
 });
