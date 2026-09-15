@@ -45,13 +45,14 @@ function coarse(value: unknown): number | null {
  */
 export function toOpenJob(
   order: Row,
-  extras: { distanceKm: number | null; outOfServiceRange: boolean },
+  extras: { distanceKm: number | null; outOfServiceRange: boolean; applied: boolean },
 ): Row {
   const fullName = (order.customer_name as string | null)?.trim();
   return {
     id: order.id,
     type: order.type,
     stage: order.stage,
+    matching_mode: order.matching_mode,
     payment_rail: order.payment_rail,
     currency: order.currency,
     estimated_total: order.estimated_total,

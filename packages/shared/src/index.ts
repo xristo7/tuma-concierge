@@ -4,7 +4,7 @@ export { PaymentRail } from "./payment-rail.js";
 export type { PaymentRail as PaymentRailValue } from "./payment-rail.js";
 export { createApiClient } from "./api-client.js";
 export type { CreateApiClientOptions, ApiClient } from "./api-client.js";
-export { isRiderProfileComplete, isUserVerified } from "./domain.js";
+export { isRiderProfileComplete, isUserVerified, MATCHING_MODE_LABELS, MATCHING_MODE_DESCRIPTIONS } from "./domain.js";
 export {
   detectMobileMoneyNetwork,
   mobileMoneyNetworkLabel,
@@ -42,4 +42,6 @@ export type {
   Wallet,
   WalletWithdrawal,
   AvailableJob,
+  MatchingMode,
+  RiderApplicant,
 } from "./domain.js";

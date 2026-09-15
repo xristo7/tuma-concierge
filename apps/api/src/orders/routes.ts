@@ -5,10 +5,10 @@ import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
-import { getDeliverySettings, getMaxOrderValue } from "../lib/settings.js";
-import { currentVisibilityRadiusKm, orderMatchPoint } from "./matching.js";
+import { getDeliverySettings, getMatchingSettings, getMaxOrderValue } from "../lib/settings.js";
+import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
 import { redactOrder } from "./visibility.js";
-import type { MobileMoneyNetwork } from "@tuma/shared";
+import type { MatchingMode, MobileMoneyNetwork } from "@tuma/shared";
 import {
   activeProvider,
   initiateCollection,
@@ -283,14 +283,33 @@ orderRoutes.post("/orders", async (c) => {
     }
   }
 
+  // Which matching mode governs this order: the customer's own standing
+  // preference, if admin currently allows it — otherwise whichever mode
+  // admin put first. Stamped once at creation so it can't shift mid-flight
+  // if either setting changes later. nearest_window gets a short collection
+  // window; customer_selects gets a longer safety-net deadline so the order
+  // still resolves even if the customer never picks (see ./matching.js and
+  // the /orders/:id/match auto-resolve logic).
+  const { enabledModes, nearestWindowSeconds, maxAssignmentMinutes } = await getMatchingSettings();
+  const userRow = await db.execute({ sql: "SELECT default_matching_mode FROM users WHERE id = ?", args: [user.sub] });
+  const preferredMode = userRow.rows[0]?.default_matching_mode as MatchingMode | null | undefined;
+  const matchingMode: MatchingMode = preferredMode && enabledModes.includes(preferredMode) ? preferredMode : enabledModes[0];
+  const matchingDeadlineAt =
+    matchingMode === "nearest_window"
+      ? new Date(Date.now() + nearestWindowSeconds * 1000).toISOString()
+      : matchingMode === "customer_selects"
+        ? new Date(Date.now() + maxAssignmentMinutes * 60 * 1000).toISOString()
+        : null;
+
   const orderId = newId("ord");
   await db.execute({
     sql: `INSERT INTO orders (
             id, list_id, customer_id, stage, type, payment_rail, estimated_total,
             pickup_area, pickup_address, pickup_lat, pickup_lng,
-            destination_area, destination_address, destination_lat, destination_lng, distance_km
+            destination_area, destination_address, destination_lat, destination_lng, distance_km,
+            matching_mode, matching_deadline_at
           )
-          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       orderId,
       d.listId,
@@ -307,6 +326,8 @@ orderRoutes.post("/orders", async (c) => {
       d.destinationLat ?? null,
       d.destinationLng ?? null,
       distanceKm,
+      matchingMode,
+      matchingDeadlineAt,
     ],
   });
   await db.execute({
@@ -344,7 +365,7 @@ orderRoutes.get("/orders/:id", async (c) => {
     db.execute({ sql: "SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
     db.execute({ sql: "SELECT * FROM substitutions WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
     db.execute({ sql: "SELECT * FROM payments WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
-    db.execute({ sql: "SELECT rating, comment FROM order_ratings WHERE order_id = ?", args: [id] }),
+    db.execute({ sql: "SELECT rating, comment, recommended FROM order_ratings WHERE order_id = ?", args: [id] }),
     db.execute({ sql: "SELECT * FROM fee_proposals WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
   ]);
 
@@ -418,44 +439,84 @@ orderRoutes.get("/orders/:id/voice-note", async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Matching preference — a customer's standing choice of how riders get
+// assigned to their orders (see ../lib/settings.js for the admin-side
+// enable/disable and MatchingMode in @tuma/shared for the three modes).
+// Only takes effect for whichever modes admin currently has enabled; a
+// preference for a mode that's since been disabled falls back silently to
+// admin's first enabled mode at order-creation time.
+// ---------------------------------------------------------------------------
+
+const matchingPreferenceSchema = z.object({
+  defaultMatchingMode: z.enum(["first_to_claim", "nearest_window", "customer_selects"]).nullable(),
+});
+
+orderRoutes.put("/me/matching-preference", async (c) => {
+  const user = c.get("user");
+  const parsed = matchingPreferenceSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  await db.execute({
+    sql: "UPDATE users SET default_matching_mode = ?, updated_at = datetime('now') WHERE id = ?",
+    args: [parsed.data.defaultMatchingMode, user.sub],
+  });
+
+  return c.json({ defaultMatchingMode: parsed.data.defaultMatchingMode });
+});
+
+// ---------------------------------------------------------------------------
 // Match
 // ---------------------------------------------------------------------------
 
-orderRoutes.post("/orders/:id/match", async (c) => {
-  const id = c.req.param("id");
-  const user = c.get("user");
-  const order = await getOrder(id);
-  if (!order) return c.json({ error: "not_found" }, 404);
-  try {
-    assertCustomer(order, user.sub);
-  } catch (e) {
-    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
-    throw e;
-  }
-  // Normally an unmatched order is in "Create". A funded order whose rider
-  // cancelled is left in "Match" with rider_id cleared instead of being
-  // rewound to "Create" — that would re-expose the funding step even though
-  // the customer already paid — so it's matchable again too.
-  const canMatch = order.stage === "Create" || (order.stage === "Match" && !order.rider_id);
-  if (!canMatch) {
-    return c.json({ error: "invalid_stage", message: `Cannot match from stage ${order.stage}` }, 409);
-  }
+/**
+ * Assigns a rider atomically (conditional UPDATE — loses the race harmlessly
+ * if someone else got there first) and logs it. Shared by every path that
+ * can end in an assignment: the first_to_claim auto-poll and claim button,
+ * the nearest_window auto-resolve, and the customer_selects pick.
+ */
+async function assignRider(
+  id: string,
+  order: Row,
+  riderId: string,
+  riderName: string,
+  outOfRange: boolean,
+): Promise<boolean> {
+  const nextStage = order.payment_rail === "float" ? "Shop" : "Match";
+  const result = await db.execute({
+    sql: `UPDATE orders SET rider_id = ?, stage = ?, matched_out_of_range = ?, updated_at = datetime('now')
+          WHERE id = ? AND rider_id IS NULL AND stage IN ('Create', 'Match')`,
+    args: [riderId, nextStage, outOfRange ? 1 : 0, id],
+  });
+  if (result.rowsAffected === 0) return false;
 
-  // Staged radius broadcast, same as the rider-facing job list: riders
-  // within 1km get first crack, then 2km, then 3km, then (once every tier
-  // has had its turn) any verified + online rider regardless of distance —
-  // so a lone rider far from a lone customer still eventually gets offered
-  // the job instead of it silently sitting invisible forever. This auto-poll
-  // is just a backstop for a rider who hasn't actively claimed it yet; it
-  // must never jump ahead of a nearer rider's turn, so it uses the exact
-  // same tier window as ../riders/routes.ts's available-jobs list.
+  await logEvent(
+    id,
+    "Match",
+    outOfRange ? `Matched with rider ${riderName} (out of normal range)` : `Matched with rider ${riderName}`,
+    riderId,
+  );
+  if (order.payment_rail === "float") {
+    await logEvent(id, "Fund", "Cash rail — rider fronting funds, no payment needed upfront", riderId);
+  }
+  return true;
+}
+
+/**
+ * Finds the best rider to auto-assign right now, exactly the way the
+ * original single-mode matcher did: nearest rider within the currently-open
+ * staged-radius tier, falling back (once every tier's had its turn) to a
+ * same-area match or any available rider. Used as first_to_claim's auto-poll
+ * backstop, and as the nearest_window / customer_selects safety net once
+ * their deadline passes with no (or no usable) applicants.
+ */
+async function findAutoMatchCandidate(
+  id: string,
+  order: Row,
+): Promise<{ riderId: string; riderName: string; outOfRange: boolean } | null> {
   const { serviceRangeKm } = await getDeliverySettings();
   const matchPoint = orderMatchPoint(order);
   const visibleRadiusKm = currentVisibilityRadiusKm(order.updated_at as string);
   const fullyOpen = visibleRadiusKm == null;
-
-  let candidate: Row | undefined;
-  let outOfRange = false;
 
   const eligible = await db.execute({
     sql: `SELECT u.id, u.name, r.stage_lat, r.stage_lng, r.area FROM riders r JOIN users u ON u.id = r.user_id
@@ -480,51 +541,111 @@ orderRoutes.post("/orders/:id/match", async (c) => {
   }
 
   if (nearestKnown) {
-    candidate = nearestKnown.row;
-    outOfRange = nearestKnown.distanceKm > serviceRangeKm;
-  } else if (fullyOpen || !matchPoint) {
-    // No one within any tier has usable coordinates (or the order itself
-    // has none to stage by) — fall back to a same-named-area match (still
-    // counts as in range), then to any available rider at all. Only once
-    // fully open, so a coarse area/any-rider grab can never preempt a
-    // geo-known nearer rider mid-rollout.
+    return { riderId: nearestKnown.row.id as string, riderName: nearestKnown.row.name as string, outOfRange: nearestKnown.distanceKm > serviceRangeKm };
+  }
+  if (fullyOpen || !matchPoint) {
     const area = order.destination_area as string | null;
-    candidate = area ? unknownLocation.find((row) => row.area === area) : undefined;
-    if (!candidate) {
-      candidate = unknownLocation[0];
-      if (candidate) outOfRange = true;
+    const candidate = (area ? unknownLocation.find((row) => row.area === area) : undefined) ?? unknownLocation[0];
+    if (candidate) {
+      return { riderId: candidate.id as string, riderName: candidate.name as string, outOfRange: !area || candidate.area !== area };
+    }
+  }
+  return null;
+}
+
+orderRoutes.post("/orders/:id/match", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  // Normally an unmatched order is in "Create". A funded order whose rider
+  // cancelled is left in "Match" with rider_id cleared instead of being
+  // rewound to "Create" — that would re-expose the funding step even though
+  // the customer already paid — so it's matchable again too.
+  const canMatch = order.stage === "Create" || (order.stage === "Match" && !order.rider_id);
+  if (!canMatch) {
+    return c.json({ error: "invalid_stage", message: `Cannot match from stage ${order.stage}` }, 409);
+  }
+
+  const mode = order.matching_mode as MatchingMode;
+
+  if (mode === "customer_selects") {
+    // The customer picks (see /orders/:id/applicants) — this poll only ever
+    // acts as the safety net once the order's max-assignment deadline (set
+    // at creation) has passed with nobody chosen yet.
+    const deadline = order.matching_deadline_at as string | null;
+    if (!deadline || Date.now() < parseDbTimestamp(deadline).getTime()) {
+      return c.json({ order });
     }
   }
 
-  if (!candidate) {
+  if (mode === "nearest_window") {
+    const deadline = order.matching_deadline_at as string | null;
+    if (deadline && Date.now() < parseDbTimestamp(deadline).getTime()) {
+      return c.json({ order }); // still collecting applicants
+    }
+    // Window's up — assign whoever applied nearest so far.
+    const applicants = await db.execute({
+      sql: `SELECT oa.rider_id, u.name, oa.distance_km FROM order_applications oa
+            JOIN users u ON u.id = oa.rider_id
+            WHERE oa.order_id = ? AND oa.status = 'pending' ORDER BY oa.distance_km ASC LIMIT 1`,
+      args: [id],
+    });
+    const best = applicants.rows[0] as Row | undefined;
+    if (best) {
+      const { serviceRangeKm } = await getDeliverySettings();
+      const distanceKm = best.distance_km as number | null;
+      const outOfRange = distanceKm != null && distanceKm > serviceRangeKm;
+      const bestRiderId = best.rider_id as string;
+      const assigned = await assignRider(id, order, bestRiderId, best.name as string, outOfRange);
+      if (assigned) {
+        await db.execute({
+          sql: "UPDATE order_applications SET status = 'selected' WHERE order_id = ? AND rider_id = ?",
+          args: [id, bestRiderId],
+        });
+        await db.execute({
+          sql: "UPDATE order_applications SET status = 'declined' WHERE order_id = ? AND rider_id != ? AND status = 'pending'",
+          args: [id, bestRiderId],
+        });
+      }
+      return c.json({ order: await getOrder(id) });
+    }
+    // Nobody's applied yet — extend the window rather than falling back
+    // immediately, unless the overall SLA ceiling has now been reached.
+    const { maxAssignmentMinutes, nearestWindowSeconds } = await getMatchingSettings();
+    const ceilingReached =
+      Date.now() - parseDbTimestamp(order.created_at as string).getTime() > maxAssignmentMinutes * 60 * 1000;
+    if (!ceilingReached) {
+      await touchOrder(id, { matching_deadline_at: new Date(Date.now() + nearestWindowSeconds * 1000).toISOString() });
+      return c.json({ order: await getOrder(id) });
+    }
+    // Ceiling reached with zero applicants — fall through to the general
+    // auto-match fallback below rather than leaving the customer stuck.
+  }
+
+  // first_to_claim's own auto-poll backstop, and the fallback for
+  // nearest_window/customer_selects once their safety net is reached.
+  const found = await findAutoMatchCandidate(id, order);
+  if (!found) {
     return c.json({ error: "no_riders_available", message: "No verified riders online right now" }, 409);
   }
-
-  // Cash orders have nothing for the customer to fund — the rider fronts
-  // the money themselves — so there's no reason to leave the order sitting
-  // in "Match" waiting on anyone. Skip straight to Shop. Escrow orders still
-  // need the customer to actually pay in, so they stop at "Match" as before.
-  const nextStage = order.payment_rail === "float" ? "Shop" : "Match";
-  await touchOrder(id, { rider_id: candidate.id, stage: nextStage, matched_out_of_range: outOfRange ? 1 : 0 });
-  await logEvent(
-    id,
-    "Match",
-    outOfRange ? `Matched with rider ${candidate.name} (out of normal range)` : `Matched with rider ${candidate.name}`,
-    user.sub,
-  );
-  if (order.payment_rail === "float") {
-    await logEvent(id, "Fund", "Cash rail — rider fronting funds, no payment needed upfront", user.sub);
-  }
-
+  await assignRider(id, order, found.riderId, found.riderName, found.outOfRange);
   return c.json({ order: await getOrder(id) });
 });
 
 /**
- * A rider actively taking an unmatched job from their available-jobs list
- * (see GET /riders/jobs/available) — the primary way orders get assigned
- * now, with the auto-match poll above as a backstop for one nobody's
- * claimed yet. Same staged-radius rule applies here so a rider can't jump
- * the queue by hitting this directly before it's their tier's turn.
+ * A rider actively taking an unmatched "first_to_claim" job from their
+ * available-jobs list (see GET /riders/jobs/available) — the primary way
+ * those orders get assigned, with the auto-match poll above as a backstop
+ * for one nobody's claimed yet. Same staged-radius rule applies here so a
+ * rider can't jump the queue by hitting this directly before it's their
+ * tier's turn. Orders in another matching mode use /apply instead.
  */
 orderRoutes.post("/orders/:id/claim", requireRole("rider"), async (c) => {
   const id = c.req.param("id") as string;
@@ -537,6 +658,9 @@ orderRoutes.post("/orders/:id/claim", requireRole("rider"), async (c) => {
   const canClaim = order.stage === "Create" || (order.stage === "Match" && !order.rider_id);
   if (!canClaim) {
     return c.json({ error: "invalid_stage", message: `Cannot claim from stage ${order.stage}` }, 409);
+  }
+  if (order.matching_mode !== "first_to_claim") {
+    return c.json({ error: "wrong_mode", message: "This order takes applications instead — use /apply" }, 409);
   }
 
   const excluded = await db.execute({
@@ -576,25 +700,175 @@ orderRoutes.post("/orders/:id/claim", requireRole("rider"), async (c) => {
   }
   const outOfRange = distanceKm != null && distanceKm > serviceRangeKm;
 
-  const nextStage = order.payment_rail === "float" ? "Shop" : "Match";
-  const result = await db.execute({
-    sql: `UPDATE orders SET rider_id = ?, stage = ?, matched_out_of_range = ?, updated_at = datetime('now')
-          WHERE id = ? AND rider_id IS NULL AND stage IN ('Create', 'Match')`,
-    args: [user.sub, nextStage, outOfRange ? 1 : 0, id],
-  });
-  if (result.rowsAffected === 0) {
+  const assigned = await assignRider(id, order, user.sub, rider.name as string, outOfRange);
+  if (!assigned) {
     return c.json({ error: "already_claimed", message: "Another rider already took this job" }, 409);
   }
 
-  await logEvent(
-    id,
-    "Match",
-    outOfRange ? `Matched with rider ${rider.name} (out of normal range)` : `Matched with rider ${rider.name}`,
-    user.sub,
-  );
-  if (order.payment_rail === "float") {
-    await logEvent(id, "Fund", "Cash rail — rider fronting funds, no payment needed upfront", user.sub);
+  return c.json({ order: await getOrder(id) });
+});
+
+/**
+ * A rider offering to take a "nearest_window" or "customer_selects" job —
+ * unlike /claim, this doesn't assign the order outright. It just enters the
+ * rider into the running: nearest_window auto-picks the closest applicant
+ * once its collection window closes (see /orders/:id/match above),
+ * customer_selects waits for the customer to pick (see /applicants below).
+ */
+orderRoutes.post("/orders/:id/apply", requireRole("rider"), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  if (order.rider_id) {
+    return c.json({ error: "already_claimed", message: "This job has already been taken" }, 409);
   }
+  const canApply = order.stage === "Create" || (order.stage === "Match" && !order.rider_id);
+  if (!canApply) {
+    return c.json({ error: "invalid_stage", message: `Cannot apply from stage ${order.stage}` }, 409);
+  }
+  if (order.matching_mode === "first_to_claim") {
+    return c.json({ error: "wrong_mode", message: "This order is first-come-first-served — use /claim" }, 409);
+  }
+
+  const excluded = await db.execute({
+    sql: "SELECT 1 FROM order_rider_exclusions WHERE order_id = ? AND rider_id = ?",
+    args: [id, user.sub],
+  });
+  if (excluded.rows.length > 0) {
+    return c.json({ error: "not_eligible", message: "You previously declined this order" }, 403);
+  }
+
+  const riderRes = await db.execute({
+    sql: "SELECT verified, is_online, stage_lat, stage_lng FROM riders WHERE user_id = ?",
+    args: [user.sub],
+  });
+  const rider = riderRes.rows[0] as Row | undefined;
+  if (!rider?.verified) return c.json({ error: "not_verified" }, 403);
+  if (!rider.is_online) return c.json({ error: "not_online", message: "Go online to apply for jobs" }, 409);
+
+  const matchPoint = orderMatchPoint(order);
+  const riderLat = rider.stage_lat as number | null;
+  const riderLng = rider.stage_lng as number | null;
+  const distanceKm =
+    matchPoint && riderLat != null && riderLng != null
+      ? haversineKm(matchPoint.lat, matchPoint.lng, riderLat, riderLng)
+      : null;
+
+  if (distanceKm != null) {
+    const visibleRadiusKm = currentVisibilityRadiusKm(order.updated_at as string);
+    if (visibleRadiusKm != null && distanceKm > visibleRadiusKm) {
+      return c.json(
+        { error: "not_yet_visible", message: "This order isn't open to your area yet — try again shortly" },
+        409,
+      );
+    }
+  }
+
+  await db.execute({
+    sql: `INSERT INTO order_applications (id, order_id, rider_id, distance_km, status)
+          VALUES (?, ?, ?, ?, 'pending')
+          ON CONFLICT(order_id, rider_id) DO UPDATE SET distance_km = excluded.distance_km`,
+    args: [newId("app"), id, user.sub, distanceKm],
+  });
+
+  return c.json({ ok: true });
+});
+
+/** The applicant pool for a "customer_selects" order — enough of each rider's track record to compare. */
+orderRoutes.get("/orders/:id/applicants", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+
+  const { serviceRangeKm } = await getDeliverySettings();
+  const applications = await db.execute({
+    sql: `SELECT oa.rider_id, u.name, oa.distance_km FROM order_applications oa
+          JOIN users u ON u.id = oa.rider_id
+          WHERE oa.order_id = ? AND oa.status = 'pending' ORDER BY oa.distance_km ASC`,
+    args: [id],
+  });
+
+  const applicants = await Promise.all(
+    (applications.rows as Row[]).map(async (row) => {
+      const riderId = row.rider_id as string;
+      const [stats, comments] = await Promise.all([
+        db.execute({
+          sql: `SELECT AVG(orr.rating) as avg_rating, COUNT(*) as review_count, SUM(orr.recommended) as recommend_count
+                FROM order_ratings orr JOIN orders o ON o.id = orr.order_id WHERE o.rider_id = ?`,
+          args: [riderId],
+        }),
+        db.execute({
+          sql: `SELECT orr.comment FROM order_ratings orr JOIN orders o ON o.id = orr.order_id
+                WHERE o.rider_id = ? AND orr.comment IS NOT NULL ORDER BY orr.created_at DESC LIMIT 3`,
+          args: [riderId],
+        }),
+      ]);
+      const statsRow = stats.rows[0] as Row | undefined;
+      const distanceKm = row.distance_km as number | null;
+      return {
+        riderId,
+        riderName: row.name as string,
+        distanceKm,
+        outOfServiceRange: distanceKm != null && distanceKm > serviceRangeKm,
+        avgRating: statsRow?.avg_rating != null ? Math.round((statsRow.avg_rating as number) * 10) / 10 : null,
+        reviewCount: Number(statsRow?.review_count ?? 0),
+        recommendCount: Number(statsRow?.recommend_count ?? 0),
+        recentComments: (comments.rows as Row[]).map((r) => r.comment as string),
+      };
+    }),
+  );
+
+  return c.json({ applicants });
+});
+
+/** The customer's pick, for a "customer_selects" order — assigns that rider and turns away the rest. */
+orderRoutes.post("/orders/:id/applicants/:riderId/select", async (c) => {
+  const id = c.req.param("id");
+  const riderId = c.req.param("riderId") as string;
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  if (order.rider_id) {
+    return c.json({ error: "already_claimed", message: "This order already has a rider" }, 409);
+  }
+
+  const application = await db.execute({
+    sql: "SELECT oa.distance_km, u.name FROM order_applications oa JOIN users u ON u.id = oa.rider_id WHERE oa.order_id = ? AND oa.rider_id = ? AND oa.status = 'pending'",
+    args: [id, riderId],
+  });
+  const row = application.rows[0] as Row | undefined;
+  if (!row) return c.json({ error: "not_found", message: "That rider hasn't applied for this order" }, 404);
+
+  const { serviceRangeKm } = await getDeliverySettings();
+  const distanceKm = row.distance_km as number | null;
+  const outOfRange = distanceKm != null && distanceKm > serviceRangeKm;
+
+  const assigned = await assignRider(id, order, riderId, row.name as string, outOfRange);
+  if (!assigned) {
+    return c.json({ error: "already_claimed", message: "This order already has a rider" }, 409);
+  }
+  await db.execute({
+    sql: "UPDATE order_applications SET status = 'selected' WHERE order_id = ? AND rider_id = ?",
+    args: [id, riderId],
+  });
+  await db.execute({
+    sql: "UPDATE order_applications SET status = 'declined' WHERE order_id = ? AND rider_id != ? AND status = 'pending'",
+    args: [id, riderId],
+  });
 
   return c.json({ order: await getOrder(id) });
 });
@@ -1126,6 +1400,7 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
 const rateSchema = z.object({
   rating: z.number().int().min(1).max(5),
   comment: z.string().max(500).optional(),
+  recommended: z.boolean().optional().default(false),
 });
 
 orderRoutes.post("/orders/:id/rate", async (c) => {
@@ -1155,15 +1430,28 @@ orderRoutes.post("/orders/:id/rate", async (c) => {
   }
 
   await db.execute({
-    sql: `INSERT INTO order_ratings (id, order_id, customer_id, rider_id, rating, comment) VALUES (?, ?, ?, ?, ?, ?)`,
-    args: [newId("rat"), id, user.sub, order.rider_id as string, parsed.data.rating, parsed.data.comment ?? null],
+    sql: `INSERT INTO order_ratings (id, order_id, customer_id, rider_id, rating, comment, recommended) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      newId("rat"),
+      id,
+      user.sub,
+      order.rider_id as string,
+      parsed.data.rating,
+      parsed.data.comment ?? null,
+      parsed.data.recommended ? 1 : 0,
+    ],
   });
   await db.execute({
     sql: `UPDATE riders SET rating = (SELECT AVG(rating) FROM order_ratings WHERE rider_id = ?), updated_at = datetime('now') WHERE user_id = ?`,
     args: [order.rider_id as string, order.rider_id as string],
   });
 
-  return c.json({ ok: true, rating: parsed.data.rating, comment: parsed.data.comment ?? null });
+  return c.json({
+    ok: true,
+    rating: parsed.data.rating,
+    comment: parsed.data.comment ?? null,
+    recommended: parsed.data.recommended,
+  });
 });
 
 // ---------------------------------------------------------------------------

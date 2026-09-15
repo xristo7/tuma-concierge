@@ -56,6 +56,7 @@ export type OrderRow = {
   customer_name: string | null;
   rider_id: string | null;
   rider_name: string | null;
+  matching_mode: MatchingMode;
   stage: string;
   type: OrderType;
   payment_rail: "escrow" | "float" | null;
@@ -93,6 +94,7 @@ export type AvailableJob = Pick<
   | "id"
   | "type"
   | "stage"
+  | "matching_mode"
   | "payment_rail"
   | "currency"
   | "estimated_total"
@@ -119,12 +121,39 @@ export type AvailableJob = Pick<
   customer_name: string | null;
   distanceKm: number | null;
   outOfServiceRange: boolean;
+  /** Set once this rider has already applied — only meaningful for "nearest_window"/"customer_selects"
+   * jobs, where applying doesn't assign the job outright (unlike "first_to_claim"'s Claim button). */
+  applied: boolean;
+};
+
+/**
+ * How a rider gets assigned to an order — admin picks which of these are on
+ * offer at all (packages/shared/src/domain.ts: DeliverySettings.matchingModesEnabled),
+ * and when more than one is enabled, the customer's own default preference
+ * (see AuthUser-adjacent account settings) decides which applies to their
+ * orders. See apps/api/src/orders/matching.ts for the full behavior.
+ */
+export type MatchingMode = "first_to_claim" | "nearest_window" | "customer_selects";
+
+export const MATCHING_MODE_LABELS: Record<MatchingMode, string> = {
+  first_to_claim: "First rider to accept",
+  nearest_window: "Nearest available",
+  customer_selects: "Let me choose",
+};
+
+export const MATCHING_MODE_DESCRIPTIONS: Record<MatchingMode, string> = {
+  first_to_claim: "Whichever rider taps \"Claim\" first gets your order — usually the fastest option.",
+  nearest_window: "The app collects nearby riders for a short window, then auto-assigns whoever's closest.",
+  customer_selects: "See who's offered to take your order — their ratings, reviews, and recommendations — and pick one yourself.",
 };
 
 /** Admin-tunable delivery pricing/matching numbers (packages/shared/src/api-client.ts: getSettings/adminUpdateSettings). */
 export type DeliverySettings = {
   deliveryRatePerKm: number;
   serviceRangeKm: number;
+  enabledModes: MatchingMode[];
+  nearestWindowSeconds: number;
+  maxAssignmentMinutes: number;
 };
 
 export type OrderEvent = {
@@ -250,6 +279,7 @@ export type AuthUser = {
   status: UserStatus;
   phoneVerifiedAt: string | null;
   emailVerifiedAt: string | null;
+  defaultMatchingMode: MatchingMode | null;
 };
 
 /** True once either phone or email has been confirmed via OTP — the two
@@ -299,6 +329,20 @@ export type AdminOrderRow = OrderRow & { rider_name: string | null };
 export type OrderRating = {
   rating: number;
   comment: string | null;
+  recommended: boolean;
+};
+
+/** A rider who's offered to take a "customer_selects" order, with enough of their track record
+ * (see order_ratings) for the customer to actually compare candidates before picking one. */
+export type RiderApplicant = {
+  riderId: string;
+  riderName: string;
+  distanceKm: number | null;
+  outOfServiceRange: boolean;
+  avgRating: number | null;
+  reviewCount: number;
+  recommendCount: number;
+  recentComments: string[];
 };
 
 /** A rider-suggested total (e.g. after an out-of-range match) awaiting the customer's accept/reject. */

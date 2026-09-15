@@ -275,14 +275,21 @@ riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), asy
   const riderLat = rider.stage_lat as number | null;
   const riderLng = rider.stage_lng as number | null;
 
-  const res = await db.execute({
-    sql: `SELECT o.*, u.name as customer_name FROM orders o
-          LEFT JOIN users u ON u.id = o.customer_id
-          WHERE o.rider_id IS NULL AND o.stage IN ('Create', 'Match')
-          AND o.id NOT IN (SELECT order_id FROM order_rider_exclusions WHERE rider_id = ?)
-          ORDER BY o.created_at ASC`,
-    args: [user.sub],
-  });
+  const [res, appliedRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT o.*, u.name as customer_name FROM orders o
+            LEFT JOIN users u ON u.id = o.customer_id
+            WHERE o.rider_id IS NULL AND o.stage IN ('Create', 'Match')
+            AND o.id NOT IN (SELECT order_id FROM order_rider_exclusions WHERE rider_id = ?)
+            ORDER BY o.created_at ASC`,
+      args: [user.sub],
+    }),
+    db.execute({
+      sql: "SELECT order_id FROM order_applications WHERE rider_id = ? AND status = 'pending'",
+      args: [user.sub],
+    }),
+  ]);
+  const appliedOrderIds = new Set((appliedRes.rows as Row[]).map((r) => r.order_id as string));
 
   const jobs = (res.rows as Row[])
     .map((order) => {
@@ -297,6 +304,7 @@ riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), asy
         job: toOpenJob(order, {
           distanceKm: distanceKm != null ? Math.round(distanceKm * 10) / 10 : null,
           outOfServiceRange: distanceKm != null && distanceKm > serviceRangeKm,
+          applied: appliedOrderIds.has(order.id as string),
         }),
         sortKey: distanceKm ?? Infinity,
         visible,

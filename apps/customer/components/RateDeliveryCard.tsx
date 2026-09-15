@@ -1,7 +1,7 @@
 "use client";
 
 import type { OrderRating } from "@tuma/shared";
-import { Star } from "lucide-react";
+import { Star, ThumbsUp } from "lucide-react";
 import { useState } from "react";
 import { api, errorMessage } from "../lib/api";
 
@@ -17,6 +17,7 @@ export function RateDeliveryCard({
   const [stars, setStars] = useState(0);
   const [hoverStars, setHoverStars] = useState(0);
   const [comment, setComment] = useState("");
+  const [recommended, setRecommended] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +37,12 @@ export function RateDeliveryCard({
           <span className="ml-1 text-xs text-ink-500">You rated this delivery</span>
         </div>
         {rating.comment && <p className="text-xs italic text-ink-500">&ldquo;{rating.comment}&rdquo;</p>}
+        {rating.recommended && (
+          <p className="flex items-center gap-1 text-xs font-semibold text-green">
+            <ThumbsUp className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            You recommended this rider
+          </p>
+        )}
       </div>
     );
   }
@@ -45,8 +52,8 @@ export function RateDeliveryCard({
     setBusy(true);
     setError(null);
     try {
-      const res = await api.rateOrder(orderId, { rating: stars, comment: comment.trim() || undefined });
-      onRated({ rating: res.rating, comment: res.comment });
+      const res = await api.rateOrder(orderId, { rating: stars, comment: comment.trim() || undefined, recommended });
+      onRated({ rating: res.rating, comment: res.comment, recommended: res.recommended });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -83,6 +90,18 @@ export function RateDeliveryCard({
           placeholder="Add a comment (optional)"
           className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
         />
+        <button
+          type="button"
+          onClick={() => setRecommended((v) => !v)}
+          className={`flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${
+            recommended
+              ? "border-green bg-green/10 text-green"
+              : "border-[var(--border-faint)] text-ink-500"
+          }`}
+        >
+          <ThumbsUp className={`h-4 w-4 ${recommended ? "fill-green" : ""}`} strokeWidth={2} aria-hidden />
+          {recommended ? "Recommended" : "Recommend this rider"}
+        </button>
         {error && <p className="text-xs text-red-600">{error}</p>}
         <button
           type="button"

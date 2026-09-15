@@ -13,11 +13,13 @@ import type {
   IntegrationsStatus,
   ListDetail,
   ListSummary,
+  MatchingMode,
   OrderDetail,
   OrderRow,
   OrderType,
   Payment,
   Rider,
+  RiderApplicant,
   SavedLocation,
   UserStatus,
   Wallet,
@@ -222,6 +224,18 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async claimOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/claim`, { method: "POST" });
     },
+    /** Rider offers for a "nearest_window"/"customer_selects" job — doesn't assign it outright, see claimOrder. */
+    async applyForOrder(orderId: string) {
+      return request<{ ok: true }>(`/v1/orders/${orderId}/apply`, { method: "POST" });
+    },
+    /** The applicant pool for a "customer_selects" order, for the customer to compare and pick from. */
+    async getApplicants(orderId: string) {
+      return request<{ applicants: RiderApplicant[] }>(`/v1/orders/${orderId}/applicants`);
+    },
+    /** Customer's pick from the applicant pool — assigns that rider and turns away the rest. */
+    async selectApplicant(orderId: string, riderId: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/applicants/${riderId}/select`, { method: "POST" });
+    },
     /** Rider backs out of a job they were matched to — it drops back into the matching pool for another rider. */
     async cancelOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/cancel`, { method: "POST" });
@@ -291,10 +305,17 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async settleOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/settle`, { method: "POST" });
     },
-    async rateOrder(orderId: string, input: { rating: number; comment?: string }) {
-      return request<{ ok: true; rating: number; comment: string | null }>(`/v1/orders/${orderId}/rate`, {
-        method: "POST",
-        body: JSON.stringify(input),
+    async rateOrder(orderId: string, input: { rating: number; comment?: string; recommended?: boolean }) {
+      return request<{ ok: true; rating: number; comment: string | null; recommended: boolean }>(
+        `/v1/orders/${orderId}/rate`,
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    /** The customer's standing preference for how riders get assigned to their orders — null defers to admin's default. */
+    async updateMatchingPreference(defaultMatchingMode: MatchingMode | null) {
+      return request<{ defaultMatchingMode: MatchingMode | null }>("/v1/me/matching-preference", {
+        method: "PUT",
+        body: JSON.stringify({ defaultMatchingMode }),
       });
     },
 
