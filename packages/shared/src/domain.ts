@@ -197,6 +197,8 @@ export type ChatMessage = {
   sender_id: string;
   sender_role: "customer" | "rider" | "admin";
   body: string;
+  type: "text" | "image" | "voice";
+  media_key: string | null;
   created_at: string;
 };
 

@@ -14,7 +14,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <AuthGate>
       {!isAuthPage && !isFullScreenPage && <BrandHeader />}
       <main className={isFullScreenPage ? "" : "mx-auto min-h-dvh max-w-lg pb-20"}>{children}</main>
-      {!isAuthPage && <BottomNav />}
+      {!isAuthPage && !isFullScreenPage && <BottomNav />}
     </AuthGate>
   );
 }

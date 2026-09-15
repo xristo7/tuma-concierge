@@ -1474,7 +1474,15 @@ orderRoutes.get("/orders/:id/chat", async (c) => {
 });
 
 const chatSchema = z.object({ body: z.string().min(1).max(2000) });
+const MAX_CHAT_IMAGE_BYTES = 6 * 1024 * 1024;
+const ALLOWED_CHAT_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
+/**
+ * Text messages arrive as JSON; a photo or voice note arrives as multipart
+ * form data instead (field `type`: "image" | "voice", field `file`) —
+ * chosen by content-type so both share this one endpoint the way
+ * apps/customer/components/OrderChat.tsx already expects.
+ */
 orderRoutes.post("/orders/:id/chat", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
@@ -1483,13 +1491,66 @@ orderRoutes.post("/orders/:id/chat", async (c) => {
   if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
     return c.json({ error: "forbidden" }, 403);
   }
+
+  if ((c.req.header("content-type") ?? "").includes("multipart/form-data")) {
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get("file");
+    const type = form?.get("type");
+    if (!(file instanceof File) || (type !== "image" && type !== "voice")) {
+      return c.json({ error: "invalid_body" }, 400);
+    }
+    const allowed = type === "image" ? ALLOWED_CHAT_IMAGE_MIME : ALLOWED_VOICE_NOTE_MIME;
+    const maxBytes = type === "image" ? MAX_CHAT_IMAGE_BYTES : MAX_VOICE_NOTE_BYTES;
+    if (!allowed.has(file.type)) return c.json({ error: "unsupported_file_type" }, 400);
+    if (file.size > maxBytes) return c.json({ error: "file_too_large" }, 400);
+
+    const messageId = newId("msg");
+    const ext = file.type.split("/")[1] ?? (type === "image" ? "jpg" : "webm");
+    const key = `orders/${id}/chat/${messageId}.${ext}`;
+    const bucket = getR2Bucket();
+    await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+
+    await db.execute({
+      sql: "INSERT INTO chat_messages (id, order_id, sender_id, sender_role, body, type, media_key) VALUES (?, ?, ?, ?, '', ?, ?)",
+      args: [messageId, id, user.sub, user.role, type, key],
+    });
+    return c.json({ id: messageId }, 201);
+  }
+
   const parsed = chatSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
   const messageId = newId("msg");
   await db.execute({
-    sql: "INSERT INTO chat_messages (id, order_id, sender_id, sender_role, body) VALUES (?, ?, ?, ?, ?)",
+    sql: "INSERT INTO chat_messages (id, order_id, sender_id, sender_role, body, type) VALUES (?, ?, ?, ?, ?, 'text')",
     args: [messageId, id, user.sub, user.role, parsed.data.body],
   });
   return c.json({ id: messageId }, 201);
+});
+
+/** Streams a chat photo or voice note from R2 — same access rule as the chat thread itself. */
+orderRoutes.get("/orders/:id/chat/:messageId/media", async (c) => {
+  const id = c.req.param("id");
+  const messageId = c.req.param("messageId") as string;
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const res = await db.execute({
+    sql: "SELECT media_key FROM chat_messages WHERE id = ? AND order_id = ?",
+    args: [messageId, id],
+  });
+  const key = res.rows[0]?.media_key as string | null | undefined;
+  if (!key) return c.json({ error: "not_found" }, 404);
+
+  const bucket = getR2Bucket();
+  const object = await bucket.get(key);
+  if (!object) return c.json({ error: "not_found" }, 404);
+
+  return new Response(object.body, {
+    headers: { "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream" },
+  });
 });

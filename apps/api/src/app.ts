@@ -107,6 +107,7 @@ app.get("/v1", (c) =>
       "POST /v1/orders/:id/rate",
       "GET /v1/orders/:id/chat",
       "POST /v1/orders/:id/chat",
+      "GET /v1/orders/:id/chat/:messageId/media",
       "GET /v1/payments/:id/refresh",
       "POST /v1/payments/yo/callback",
       "POST /v1/riders/apply",

@@ -1,7 +1,8 @@
 "use client";
 
 import type { OrderDetail } from "@tuma/shared";
-import { MapPin, Pencil, X } from "lucide-react";
+import { MapPin, MessageCircle, Pencil, X } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
@@ -489,6 +490,13 @@ export default function JobDetailPage() {
         </section>
       )}
 
+      <Link
+        href={`/jobs/${orderId}/chat`}
+        className="home-card flex items-center gap-2 !rounded-2xl !py-3 text-sm font-bold text-ink"
+      >
+        <MessageCircle className="h-4 w-4 text-gold" strokeWidth={2} aria-hidden />
+        Open full-screen chat
+      </Link>
       <OrderChat orderId={orderId} />
     </div>
   );

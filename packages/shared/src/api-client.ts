@@ -329,6 +329,24 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         body: JSON.stringify({ body }),
       });
     },
+    /** Sends a photo or voice note as a chat message. `file` is a browser File/Blob. */
+    async sendChatMedia(orderId: string, type: "image" | "voice", file: Blob) {
+      const form = new FormData();
+      form.append("type", type);
+      form.append("file", file, type === "image" ? "photo.jpg" : "voice.webm");
+      const res = await f(`${root}/v1/orders/${orderId}/chat`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ id: string }>(res);
+    },
+    /** Fetches a chat message's photo/voice note as a Blob (not JSON — raw fetch). */
+    async chatMediaBlob(orderId: string, messageId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/orders/${orderId}/chat/${messageId}/media`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load chat media`);
+      return res.blob();
+    },
 
     // Payments
     async refreshPayment(paymentId: string) {
