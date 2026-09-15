@@ -4,6 +4,7 @@ import type {
   AdminRider,
   AdminStats,
   AuthUser,
+  AvailableJob,
   ChatMessage,
   CreateListBody,
   CreateListResponse,
@@ -196,6 +197,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     async matchOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/match`, { method: "POST" });
     },
+    /** Rider actively takes an unmatched job from their available-jobs list. */
+    async claimOrder(orderId: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/claim`, { method: "POST" });
+    },
     /** Rider backs out of a job they were matched to — it drops back into the matching pool for another rider. */
     async cancelOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/cancel`, { method: "POST" });
@@ -328,6 +333,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken }: CreateApiClien
     },
     async myRiderOrders() {
       return request<{ orders: OrderRow[] }>("/v1/riders/me/orders");
+    },
+    /** Unmatched orders currently open to this rider — nearest riders see each one first, then it widens. */
+    async availableJobs() {
+      return request<{ jobs: AvailableJob[] }>("/v1/riders/jobs/available");
     },
     async myWallet() {
       return request<Wallet>("/v1/riders/me/wallet");

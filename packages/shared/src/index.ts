@@ -41,4 +41,5 @@ export type {
   CreateListResponse,
   Wallet,
   WalletWithdrawal,
+  AvailableJob,
 } from "./domain.js";

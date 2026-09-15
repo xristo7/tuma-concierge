@@ -3,7 +3,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
+import { haversineKm } from "../lib/geo.js";
 import { newId } from "../lib/ids.js";
+import { getDeliverySettings } from "../lib/settings.js";
+import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { activeProvider, checkPaymentStatus, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
 import { getR2Bucket } from "../storage/r2.js";
 
@@ -174,6 +177,59 @@ riderRoutes.get("/riders/me/orders", requireAuth, requireRole("rider"), async (c
     args: [user.sub],
   });
   return c.json({ orders: res.rows });
+});
+
+/**
+ * Unmatched orders open to this rider right now — every order eventually
+ * shows up for every verified/online rider, but the staged radius broadcast
+ * (see ../orders/matching.js) means the nearest riders see each one first:
+ * 1km, then 2km, then 3km, then everyone regardless of distance. A rider
+ * has to be online to see anything here, same as for auto-matching.
+ */
+riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), async (c) => {
+  const user = c.get("user");
+  const riderRes = await db.execute({
+    sql: "SELECT verified, is_online, stage_lat, stage_lng FROM riders WHERE user_id = ?",
+    args: [user.sub],
+  });
+  const rider = riderRes.rows[0] as Row | undefined;
+  if (!rider?.verified || !rider.is_online) {
+    return c.json({ jobs: [] });
+  }
+
+  const { serviceRangeKm } = await getDeliverySettings();
+  const riderLat = rider.stage_lat as number | null;
+  const riderLng = rider.stage_lng as number | null;
+
+  const res = await db.execute({
+    sql: `SELECT o.*, u.name as customer_name FROM orders o
+          LEFT JOIN users u ON u.id = o.customer_id
+          WHERE o.rider_id IS NULL AND o.stage IN ('Create', 'Match')
+          AND o.id NOT IN (SELECT order_id FROM order_rider_exclusions WHERE rider_id = ?)
+          ORDER BY o.created_at ASC`,
+    args: [user.sub],
+  });
+
+  const jobs = (res.rows as Row[])
+    .map((order) => {
+      const matchPoint = orderMatchPoint(order);
+      const distanceKm =
+        matchPoint && riderLat != null && riderLng != null
+          ? haversineKm(matchPoint.lat, matchPoint.lng, riderLat, riderLng)
+          : null;
+      const visibleRadiusKm = currentVisibilityRadiusKm(order.updated_at as string);
+      const visible = distanceKm == null || visibleRadiusKm == null || distanceKm <= visibleRadiusKm;
+      return {
+        ...order,
+        distanceKm: distanceKm != null ? Math.round(distanceKm * 10) / 10 : null,
+        outOfServiceRange: distanceKm != null && distanceKm > serviceRangeKm,
+        visible,
+      };
+    })
+    .filter((job) => job.visible)
+    .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+
+  return c.json({ jobs: jobs.map(({ visible: _visible, ...job }) => job) });
 });
 
 // ---------------------------------------------------------------------------

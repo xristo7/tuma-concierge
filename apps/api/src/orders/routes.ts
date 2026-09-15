@@ -2,10 +2,11 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { InArgs } from "@libsql/client";
 import { db } from "../db/client.js";
-import { requireAuth } from "../auth/middleware.js";
+import { requireAuth, requireRole } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
 import { getDeliverySettings } from "../lib/settings.js";
+import { currentVisibilityRadiusKm, orderMatchPoint } from "./matching.js";
 import type { MobileMoneyNetwork } from "@tuma/shared";
 import {
   activeProvider,
@@ -349,67 +350,59 @@ orderRoutes.post("/orders/:id/match", async (c) => {
     return c.json({ error: "invalid_stage", message: `Cannot match from stage ${order.stage}` }, 409);
   }
 
-  // Nearest-available matching: among verified + online + unassigned riders
-  // who have a stage location, pick the closest to where this ride starts
-  // (pickup point for a parcel, destination for a shopping run, since
-  // there's no separate pickup point for those). If that rider is beyond
-  // the normal service range — or no rider has location data at all — we
-  // still match them rather than leave the customer with nobody, but flag
-  // it so the customer can be told the ride may cost a bit more than usual.
+  // Staged radius broadcast, same as the rider-facing job list: riders
+  // within 1km get first crack, then 2km, then 3km, then (once every tier
+  // has had its turn) any verified + online rider regardless of distance —
+  // so a lone rider far from a lone customer still eventually gets offered
+  // the job instead of it silently sitting invisible forever. This auto-poll
+  // is just a backstop for a rider who hasn't actively claimed it yet; it
+  // must never jump ahead of a nearer rider's turn, so it uses the exact
+  // same tier window as ../riders/routes.ts's available-jobs list.
   const { serviceRangeKm } = await getDeliverySettings();
-  const matchLat = (order.type === "parcel" ? order.pickup_lat : order.destination_lat) as number | null;
-  const matchLng = (order.type === "parcel" ? order.pickup_lng : order.destination_lng) as number | null;
+  const matchPoint = orderMatchPoint(order);
+  const visibleRadiusKm = currentVisibilityRadiusKm(order.updated_at as string);
+  const fullyOpen = visibleRadiusKm == null;
 
   let candidate: Row | undefined;
   let outOfRange = false;
 
-  if (matchLat != null && matchLng != null) {
-    const geoRiders = await db.execute({
-      sql: `SELECT u.id, u.name, r.stage_lat, r.stage_lng FROM riders r JOIN users u ON u.id = r.user_id
-            WHERE r.verified = 1 AND r.is_online = 1 AND r.stage_lat IS NOT NULL AND r.stage_lng IS NOT NULL
-            AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
-            AND u.id NOT IN (SELECT rider_id FROM order_rider_exclusions WHERE order_id = ?)`,
-      args: [id],
-    });
-    let nearest: { row: Row; distanceKm: number } | null = null;
-    for (const row of geoRiders.rows as Row[]) {
-      const distanceKm = haversineKm(matchLat, matchLng, row.stage_lat as number, row.stage_lng as number);
-      if (!nearest || distanceKm < nearest.distanceKm) nearest = { row, distanceKm };
-    }
-    if (nearest) {
-      candidate = nearest.row;
-      outOfRange = nearest.distanceKm > serviceRangeKm;
+  const eligible = await db.execute({
+    sql: `SELECT u.id, u.name, r.stage_lat, r.stage_lng, r.area FROM riders r JOIN users u ON u.id = r.user_id
+          WHERE r.verified = 1 AND r.is_online = 1
+          AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
+          AND u.id NOT IN (SELECT rider_id FROM order_rider_exclusions WHERE order_id = ?)`,
+    args: [id],
+  });
+
+  let nearestKnown: { row: Row; distanceKm: number } | null = null;
+  const unknownLocation: Row[] = [];
+  for (const row of eligible.rows as Row[]) {
+    const riderLat = row.stage_lat as number | null;
+    const riderLng = row.stage_lng as number | null;
+    if (matchPoint && riderLat != null && riderLng != null) {
+      const distanceKm = haversineKm(matchPoint.lat, matchPoint.lng, riderLat, riderLng);
+      if (!fullyOpen && distanceKm > (visibleRadiusKm as number)) continue; // not their turn yet
+      if (!nearestKnown || distanceKm < nearestKnown.distanceKm) nearestKnown = { row, distanceKm };
+    } else {
+      unknownLocation.push(row);
     }
   }
 
-  // No rider with usable coordinates nearby — fall back to a same-named-area
-  // match (still counts as "in range"), then to any available rider at all.
-  if (!candidate) {
+  if (nearestKnown) {
+    candidate = nearestKnown.row;
+    outOfRange = nearestKnown.distanceKm > serviceRangeKm;
+  } else if (fullyOpen || !matchPoint) {
+    // No one within any tier has usable coordinates (or the order itself
+    // has none to stage by) — fall back to a same-named-area match (still
+    // counts as in range), then to any available rider at all. Only once
+    // fully open, so a coarse area/any-rider grab can never preempt a
+    // geo-known nearer rider mid-rollout.
     const area = order.destination_area as string | null;
-    const byArea = area
-      ? await db.execute({
-          sql: `SELECT u.id, u.name FROM riders r JOIN users u ON u.id = r.user_id
-                WHERE r.verified = 1 AND r.is_online = 1 AND r.area = ?
-                AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
-                AND u.id NOT IN (SELECT rider_id FROM order_rider_exclusions WHERE order_id = ?)
-                LIMIT 1`,
-          args: [area, id],
-        })
-      : { rows: [] as Row[] };
-    candidate = byArea.rows[0] as Row | undefined;
-  }
-
-  if (!candidate) {
-    const any = await db.execute({
-      sql: `SELECT u.id, u.name FROM riders r JOIN users u ON u.id = r.user_id
-            WHERE r.verified = 1 AND r.is_online = 1
-            AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
-            AND u.id NOT IN (SELECT rider_id FROM order_rider_exclusions WHERE order_id = ?)
-            LIMIT 1`,
-      args: [id],
-    });
-    candidate = any.rows[0] as Row | undefined;
-    if (candidate) outOfRange = true;
+    candidate = area ? unknownLocation.find((row) => row.area === area) : undefined;
+    if (!candidate) {
+      candidate = unknownLocation[0];
+      if (candidate) outOfRange = true;
+    }
   }
 
   if (!candidate) {
@@ -426,6 +419,86 @@ orderRoutes.post("/orders/:id/match", async (c) => {
     id,
     "Match",
     outOfRange ? `Matched with rider ${candidate.name} (out of normal range)` : `Matched with rider ${candidate.name}`,
+    user.sub,
+  );
+  if (order.payment_rail === "float") {
+    await logEvent(id, "Fund", "Cash rail — rider fronting funds, no payment needed upfront", user.sub);
+  }
+
+  return c.json({ order: await getOrder(id) });
+});
+
+/**
+ * A rider actively taking an unmatched job from their available-jobs list
+ * (see GET /riders/jobs/available) — the primary way orders get assigned
+ * now, with the auto-match poll above as a backstop for one nobody's
+ * claimed yet. Same staged-radius rule applies here so a rider can't jump
+ * the queue by hitting this directly before it's their tier's turn.
+ */
+orderRoutes.post("/orders/:id/claim", requireRole("rider"), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  if (order.rider_id) {
+    return c.json({ error: "already_claimed", message: "Another rider already took this job" }, 409);
+  }
+  const canClaim = order.stage === "Create" || (order.stage === "Match" && !order.rider_id);
+  if (!canClaim) {
+    return c.json({ error: "invalid_stage", message: `Cannot claim from stage ${order.stage}` }, 409);
+  }
+
+  const excluded = await db.execute({
+    sql: "SELECT 1 FROM order_rider_exclusions WHERE order_id = ? AND rider_id = ?",
+    args: [id, user.sub],
+  });
+  if (excluded.rows.length > 0) {
+    return c.json({ error: "not_eligible", message: "You previously declined this order" }, 403);
+  }
+
+  const riderRes = await db.execute({
+    sql: `SELECT r.verified, r.is_online, r.stage_lat, r.stage_lng, u.name FROM riders r
+          JOIN users u ON u.id = r.user_id WHERE r.user_id = ?`,
+    args: [user.sub],
+  });
+  const rider = riderRes.rows[0] as Row | undefined;
+  if (!rider?.verified) return c.json({ error: "not_verified" }, 403);
+  if (!rider.is_online) return c.json({ error: "not_online", message: "Go online to claim jobs" }, 409);
+
+  const { serviceRangeKm } = await getDeliverySettings();
+  const matchPoint = orderMatchPoint(order);
+  const riderLat = rider.stage_lat as number | null;
+  const riderLng = rider.stage_lng as number | null;
+  const distanceKm =
+    matchPoint && riderLat != null && riderLng != null
+      ? haversineKm(matchPoint.lat, matchPoint.lng, riderLat, riderLng)
+      : null;
+
+  if (distanceKm != null) {
+    const visibleRadiusKm = currentVisibilityRadiusKm(order.updated_at as string);
+    if (visibleRadiusKm != null && distanceKm > visibleRadiusKm) {
+      return c.json(
+        { error: "not_yet_visible", message: "This order isn't open to your area yet — try again shortly" },
+        409,
+      );
+    }
+  }
+  const outOfRange = distanceKm != null && distanceKm > serviceRangeKm;
+
+  const nextStage = order.payment_rail === "float" ? "Shop" : "Match";
+  const result = await db.execute({
+    sql: `UPDATE orders SET rider_id = ?, stage = ?, matched_out_of_range = ?, updated_at = datetime('now')
+          WHERE id = ? AND rider_id IS NULL AND stage IN ('Create', 'Match')`,
+    args: [user.sub, nextStage, outOfRange ? 1 : 0, id],
+  });
+  if (result.rowsAffected === 0) {
+    return c.json({ error: "already_claimed", message: "Another rider already took this job" }, 409);
+  }
+
+  await logEvent(
+    id,
+    "Match",
+    outOfRange ? `Matched with rider ${rider.name} (out of normal range)` : `Matched with rider ${rider.name}`,
     user.sub,
   );
   if (order.payment_rail === "float") {

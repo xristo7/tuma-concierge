@@ -65,6 +65,21 @@ export type OrderRow = {
   updated_at: string;
 };
 
+/**
+ * An unmatched order as it appears in a rider's available-jobs list — every
+ * order eventually reaches every verified/online rider, but the staged
+ * radius broadcast means the nearest riders see it first (see
+ * apps/api/src/orders/matching.ts): 1km, then 2km, then 3km, then everyone.
+ * `distanceKm` is null when it can't be computed (rider or order missing
+ * coordinates); `outOfServiceRange` flags a job worth warning the rider
+ * (and, once claimed, the customer) may cost more than the normal rate.
+ */
+export type AvailableJob = OrderRow & {
+  customer_name: string | null;
+  distanceKm: number | null;
+  outOfServiceRange: boolean;
+};
+
 /** Admin-tunable delivery pricing/matching numbers (packages/shared/src/api-client.ts: getSettings/adminUpdateSettings). */
 export type DeliverySettings = {
   deliveryRatePerKm: number;
