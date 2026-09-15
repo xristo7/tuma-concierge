@@ -9,7 +9,7 @@ import { getDeliverySettings } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { redactOrders, toOpenJob } from "../orders/visibility.js";
 import { activeProvider, checkPaymentStatus, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
-import { getR2Bucket } from "../storage/r2.js";
+import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
 
 export const riderRoutes = new Hono();
 
@@ -215,7 +215,7 @@ riderRoutes.get("/riders/:userId/photo", requireAuth, async (c) => {
   if (!object) return c.json({ error: "not_found" }, 404);
 
   return new Response(object.body, {
-    headers: { "Content-Type": object.httpMetadata?.contentType ?? "image/jpeg", "Cache-Control": "private, max-age=3600" },
+    headers: { ...uploadResponseHeaders(object.httpMetadata?.contentType, "image/jpeg"), "Cache-Control": "private, max-age=3600" },
   });
 });
 
@@ -459,7 +459,7 @@ riderRoutes.get("/admin/riders/:userId/id-document", requireAuth, requireRole("a
   if (!object) return c.json({ error: "not_found" }, 404);
 
   return new Response(object.body, {
-    headers: { "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream" },
+    headers: uploadResponseHeaders(object.httpMetadata?.contentType, "application/octet-stream"),
   });
 });
 

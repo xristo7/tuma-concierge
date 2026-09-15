@@ -5,6 +5,7 @@ import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
+import { consume, tooManyRequests } from "../lib/ratelimit.js";
 import { getDeliverySettings, getMatchingSettings, getMaxOrderValue } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
 import { redactOrder } from "./visibility.js";
@@ -15,7 +16,7 @@ import {
   mobileMoneyNetworkLabel,
   UnsupportedNetworkError,
 } from "../payments/service.js";
-import { getR2Bucket } from "../storage/r2.js";
+import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
 
 export const orderRoutes = new Hono();
 orderRoutes.use("*", requireAuth);
@@ -84,10 +85,22 @@ orderRoutes.use("*", async (c, next) => {
   if (!user || user.role === "admin") return;
   if (!c.res.headers.get("content-type")?.includes("application/json")) return;
 
-  const body = (await c.res
+  // Cheap check before the expensive one. This router also serves chat
+  // history, which can be long and never contains a PIN — reading the text
+  // and looking for the field beats parsing and re-serializing every
+  // response just in case.
+  const text = await c.res
     .clone()
-    .json()
-    .catch(() => null)) as { order?: Row; orders?: Row[] } | null;
+    .text()
+    .catch(() => "");
+  if (!text.includes("pin_code")) return;
+
+  let body: { order?: Row; orders?: Row[] } | null;
+  try {
+    body = JSON.parse(text) as { order?: Row; orders?: Row[] };
+  } catch {
+    return;
+  }
   if (!body || typeof body !== "object") return;
 
   const strip = (order: Row | undefined) => {
@@ -434,7 +447,7 @@ orderRoutes.get("/orders/:id/voice-note", async (c) => {
   if (!object) return c.json({ error: "not_found" }, 404);
 
   return new Response(object.body, {
-    headers: { "Content-Type": object.httpMetadata?.contentType ?? "audio/webm" },
+    headers: uploadResponseHeaders(object.httpMetadata?.contentType, "audio/webm"),
   });
 });
 
@@ -488,6 +501,16 @@ async function assignRider(
     args: [riderId, nextStage, outOfRange ? 1 : 0, id],
   });
   if (result.rowsAffected === 0) return false;
+
+  // Anything the customer sent before a rider existed was stored with a null
+  // rider_id, and every chat query since works off the customer/rider pair —
+  // so without this those messages drop out of the conversation the moment
+  // it gets a second participant, which is exactly when someone would look
+  // for them. Adopt them into the thread that just formed.
+  await db.execute({
+    sql: "UPDATE chat_messages SET rider_id = ? WHERE order_id = ? AND rider_id IS NULL",
+    args: [riderId, id],
+  });
 
   await logEvent(
     id,
@@ -765,10 +788,16 @@ orderRoutes.post("/orders/:id/apply", requireRole("rider"), async (c) => {
     }
   }
 
+  // status goes back to 'pending' on a repeat application, not just the
+  // distance. When someone else gets picked every other applicant is marked
+  // 'declined', and if that rider later cancels the job returns to the pool —
+  // without this reset, anyone who applied the first time round would get an
+  // "applied" confirmation while staying invisible to the customer, because
+  // the applicant list only shows pending rows.
   await db.execute({
     sql: `INSERT INTO order_applications (id, order_id, rider_id, distance_km, status)
           VALUES (?, ?, ?, ?, 'pending')
-          ON CONFLICT(order_id, rider_id) DO UPDATE SET distance_km = excluded.distance_km`,
+          ON CONFLICT(order_id, rider_id) DO UPDATE SET distance_km = excluded.distance_km, status = 'pending'`,
     args: [newId("app"), id, user.sub, distanceKm],
   });
 
@@ -1489,6 +1518,13 @@ const chatSchema = z.object({ body: z.string().min(1).max(2000) });
 const MAX_CHAT_IMAGE_BYTES = 6 * 1024 * 1024;
 const ALLOWED_CHAT_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
+/** Every photo or voice message is up to 6-10MB kept in R2 indefinitely, and
+ * nothing deletes it — so an ordinary signed-in account can run up storage
+ * at will. Both ceilings are well past what a real conversation uses in an
+ * hour; they exist to stop a script, not a chatty customer. */
+const CHAT_MEDIA_PER_HOUR = 40;
+const CHAT_MESSAGES_PER_HOUR = 400;
+
 /**
  * Text messages arrive as JSON; a photo or voice note arrives as multipart
  * form data instead (field `type`: "image" | "voice", field `file`) —
@@ -1504,7 +1540,17 @@ orderRoutes.post("/orders/:id/chat", async (c) => {
     return c.json({ error: "forbidden" }, 403);
   }
 
+  const overall = await consume(`chat:${user.sub}`, CHAT_MESSAGES_PER_HOUR, 60 * 60);
+  if (!overall.allowed) {
+    return tooManyRequests(c, overall, "You're sending messages too quickly. Please try again shortly.");
+  }
+
   if ((c.req.header("content-type") ?? "").includes("multipart/form-data")) {
+    const mediaQuota = await consume(`chat-media:${user.sub}`, CHAT_MEDIA_PER_HOUR, 60 * 60);
+    if (!mediaQuota.allowed) {
+      return tooManyRequests(c, mediaQuota, "You've sent a lot of attachments — please try again later.");
+    }
+
     const form = await c.req.formData().catch(() => null);
     const file = form?.get("file");
     const type = form?.get("type");
@@ -1570,7 +1616,7 @@ orderRoutes.get("/chat/media/:messageId", async (c) => {
   if (!object) return c.json({ error: "not_found" }, 404);
 
   return new Response(object.body, {
-    headers: { "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream" },
+    headers: uploadResponseHeaders(object.httpMetadata?.contentType, "application/octet-stream"),
   });
 });
 
