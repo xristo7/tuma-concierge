@@ -1,8 +1,6 @@
 -- Onboarding verification: either phone (SMS) or email confirms a new
 -- account. Existing accounts at migration time are grandfathered in as
 -- already-verified so this only gates registrations going forward.
--- (Comments in these files must avoid the semicolon character entirely --
--- migrate.ts splits each file on it without understanding SQL comments.)
 
 ALTER TABLE users ADD COLUMN phone_verified_at TEXT;
 ALTER TABLE users ADD COLUMN email_verified_at TEXT;

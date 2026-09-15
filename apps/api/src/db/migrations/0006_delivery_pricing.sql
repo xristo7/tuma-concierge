@@ -5,8 +5,6 @@
 -- range. A generic key/value settings table holds admin-tunable numbers
 -- (delivery_rate_per_km, service_range_km) so they don't need a redeploy
 -- to change.
--- (Comments in these files must avoid the semicolon character entirely --
--- migrate.ts splits each file on it without understanding SQL comments.)
 
 ALTER TABLE orders ADD COLUMN pickup_lat REAL;
 ALTER TABLE orders ADD COLUMN pickup_lng REAL;

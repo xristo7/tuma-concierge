@@ -3,7 +3,5 @@
 -- family pack", a landmark inside the shop). Stored in R2 like the rider's
 -- National ID scan; this column just holds the object key. Playable by
 -- whoever can already see the order (customer, assigned rider, admin).
--- (Comments in these files must avoid the semicolon character entirely --
--- migrate.ts splits each file on it without understanding SQL comments.)
 
 ALTER TABLE orders ADD COLUMN voice_note_key TEXT;

@@ -1,6 +1,4 @@
 -- Security hardening.
--- (Comments in these files must avoid the semicolon character entirely --
--- migrate.ts splits each file on it without understanding SQL comments.)
 --
 -- sessions_valid_from: every token carries an "issued at" claim, and any
 -- token issued before this timestamp is rejected. Set it on password reset

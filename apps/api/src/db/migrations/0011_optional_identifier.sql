@@ -1,8 +1,6 @@
 -- Registration can now be completed with a phone number OR an email
 -- address (previously phone was mandatory). SQLite has no ALTER COLUMN to
 -- drop a NOT NULL constraint, so the table is rebuilt.
--- (Comments in these files must avoid the semicolon character entirely --
--- migrate.ts splits each file on it without understanding SQL comments.)
 
 PRAGMA foreign_keys=OFF;
 

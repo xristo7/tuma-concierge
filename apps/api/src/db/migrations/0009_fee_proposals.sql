@@ -3,8 +3,6 @@
 -- match, or heavier traffic than the distance estimate assumed. The customer
 -- must accept or reject it; nothing changes until they do. Both the
 -- previous and proposed totals are kept on the row itself as a record.
--- (Comments in these files must avoid the semicolon character entirely --
--- migrate.ts splits each file on it without understanding SQL comments.)
 
 CREATE TABLE IF NOT EXISTS fee_proposals (
   id TEXT PRIMARY KEY,
