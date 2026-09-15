@@ -466,3 +466,60 @@ authRoutes.post("/password/reset/confirm", async (c) => {
   const userRow = await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [row.id] });
   return c.json({ token, user: toAuthUser(userRow.rows[0]) });
 });
+
+// ---------------------------------------------------------------------------
+// Change password — signed-in equivalent of the reset flow above, for
+// someone who knows their current password and just wants a new one (e.g.
+// the admin settings page). Requires the current password rather than an
+// OTP, since being logged in already proves less than a code sent to a
+// verified channel would — a stolen or borrowed token is exactly the case
+// this guards against.
+// ---------------------------------------------------------------------------
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(6).max(100),
+});
+
+authRoutes.post("/password/change", requireAuth, async (c) => {
+  const user = c.get("user");
+  const parsed = changePasswordSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+  const { currentPassword, newPassword } = parsed.data;
+
+  // Keyed on the account, not an attacker-supplied identifier — someone
+  // holding a valid token could otherwise hammer this to confirm the
+  // current password without ever touching /login's own lockout.
+  const lockKey = `pwchange:${user.sub}`;
+  const lock = await checkLockout(lockKey);
+  if (!lock.allowed) {
+    return tooManyRequests(c, lock, "Too many attempts. Please try again shortly.");
+  }
+
+  const result = await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [user.sub] });
+  const row = result.rows[0] as unknown as (UserRow & Record<string, unknown>) | undefined;
+  if (!row) return c.json({ error: "not_found" }, 404);
+
+  const ok = await bcrypt.compare(currentPassword, row.password_hash);
+  if (!ok) {
+    await recordFailure(lockKey);
+    return c.json({ error: "invalid_current_password", message: "That's not your current password." }, 400);
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  // Same reasoning as the OTP reset path: bump sessions_valid_from so every
+  // *other* signed-in session (another device, a stolen token) stops
+  // working. The replacement token issued below shares this second, so
+  // this request's own session survives — changing your password from
+  // Settings shouldn't log you out mid-flow.
+  await db.execute({
+    sql: `UPDATE users SET password_hash = ?, sessions_valid_from = datetime('now'), updated_at = datetime('now')
+          WHERE id = ?`,
+    args: [passwordHash, user.sub],
+  });
+  await clearFailures(lockKey);
+
+  const token = await signToken({ sub: row.id, role: row.role, phone: row.phone });
+  const userRow = await db.execute({ sql: "SELECT * FROM users WHERE id = ?", args: [user.sub] });
+  return c.json({ token, user: toAuthUser(userRow.rows[0]) });
+});

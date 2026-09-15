@@ -79,6 +79,7 @@ app.get("/v1", (c) =>
       "GET /v1/auth/verify/confirm-link",
       "POST /v1/auth/password/reset/request",
       "POST /v1/auth/password/reset/confirm",
+      "POST /v1/auth/password/change",
       "PUT /v1/me/matching-preference",
       "POST /v1/lists",
       "GET /v1/lists/recent",

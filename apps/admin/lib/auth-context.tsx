@@ -9,6 +9,8 @@ type AuthState = {
   ready: boolean;
   login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Signs the browser in directly with an already-issued token — e.g. after a password change. */
+  setSession: (token: string, user: AuthUser) => void;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -28,15 +30,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (identifier: string, password: string) => {
-    const res = await api.login({ identifier, password });
-    if (res.user.role !== "admin") {
-      throw new Error("This portal is for admin accounts only.");
-    }
-    window.localStorage.setItem(TOKEN_KEY, res.token);
-    window.localStorage.setItem(USER_KEY, JSON.stringify(res.user));
-    setUser(res.user);
+  const persist = useCallback((token: string, nextUser: AuthUser) => {
+    window.localStorage.setItem(TOKEN_KEY, token);
+    window.localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    setUser(nextUser);
   }, []);
+
+  const login = useCallback(
+    async (identifier: string, password: string) => {
+      const res = await api.login({ identifier, password });
+      if (res.user.role !== "admin") {
+        throw new Error("This portal is for admin accounts only.");
+      }
+      persist(res.token, res.user);
+    },
+    [persist],
+  );
 
   const logout = useCallback(() => {
     // Order matters: this call reads the token out of local storage to
@@ -52,7 +61,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void revoked;
   }, []);
 
-  const value = useMemo(() => ({ user, ready, login, logout }), [user, ready, login, logout]);
+  const value = useMemo(
+    () => ({ user, ready, login, logout, setSession: persist }),
+    [user, ready, login, logout, persist],
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

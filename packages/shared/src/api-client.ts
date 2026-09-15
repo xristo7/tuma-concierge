@@ -155,6 +155,16 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       });
     },
 
+    /** Change password while signed in, given the current one — e.g. from an account settings
+     * page. Returns a fresh token for this session (unaffected); every other signed-in session
+     * is ended. */
+    async changePassword(currentPassword: string, newPassword: string) {
+      return request<{ token: string; user: AuthUser }>("/v1/auth/password/change", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+    },
+
     // Lists
     async createList(body: CreateListBody = {}) {
       return request<CreateListResponse>("/v1/lists", { method: "POST", body: JSON.stringify(body) });
