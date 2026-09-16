@@ -4,5 +4,5 @@ type Props = { params: Promise<{ id: string }> };
 
 export default async function CreateStagePage({ params }: Props) {
   const { id } = await params;
-  redirect(`/orders/${id}/pay`);
+  redirect(`/orders/${id}`);
 }

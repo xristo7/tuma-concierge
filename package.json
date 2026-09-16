@@ -5,9 +5,11 @@
   "scripts": {
     "dev:customer": "pnpm --filter customer dev",
     "dev:rider": "pnpm --filter rider dev",
+    "dev:admin": "pnpm --filter admin dev",
     "dev:api": "pnpm --filter api dev",
     "build:customer": "pnpm --filter customer build",
     "build:rider": "pnpm --filter rider build",
+    "build:admin": "pnpm --filter admin build",
     "build:api": "pnpm --filter api build",
     "migrate:api": "pnpm --filter api migrate",
     "seed:api": "pnpm --filter api seed",

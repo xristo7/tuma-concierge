@@ -1,6 +1,6 @@
 "use client";
 
-import { Briefcase, Navigation, User, Wallet } from "lucide-react";
+import { Briefcase, MessageCircle, Navigation, User, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
@@ -8,6 +8,7 @@ import type { LucideIcon } from "lucide-react";
 const tabs: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Jobs", icon: Briefcase },
   { href: "/active", label: "Active", icon: Navigation },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/wallet", label: "Wallet", icon: Wallet },
   { href: "/account", label: "Account", icon: User },
 ];
@@ -16,7 +17,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-faint)] bg-white pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-faint)] bg-[rgb(var(--surface-card))] pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto flex max-w-lg items-stretch justify-around">
         {tabs.map((tab) => {
           const active =

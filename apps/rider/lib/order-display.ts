@@ -21,7 +21,8 @@ export function stageProgressPct(stage: string): number {
   return Math.round(((stageIndex(stage) + 1) / ORDER_STAGES.length) * 100);
 }
 
-export function stageLabel(stage: string): string {
+export function stageLabel(stage: string, type?: OrderRow["type"]): string {
+  if (type === "parcel" && stage === "Shop") return "Picking up";
   return STAGE_LABELS[stage as OrderStageValue] ?? stage;
 }
 
@@ -30,6 +31,15 @@ export function formatUgx(amount: number | null | undefined): string {
   return `UGX ${amount.toLocaleString("en-UG")}`;
 }
 
-export function jobTitle(order: OrderRow): string {
-  return order.destination_area ? `Delivery to ${order.destination_area}` : `Job #${order.id.slice(-6)}`;
+/** Takes only the four fields it reads, so it works for both a full order
+ * and the deliberately thinner AvailableJob from the open-jobs feed. */
+type TitleableOrder = Pick<OrderRow, "id" | "type" | "customer_name" | "destination_area">;
+
+export function jobTitle(order: TitleableOrder): string {
+  if (order.type !== "parcel") {
+    const firstName = order.customer_name?.trim().split(/\s+/)[0];
+    if (firstName) return `${firstName}'s List`;
+  }
+  const noun = order.type === "parcel" ? "Parcel" : "Delivery";
+  return order.destination_area ? `${noun} to ${order.destination_area}` : `Job #${order.id.slice(-6)}`;
 }

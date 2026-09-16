@@ -1,13 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { GoogleSignInButton } from "../../components/GoogleSignInButton";
+import { PasswordInput } from "../../components/PasswordInput";
 import { useAuth } from "../../lib/auth-context";
 import { errorMessage } from "../../lib/api";
+
+type Identifier = "email" | "phone";
 
 export default function LoginPage() {
   const { login, register } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
+  const [identifierType, setIdentifierType] = useState<Identifier>("email");
+  const [loginIdentifier, setLoginIdentifier] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -19,9 +27,11 @@ export default function LoginPage() {
     setBusy(true);
     try {
       if (mode === "login") {
-        await login(phone, password);
+        await login(loginIdentifier, password);
+      } else if (identifierType === "email") {
+        await register({ email: email.trim(), name, password });
       } else {
-        await register({ phone, name, password });
+        await register({ phone: phone.trim(), name, password });
       }
     } catch (err) {
       setError(errorMessage(err));
@@ -35,19 +45,25 @@ export default function LoginPage() {
       <div className="mx-auto w-full max-w-sm space-y-6">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/brand/tuma-logo-helmet-wordmark.svg"
+          src="/brand/tuma-logo-navy.png"
           alt="Tuma"
-          className="mx-auto h-9 w-auto"
+          className="mx-auto h-9 w-auto dark:hidden"
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/brand/tuma-logo-white.png"
+          alt="Tuma"
+          className="mx-auto hidden h-9 w-auto dark:block"
         />
 
-        <div className="flex rounded-full bg-[#ECE8E2] p-1">
+        <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
           {(["login", "register"] as const).map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => setMode(m)}
               className={`flex-1 rounded-full py-2 text-sm font-semibold transition-colors ${
-                mode === m ? "bg-white text-ink shadow-sm" : "text-ink-500"
+                mode === m ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
               }`}
             >
               {m === "login" ? "Log in" : "Sign up"}
@@ -56,43 +72,91 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={onSubmit} className="card space-y-4 !p-5">
-          {mode === "register" && (
+          {mode === "login" ? (
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-ink-500" htmlFor="name">
-                Name
+              <label className="text-xs font-semibold text-ink-500" htmlFor="identifier">
+                Phone or email
               </label>
               <input
-                id="name"
+                id="identifier"
                 required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                value={loginIdentifier}
+                onChange={(e) => setLoginIdentifier(e.target.value)}
                 className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-                placeholder="Sharon"
+                placeholder="sharon@example.com"
               />
             </div>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-ink-500" htmlFor="name">
+                  Name
+                </label>
+                <input
+                  id="name"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                  placeholder="Sharon"
+                />
+              </div>
+
+              <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
+                {(["email", "phone"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setIdentifierType(t)}
+                    className={`flex-1 rounded-full py-2 text-xs font-bold capitalize transition-colors ${
+                      identifierType === t ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              {identifierType === "email" ? (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-ink-500" htmlFor="email">
+                    Email
+                  </label>
+                  <input
+                    id="email"
+                    required
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                    placeholder="sharon@example.com"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-ink-500" htmlFor="phone">
+                    Phone
+                  </label>
+                  <input
+                    id="phone"
+                    required
+                    inputMode="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                    placeholder="+256700000001"
+                  />
+                </div>
+              )}
+            </>
           )}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-ink-500" htmlFor="phone">
-              Phone
-            </label>
-            <input
-              id="phone"
-              required
-              inputMode="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-              placeholder="+256700000001"
-            />
-          </div>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-ink-500" htmlFor="password">
               Password
             </label>
-            <input
+            <PasswordInput
               id="password"
               required
-              type="password"
               minLength={6}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -112,11 +176,15 @@ export default function LoginPage() {
           >
             {busy ? "Please wait…" : mode === "login" ? "Log in" : "Create account"}
           </button>
+
+          {mode === "login" && (
+            <Link href="/forgot-password" className="block text-center text-sm font-semibold text-gold">
+              Forgot password?
+            </Link>
+          )}
         </form>
 
-        <p className="text-center text-xs text-ink-500">
-          Demo customer: +256700000001 / password123
-        </p>
+        <GoogleSignInButton role="customer" />
       </div>
     </div>
   );

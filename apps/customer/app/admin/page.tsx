@@ -58,7 +58,7 @@ export default function AdminRidersPage() {
               disabled={busyId === rider.user_id}
               onClick={() => toggle(rider.user_id, !rider.verified)}
               className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold disabled:opacity-60 ${
-                rider.verified ? "bg-[#ECE8E2] text-ink" : "bg-green text-white"
+                rider.verified ? "bg-[rgb(var(--surface-muted))] text-ink" : "bg-green text-white"
               }`}
             >
               {rider.verified ? "Revoke" : "Verify"}

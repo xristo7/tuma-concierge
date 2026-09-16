@@ -1,57 +1,106 @@
 "use client";
 
-import type { OrderRow } from "@tuma/shared";
+import type { ChatThread } from "@tuma/shared";
+import { User } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { OrderChat } from "../../components/OrderChat";
+import { ShoppingListModal } from "../../components/home/ShoppingListModal";
 import { api } from "../../lib/api";
-import { stageLabel } from "../../lib/order-display";
 
-export default function ChatPage() {
-  const [order, setOrder] = useState<OrderRow | null | undefined>(undefined);
+function formatTime(iso: string): string {
+  const d = new Date(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function ThreadAvatar({ counterpartId, hasPhoto }: { counterpartId: string; hasPhoto: boolean }) {
+  const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!hasPhoto) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
     api
-      .getActiveOrder()
-      .then((res) => setOrder(res.activeOrder))
-      .catch(() => setOrder(null));
+      .riderPhotoBlob(counterpartId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [counterpartId, hasPhoto]);
+
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" />;
+  }
+  return (
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+      <User className="h-6 w-6" strokeWidth={1.75} aria-hidden />
+    </span>
+  );
+}
+
+export default function ChatListPage() {
+  const [threads, setThreads] = useState<ChatThread[] | null>(null);
+  const [showNewList, setShowNewList] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getChatThreads()
+      .then((res) => {
+        if (!cancelled) setThreads(res.threads);
+      })
+      .catch(() => {
+        if (!cancelled) setThreads([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  if (order === undefined) {
-    return <div className="flex min-h-dvh items-center justify-center text-sm text-ink-500">Loading…</div>;
+  if (threads === null) {
+    return <div className="p-4 text-sm text-ink-500">Loading…</div>;
   }
 
-  if (!order) {
+  if (threads.length === 0) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center space-y-3 p-4 text-center">
+      <div className="flex min-h-[70dvh] flex-col items-center justify-center space-y-3 p-4 text-center">
         <h1 className="text-xl font-bold text-ink">Chat</h1>
-        <p className="text-sm text-ink-500">You have no active order to chat about.</p>
-        <Link href="/orders/new" className="text-sm font-semibold text-gold">
+        <p className="text-sm text-ink-500">You have no conversations yet.</p>
+        <button type="button" onClick={() => setShowNewList(true)} className="text-sm font-semibold text-gold">
           Send a shopping list
-        </Link>
+        </button>
+        {showNewList && <ShoppingListModal onClose={() => setShowNewList(false)} />}
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-14">
-      <div className="mx-auto flex h-full max-w-lg flex-col bg-cream">
-        <header className="flex shrink-0 items-center gap-3 border-b border-[var(--border-faint)] bg-cream/95 px-4 py-3 backdrop-blur-sm">
-          <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gold text-sm font-bold text-ink">
-            R
-            {order.rider_id && (
-              <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-cream bg-green" />
-            )}
-          </span>
-          <div className="min-w-0">
-            <h1 className="truncate text-base font-bold text-ink">
-              {order.rider_id ? "Your rider" : "Finding a rider…"}
-            </h1>
-            <p className="text-xs text-ink-500">{stageLabel(order.stage)}</p>
-          </div>
-        </header>
-        <OrderChat orderId={order.id} variant="full" />
-      </div>
+    <div className="space-y-3 px-4 pb-6 pt-4">
+      <h1 className="text-xl font-bold text-ink">Chat</h1>
+      <ul className="space-y-2">
+        {threads.map((t) => (
+          <li key={t.counterpartId}>
+            <Link
+              href={`/chat/${t.counterpartId}`}
+              className="home-card flex items-center gap-3 !rounded-2xl !px-3 !py-3"
+            >
+              <ThreadAvatar counterpartId={t.counterpartId} hasPhoto={t.counterpartHasPhoto} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-bold text-ink">{t.counterpartName}</span>
+                <span className="block truncate text-xs text-ink-500">{t.lastMessagePreview}</span>
+              </span>
+              <span className="shrink-0 text-[11px] text-ink-500">{formatTime(t.lastMessageAt)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

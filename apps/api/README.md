@@ -39,7 +39,10 @@ See `GET /v1` for the full live list. Highlights:
 - **Riders**: `POST /v1/riders/apply`, `POST /v1/riders/status`,
   `GET /v1/riders/me`, `GET /v1/riders/me/orders`
 - **Admin** (mock manual KYC — no real document verification integration):
-  `GET /v1/admin/riders`, `POST /v1/admin/riders/:userId/verify`
+  `GET /v1/admin/riders`, `POST /v1/admin/riders/:userId/verify`,
+  `GET /v1/admin/stats`, `GET /v1/admin/integrations`,
+  `GET /v1/admin/customers`, `GET /v1/admin/customers/:id`,
+  `GET /v1/admin/orders`, `POST /v1/admin/users/:id/status`
 
 ## MoMo (escrow funding + rider payout)
 
