@@ -42,6 +42,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(
     async (identifier: string, password: string) => {
       const res = await api.login({ identifier, password });
+      if (res.user.role === "rider") {
+        throw new Error("This account is registered as a rider. Please sign in from the rider app instead.");
+      }
+      if (res.user.role === "admin") {
+        throw new Error("This account is registered as staff. Please sign in from the admin app instead.");
+      }
       persist(res.token, res.user);
     },
     [persist],

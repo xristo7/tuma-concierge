@@ -277,6 +277,21 @@ authRoutes.post("/google", async (c) => {
   let row = existing.rows[0] as unknown as (UserRow & Record<string, unknown>) | undefined;
   let isNewUser = false;
 
+  // This account already exists under a different role — signing them in
+  // here as-is would hand back a token that every route in this app rejects
+  // (e.g. a customer landing in the rider app gets 403s everywhere). Tell
+  // them where their account actually lives instead of leaving them stuck.
+  if (row && row.role !== role) {
+    const appName = row.role === "rider" ? "rider" : row.role === "admin" ? "admin" : "customer";
+    return c.json(
+      {
+        error: "role_mismatch",
+        message: `This Google account is already registered as a ${row.role}. Please sign in from the ${appName} app instead.`,
+      },
+      409,
+    );
+  }
+
   if (!row) {
     isNewUser = true;
     const id = crypto.randomUUID();
