@@ -1,16 +1,19 @@
 "use client";
 
 import type { SavedLocation } from "@tuma/shared";
-import { Plus, Trash2 } from "lucide-react";
+import { List, Mic, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LocationPicker, emptyPoint, resolvePoint, type PointState } from "../LocationPicker";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
 import { OrderVoiceNoteRecorder } from "./OrderVoiceNoteRecorder";
-import { VoiceNoteRecorder } from "./VoiceNoteRecorder";
 
 type Item = { name: string; quantity: string; unitCost: string };
+/** "list": type each item with its own cost — today's flow. "voice": speak
+ * the list instead (for anyone who reads numbers more easily than text) and
+ * just key in the total, which is what escrow actually needs. */
+type Mode = "list" | "voice";
 
 function currency(n: number) {
   return `UGX ${n.toLocaleString("en-UG")}`;
@@ -19,7 +22,9 @@ function currency(n: number) {
 export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState<"items" | "location">("items");
+  const [mode, setMode] = useState<Mode>("list");
   const [items, setItems] = useState<Item[]>([{ name: "", quantity: "1", unitCost: "" }]);
+  const [voiceTotal, setVoiceTotal] = useState("");
 
   const [locations, setLocations] = useState<SavedLocation[]>([]);
   const [delivery, setDelivery] = useState<PointState>(emptyPoint);
@@ -36,7 +41,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
       .catch(() => {});
   }, []);
 
-  const total = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitCost) || 0), 0);
+  const listTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitCost) || 0), 0);
+  const total = mode === "voice" ? Number(voiceTotal) || 0 : listTotal;
 
   function updateItem(i: number, patch: Partial<Item>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
@@ -48,19 +54,22 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
     setItems((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  function addItemsFromVoice(extracted: Array<{ name: string; quantity: number }>) {
-    const spoken = extracted.map((it) => ({ name: it.name, quantity: String(it.quantity), unitCost: "" }));
-    setItems((prev) => {
-      const rest = prev.filter((it) => it.name.trim().length > 0);
-      return [...rest, ...spoken];
-    });
-  }
-
   function goToLocation() {
-    const clean = items.filter((it) => it.name.trim().length > 0);
-    if (clean.length === 0) {
-      setError("Add at least one item.");
-      return;
+    if (mode === "list") {
+      const clean = items.filter((it) => it.name.trim().length > 0);
+      if (clean.length === 0) {
+        setError("Add at least one item.");
+        return;
+      }
+    } else {
+      if (!voiceNote) {
+        setError("Record a voice note describing what you need.");
+        return;
+      }
+      if (!voiceTotal || Number(voiceTotal) <= 0) {
+        setError("Enter the total amount.");
+        return;
+      }
     }
     setError(null);
     setStep("location");
@@ -111,51 +120,92 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
     <Modal title={step === "items" ? "Shopping List" : "Delivery location"} onClose={onClose}>
       {step === "items" ? (
         <div className="space-y-4">
-          <VoiceNoteRecorder onItemsExtracted={addItemsFromVoice} />
-
-          <div className="space-y-2">
-            {items.map((item, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] p-2.5">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-xs font-bold text-ink-500">
-                  {i + 1}
-                </span>
-                <input
-                  value={item.name}
-                  onChange={(e) => updateItem(i, { name: e.target.value })}
-                  placeholder="Item name"
-                  className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
-                />
-                <input
-                  value={item.quantity}
-                  onChange={(e) => updateItem(i, { quantity: e.target.value.replace(/[^\d]/g, "") })}
-                  inputMode="numeric"
-                  placeholder="Qty"
-                  className="w-12 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-center text-sm text-ink outline-none"
-                />
-                <input
-                  value={item.unitCost}
-                  onChange={(e) => updateItem(i, { unitCost: e.target.value.replace(/[^\d]/g, "") })}
-                  inputMode="numeric"
-                  placeholder="Unit cost"
-                  className="w-20 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-right text-sm text-ink outline-none"
-                />
-                <button
-                  onClick={() => removeItem(i)}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center text-ink-500/60 hover:text-red-600"
-                  aria-label="Remove item"
-                >
-                  <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                </button>
-              </div>
+          <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
+            {(["list", "voice"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-sm font-bold transition-colors ${
+                  mode === m ? "bg-gold text-ink-gold shadow-sm" : "text-ink-500"
+                }`}
+              >
+                {m === "list" ? (
+                  <List className="h-4 w-4" strokeWidth={2} aria-hidden />
+                ) : (
+                  <Mic className="h-4 w-4" strokeWidth={2} aria-hidden />
+                )}
+                {m === "list" ? "Write list" : "Voice note"}
+              </button>
             ))}
-            <button
-              onClick={addItem}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border-faint)] py-2.5 text-sm font-semibold text-ink-500"
-            >
-              <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
-              Add item
-            </button>
           </div>
+
+          {mode === "list" ? (
+            <div className="space-y-2">
+              {items.map((item, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] p-2.5">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-xs font-bold text-ink-500">
+                    {i + 1}
+                  </span>
+                  <input
+                    value={item.name}
+                    onChange={(e) => updateItem(i, { name: e.target.value })}
+                    placeholder="Item name"
+                    className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+                  />
+                  <input
+                    value={item.quantity}
+                    onChange={(e) => updateItem(i, { quantity: e.target.value.replace(/[^\d]/g, "") })}
+                    inputMode="numeric"
+                    placeholder="Qty"
+                    className="w-12 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-center text-sm text-ink outline-none"
+                  />
+                  <input
+                    value={item.unitCost}
+                    onChange={(e) => updateItem(i, { unitCost: e.target.value.replace(/[^\d]/g, "") })}
+                    inputMode="numeric"
+                    placeholder="Unit cost"
+                    className="w-20 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-right text-sm text-ink outline-none"
+                  />
+                  <button
+                    onClick={() => removeItem(i)}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center text-ink-500/60 hover:text-red-600"
+                    aria-label="Remove item"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={addItem}
+                className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border-faint)] py-2.5 text-sm font-semibold text-ink-500"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
+                Add item
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-ink-500">
+                Record what you need — your rider will listen to it. Then enter the total so we know how much to
+                charge.
+              </p>
+              <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-ink-500" htmlFor="voice-total">
+                  Total amount (UGX)
+                </label>
+                <input
+                  id="voice-total"
+                  inputMode="numeric"
+                  value={voiceTotal}
+                  onChange={(e) => setVoiceTotal(e.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="e.g. 25000"
+                  className="w-full rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-3 text-lg font-bold text-ink outline-none focus:border-gold"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center justify-between rounded-xl bg-[rgb(var(--surface-muted))] px-4 py-3">
             <span className="text-sm font-semibold text-ink">Total</span>
@@ -175,7 +225,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
         <div className="space-y-4">
           <LocationPicker point={delivery} setPoint={setDelivery} locations={locations} />
 
-          <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />
+          {/* Voice mode already recorded the list itself as this same voice note — asking again here would be redundant. */}
+          {mode === "list" && <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />}
 
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment</p>
