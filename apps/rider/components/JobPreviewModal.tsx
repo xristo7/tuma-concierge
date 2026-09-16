@@ -10,6 +10,7 @@ import { formatUgx, jobTitle } from "../lib/order-display";
 type Props = {
   job: AvailableJob;
   busy: boolean;
+  offline?: boolean;
   onClose: () => void;
   onClaim: () => void;
   onApply: () => void;
@@ -19,7 +20,7 @@ type Props = {
  * apply — the open-jobs feed itself withholds this (see the API's
  * orders/visibility.ts: toOpenJob) since it goes to every online rider,
  * not just the one about to commit to a job. */
-export function JobPreviewModal({ job, busy, onClose, onClaim, onApply }: Props) {
+export function JobPreviewModal({ job, busy, offline, onClose, onClaim, onApply }: Props) {
   const [items, setItems] = useState<ListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,10 +92,16 @@ export function JobPreviewModal({ job, busy, onClose, onClaim, onApply }: Props)
           <span>{formatUgx(job.final_total ?? job.estimated_total)}</span>
         </div>
 
+        {offline && (
+          <p className="rounded-lg bg-gold/10 px-3 py-2 text-xs font-semibold text-ink-500">
+            You&apos;re offline — reconnect to claim or apply.
+          </p>
+        )}
+
         {job.matching_mode === "first_to_claim" ? (
           <button
             onClick={onClaim}
-            disabled={busy}
+            disabled={busy || offline}
             className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
           >
             {busy ? "Claiming…" : "Claim job"}
@@ -102,7 +109,7 @@ export function JobPreviewModal({ job, busy, onClose, onClaim, onApply }: Props)
         ) : (
           <button
             onClick={onApply}
-            disabled={busy || job.applied}
+            disabled={busy || job.applied || offline}
             className={`min-h-11 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
               job.applied ? "bg-[rgb(var(--surface-muted))] text-ink-500" : "bg-gold text-ink-gold"
             }`}

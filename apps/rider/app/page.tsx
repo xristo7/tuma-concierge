@@ -4,11 +4,13 @@ import type { AvailableJob, OrderRow, Rider } from "@tuma/shared";
 import { ChevronRight, MapPin, ShieldCheck, ShieldQuestion, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { JobPreviewModal } from "../components/JobPreviewModal";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { formatUgx, jobTitle, stageLabel } from "../lib/order-display";
+import { useLivePolling } from "../lib/use-live-polling";
+import { useNetworkStatus } from "../lib/use-network-status";
 
 export default function JobsHomePage() {
   const { user } = useAuth();
@@ -20,6 +22,7 @@ export default function JobsHomePage() {
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewJobItem, setPreviewJobItem] = useState<AvailableJob | null>(null);
+  const online = useNetworkStatus();
 
   const load = useCallback(() => {
     Promise.all([api.myRiderProfile(), api.myRiderOrders(), api.availableJobs()])
@@ -31,11 +34,7 @@ export default function JobsHomePage() {
       .catch((err) => setError(errorMessage(err)));
   }, []);
 
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 6000);
-    return () => clearInterval(interval);
-  }, [load]);
+  useLivePolling(load, 6000, [load]);
 
   async function toggleOnline() {
     if (!rider) return;
@@ -107,7 +106,7 @@ export default function JobsHomePage() {
             {rider.verified ? "Verified" : "Unverified"}
           </span>
           <button
-            disabled={busy || !rider.verified}
+            disabled={busy || !rider.verified || !online}
             onClick={toggleOnline}
             className={`rounded-full px-4 py-2 text-sm font-bold disabled:opacity-50 ${
               rider.is_online ? "bg-green text-white" : "bg-[rgb(var(--surface-muted))] text-ink"
@@ -172,20 +171,20 @@ export default function JobsHomePage() {
                   {job.matching_mode === "first_to_claim" ? (
                     <button
                       onClick={() => claimJob(job.id)}
-                      disabled={claimingId === job.id}
+                      disabled={claimingId === job.id || !online}
                       className="min-h-10 flex-[2] rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
                     >
-                      {claimingId === job.id ? "Claiming…" : "Claim job"}
+                      {claimingId === job.id ? "Claiming…" : !online ? "Offline" : "Claim job"}
                     </button>
                   ) : (
                     <button
                       onClick={() => applyToJob(job.id)}
-                      disabled={claimingId === job.id || job.applied}
+                      disabled={claimingId === job.id || job.applied || !online}
                       className={`min-h-10 flex-[2] rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
                         job.applied ? "bg-[rgb(var(--surface-muted))] text-ink-500" : "bg-gold text-ink-gold"
                       }`}
                     >
-                      {claimingId === job.id ? "Applying…" : job.applied ? "Applied ✓" : "Apply"}
+                      {claimingId === job.id ? "Applying…" : job.applied ? "Applied ✓" : !online ? "Offline" : "Apply"}
                     </button>
                   )}
                 </div>
@@ -219,6 +218,7 @@ export default function JobsHomePage() {
         <JobPreviewModal
           job={previewJobItem}
           busy={claimingId === previewJobItem.id}
+          offline={!online}
           onClose={() => setPreviewJobItem(null)}
           onClaim={() => {
             setPreviewJobItem(null);

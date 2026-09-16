@@ -4,13 +4,14 @@ import type { OrderDetail } from "@tuma/shared";
 import { MapPin, MessageCircle, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { CustomerAvatar } from "../../../components/CustomerAvatar";
 import { OrderChat } from "../../../components/OrderChat";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { VoiceReasonRecorder } from "../../../components/VoiceReasonRecorder";
 import { api, errorMessage } from "../../../lib/api";
 import { formatUgx, jobTitle, stageLabel } from "../../../lib/order-display";
+import { useLivePolling } from "../../../lib/use-live-polling";
 
 type PendingEdit = { originalName: string; substituteName: string; priceDelta: number };
 
@@ -37,11 +38,7 @@ export default function JobDetailPage() {
     return res;
   }, [orderId]);
 
-  useEffect(() => {
-    load().catch(() => {});
-    const interval = setInterval(() => load().catch(() => {}), 4000);
-    return () => clearInterval(interval);
-  }, [load]);
+  useLivePolling(() => void load().catch(() => {}), 4000, [load]);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);

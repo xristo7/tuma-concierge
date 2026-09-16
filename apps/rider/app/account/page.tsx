@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
+import { compressImage } from "../../lib/image-compress";
 
 const LocationMapPicker = dynamic(
   () => import("../../components/LocationMapPicker").then((m) => m.LocationMapPicker),
@@ -163,7 +164,11 @@ export default function AccountPage() {
     setUploadingId(true);
     setError(null);
     try {
-      const res = await api.uploadRiderIdDocument(file);
+      // Kept larger/higher-quality than a casual photo — this has to stay
+      // legible enough for an admin to actually verify the ID against.
+      // compressImage() passes a PDF through untouched.
+      const compressed = await compressImage(file, { maxDimension: 1600, quality: 0.82 });
+      const res = await api.uploadRiderIdDocument(compressed);
       applyRider(res.rider);
       await refreshRider();
     } catch (err) {
@@ -178,7 +183,8 @@ export default function AccountPage() {
     setUploadingPhoto(true);
     setError(null);
     try {
-      const res = await api.uploadRiderProfilePhoto(file);
+      const compressed = await compressImage(file, { maxDimension: 640 });
+      const res = await api.uploadRiderProfilePhoto(compressed);
       applyRider(res.rider);
       await refreshRider();
     } catch (err) {

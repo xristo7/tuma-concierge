@@ -4,6 +4,7 @@ import { Camera, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { compressImage } from "../lib/image-compress";
 
 const MAX_BYTES = 4 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -54,7 +55,8 @@ export function ProfilePhoto() {
     }
     setBusy(true);
     try {
-      await api.uploadUserProfilePhoto(file);
+      const compressed = await compressImage(file, { maxDimension: 640 });
+      await api.uploadUserProfilePhoto(compressed);
       if (user) updateUser({ ...user, hasProfilePhoto: true });
     } catch (err) {
       setError(errorMessage(err));

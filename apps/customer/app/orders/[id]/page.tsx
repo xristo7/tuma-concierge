@@ -11,6 +11,8 @@ import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { api, errorMessage } from "../../../lib/api";
 import { formatDateTime, formatDuration, formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
+import { useLivePolling } from "../../../lib/use-live-polling";
+import { useNetworkStatus } from "../../../lib/use-network-status";
 
 /** Photo + name of the rider handling this order, and (once settled) when it was delivered and how long it took. */
 function RiderSummaryCard({
@@ -90,11 +92,7 @@ function ApplicantPicker({ orderId, onSelected }: { orderId: string; onSelected:
       .catch(() => {});
   }, [orderId]);
 
-  useEffect(() => {
-    load();
-    const interval = setInterval(load, 4000);
-    return () => clearInterval(interval);
-  }, [load]);
+  useLivePolling(load, 4000, [load]);
 
   async function choose(riderId: string) {
     setBusyId(riderId);
@@ -168,6 +166,7 @@ export default function OrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [msisdn, setMsisdn] = useState("");
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const online = useNetworkStatus();
   const detectedNetwork = useMemo(() => detectMobileMoneyNetwork(msisdn), [msisdn]);
   const matching = useRef(false);
 
@@ -188,11 +187,7 @@ export default function OrderDetailPage() {
     return res;
   }, [orderId]);
 
-  useEffect(() => {
-    load().catch(() => {});
-    const interval = setInterval(() => load().catch(() => {}), 4000);
-    return () => clearInterval(interval);
-  }, [load]);
+  useLivePolling(() => void load().catch(() => {}), 4000, [load]);
 
   // Silently find a rider as soon as an unmatched order lands here, then
   // keep retrying on a fixed 4s cadence until one is found. Depends only on
@@ -432,13 +427,18 @@ export default function OrderDetailPage() {
           {order.rider_id && !pendingPayment && (
             <>
               <p className="text-sm text-ink-500">A rider is ready. Pay to send your {order.type === "parcel" ? "parcel" : "list"}.</p>
+              {!online && (
+                <p className="rounded-lg bg-gold/10 px-3 py-2 text-xs font-semibold text-ink-500">
+                  You&apos;re offline — paying needs a connection. Reconnect to continue.
+                </p>
+              )}
               {order.payment_rail === "escrow" ? (
                 <div className="space-y-2">
                   {walletBalance != null && walletBalance >= (order.final_total ?? order.estimated_total ?? 0) && (
                     <button
                       type="button"
                       onClick={() => doFund(true)}
-                      disabled={busy}
+                      disabled={busy || !online}
                       className="min-h-12 w-full rounded-full border-2 border-gold px-4 text-base font-bold text-ink disabled:opacity-60"
                     >
                       Pay from wallet ({formatUgx(walletBalance)} available)
@@ -467,7 +467,7 @@ export default function OrderDetailPage() {
                     </div>
                     <button
                       type="submit"
-                      disabled={busy}
+                      disabled={busy || !online}
                       className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
                     >
                       Pay via {mobileMoneyNetworkLabel(detectedNetwork)}
@@ -477,7 +477,7 @@ export default function OrderDetailPage() {
               ) : (
                 <button
                   onClick={() => doFund()}
-                  disabled={busy}
+                  disabled={busy || !online}
                   className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
                 >
                   Confirm — rider fronts the cash

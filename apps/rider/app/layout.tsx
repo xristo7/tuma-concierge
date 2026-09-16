@@ -3,6 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 import { AppShell } from "../components/AppShell";
 import { InstallPrompt } from "../components/InstallPrompt";
+import { OfflineBanner } from "../components/OfflineBanner";
 import { PushNotifications } from "../components/PushNotifications";
 import { ServiceWorkerRegister } from "../components/ServiceWorkerRegister";
 import { AuthProvider } from "../lib/auth-context";
@@ -55,6 +56,7 @@ export default function RootLayout({
           {THEME_INIT_SCRIPT}
         </Script>
         <ServiceWorkerRegister />
+        <OfflineBanner />
         <AuthProvider>
           <AppShell>{children}</AppShell>
           <PushNotifications />

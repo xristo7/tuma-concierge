@@ -95,6 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // server for the rest of its life.
     const revoked = api.logout().catch(() => undefined);
     void unsubscribeFromPush();
+    // A shared device shouldn't see this account's cached jobs/chat/wallet
+    // data — the service worker's runtime cache is keyed by URL, not by
+    // who's signed in, so it has to be cleared explicitly.
+    navigator.serviceWorker?.controller?.postMessage("clear-runtime-cache");
     window.localStorage.removeItem(TOKEN_KEY);
     window.localStorage.removeItem(USER_KEY);
     setUser(null);

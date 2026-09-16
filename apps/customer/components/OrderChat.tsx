@@ -1,12 +1,15 @@
 "use client";
 
 import type { ChatMessage } from "@tuma/shared";
-import { Camera, Check, CheckCheck, Mic, Pause, Play, Send, Square, Trash2 } from "lucide-react";
+import { Camera, Check, CheckCheck, Clock, Mic, Pause, Play, Send, Square, Trash2 } from "lucide-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { getQueuedMessages, queueMessage, removeQueuedMessage, type QueuedMessage } from "../lib/chat-outbox";
+import { compressImage } from "../lib/image-compress";
+import { useLivePolling } from "../lib/use-live-polling";
 
 const ROLE_STYLES: Record<string, { bg: string; label: string }> = {
   customer: { bg: "bg-green", label: "C" },
@@ -157,6 +160,7 @@ type Props = {
 export function OrderChat({ orderId, variant = "embedded" }: Props) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [queued, setQueued] = useState<QueuedMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -183,15 +187,37 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
       .catch(() => {});
   }, [orderId]);
 
-  useEffect(() => {
+  useLivePolling(load, 4000, [load]);
+
+  // Queued text messages are per-order, kept in localStorage so they
+  // survive a refresh — flush whatever's waiting whenever we come online
+  // (including right away, if we're already online on mount).
+  const flushQueued = useCallback(async () => {
+    for (const m of getQueuedMessages(orderId)) {
+      try {
+        await api.sendChat(orderId, m.body);
+        removeQueuedMessage(m.localId);
+        setQueued((prev) => prev.filter((x) => x.localId !== m.localId));
+      } catch {
+        break;
+      }
+    }
     load();
-    const interval = setInterval(load, 4000);
-    return () => clearInterval(interval);
-  }, [load]);
+  }, [orderId, load]);
+
+  useEffect(() => {
+    setQueued(getQueuedMessages(orderId));
+  }, [orderId]);
+
+  useEffect(() => {
+    if (navigator.onLine) void flushQueued();
+    window.addEventListener("online", flushQueued);
+    return () => window.removeEventListener("online", flushQueued);
+  }, [flushQueued]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "nearest" });
-  }, [messages.length]);
+  }, [messages.length, queued.length]);
 
   useEffect(() => {
     return () => {
@@ -206,21 +232,33 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
     e.preventDefault();
     const body = draft.trim();
     if (!body) return;
-    setSending(true);
     setDraft("");
+    if (!navigator.onLine) {
+      setQueued((prev) => [...prev, queueMessage(orderId, body)]);
+      return;
+    }
+    setSending(true);
     try {
       await api.sendChat(orderId, body);
       load();
+    } catch {
+      setQueued((prev) => [...prev, queueMessage(orderId, body)]);
     } finally {
       setSending(false);
     }
   }
 
   async function pickPhoto(file: File) {
+    if (!navigator.onLine) {
+      setMediaError("Photos need a connection — try again once you're back online.");
+      if (photoInputRef.current) photoInputRef.current.value = "";
+      return;
+    }
     setSending(true);
     setMediaError(null);
     try {
-      await api.sendChatMedia(orderId, "image", file);
+      const compressed = await compressImage(file);
+      await api.sendChatMedia(orderId, "image", compressed);
       load();
     } catch {
       setMediaError("Couldn't send that photo. Please try again.");
@@ -234,7 +272,7 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
     setMediaError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const recorder = new MediaRecorder(stream, { audioBitsPerSecond: 24000 });
       chunksRef.current = [];
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -289,6 +327,10 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
 
   async function sendPreview() {
     if (!preview) return;
+    if (!navigator.onLine) {
+      setMediaError("Voice messages need a connection — try again once you're back online.");
+      return;
+    }
     const { blob, url } = preview;
     setSending(true);
     setMediaError(null);
@@ -309,7 +351,7 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
 
   const bubbles = (
     <>
-      {messages.length === 0 && (
+      {messages.length === 0 && queued.length === 0 && (
         <p className="py-8 text-center text-xs text-ink-500">No messages yet — say hello to your rider.</p>
       )}
       {messages.map((m, i) => {
@@ -350,6 +392,19 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
           </div>
         );
       })}
+      {queued.map((q) => (
+        <div key={q.localId} className="flex items-end justify-end gap-2">
+          <div className="flex max-w-[75%] flex-col items-end">
+            <div className="rounded-[20px] rounded-br-md bg-gold/50 px-4 py-2.5 text-[14px] leading-snug text-[#0A0A0A] shadow-sm">
+              {q.body}
+            </div>
+            <span className="mt-1 flex items-center gap-1 px-1 text-[10px] text-ink-500/70">
+              Queued
+              <Clock className="h-3 w-3" strokeWidth={2} aria-hidden />
+            </span>
+          </div>
+        </div>
+      ))}
       <div ref={bottomRef} />
     </>
   );

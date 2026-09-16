@@ -3,9 +3,10 @@
 import { Home, MessageCircle, ShoppingCart, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
+import { useLivePolling } from "../lib/use-live-polling";
 
 const tabs: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Home", icon: Home },
@@ -20,23 +21,16 @@ export function BottomNav() {
   const pathname = usePathname();
   const [hasUnread, setHasUnread] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    function poll() {
+  useLivePolling(
+    () => {
       api
         .getChatThreads()
-        .then((res) => {
-          if (!cancelled) setHasUnread(res.threads.some((t) => t.unread));
-        })
+        .then((res) => setHasUnread(res.threads.some((t) => t.unread)))
         .catch(() => {});
-    }
-    poll();
-    const interval = setInterval(poll, UNREAD_POLL_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, []);
+    },
+    UNREAD_POLL_MS,
+    [],
+  );
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-faint)] bg-[rgb(var(--surface-card))] pb-[env(safe-area-inset-bottom)]">

@@ -6,6 +6,7 @@ import { ArrowDownLeft, ArrowUpRight, RotateCcw, Wallet as WalletIcon } from "lu
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
+import { useNetworkStatus } from "../../lib/use-network-status";
 import { formatDateTime, formatUgx } from "../../lib/order-display";
 
 const LEDGER_ICONS = {
@@ -32,6 +33,7 @@ export default function WalletPage() {
   const [error, setError] = useState<string | null>(null);
   const [pendingTopupId, setPendingTopupId] = useState<string | null>(null);
   const detectedNetwork = useMemo(() => detectMobileMoneyNetwork(msisdn), [msisdn]);
+  const online = useNetworkStatus();
 
   const load = useCallback(() => {
     api
@@ -130,6 +132,11 @@ export default function WalletPage() {
           </div>
         ) : (
           <form onSubmit={submitTopup} className="space-y-2">
+            {!online && (
+              <p className="rounded-lg bg-gold/10 px-3 py-2 text-xs font-semibold text-ink-500">
+                You&apos;re offline — topping up needs a connection.
+              </p>
+            )}
             <input
               required
               inputMode="numeric"
@@ -152,7 +159,7 @@ export default function WalletPage() {
             </div>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !online}
               className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
             >
               {busy ? "Starting…" : "Top up"}
