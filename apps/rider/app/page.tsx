@@ -5,6 +5,7 @@ import { ChevronRight, MapPin, ShieldCheck, ShieldQuestion, TriangleAlert } from
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { JobPreviewModal } from "../components/JobPreviewModal";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { formatUgx, jobTitle, stageLabel } from "../lib/order-display";
@@ -18,6 +19,7 @@ export default function JobsHomePage() {
   const [busy, setBusy] = useState(false);
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewJobItem, setPreviewJobItem] = useState<AvailableJob | null>(null);
 
   const load = useCallback(() => {
     Promise.all([api.myRiderProfile(), api.myRiderOrders(), api.availableJobs()])
@@ -159,25 +161,34 @@ export default function JobsHomePage() {
                     </p>
                   </div>
                 )}
-                {job.matching_mode === "first_to_claim" ? (
+                <div className="flex gap-2">
                   <button
-                    onClick={() => claimJob(job.id)}
-                    disabled={claimingId === job.id}
-                    className="min-h-10 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
+                    type="button"
+                    onClick={() => setPreviewJobItem(job)}
+                    className="min-h-10 flex-1 rounded-full border border-[var(--border-faint)] px-4 text-sm font-bold text-ink"
                   >
-                    {claimingId === job.id ? "Claiming…" : "Claim job"}
+                    Preview
                   </button>
-                ) : (
-                  <button
-                    onClick={() => applyToJob(job.id)}
-                    disabled={claimingId === job.id || job.applied}
-                    className={`min-h-10 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
-                      job.applied ? "bg-[rgb(var(--surface-muted))] text-ink-500" : "bg-gold text-ink-gold"
-                    }`}
-                  >
-                    {claimingId === job.id ? "Applying…" : job.applied ? "Applied ✓" : "Apply"}
-                  </button>
-                )}
+                  {job.matching_mode === "first_to_claim" ? (
+                    <button
+                      onClick={() => claimJob(job.id)}
+                      disabled={claimingId === job.id}
+                      className="min-h-10 flex-[2] rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
+                    >
+                      {claimingId === job.id ? "Claiming…" : "Claim job"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => applyToJob(job.id)}
+                      disabled={claimingId === job.id || job.applied}
+                      className={`min-h-10 flex-[2] rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
+                        job.applied ? "bg-[rgb(var(--surface-muted))] text-ink-500" : "bg-gold text-ink-gold"
+                      }`}
+                    >
+                      {claimingId === job.id ? "Applying…" : job.applied ? "Applied ✓" : "Apply"}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
@@ -203,6 +214,22 @@ export default function JobsHomePage() {
           ))}
         </ul>
       </section>
+
+      {previewJobItem && (
+        <JobPreviewModal
+          job={previewJobItem}
+          busy={claimingId === previewJobItem.id}
+          onClose={() => setPreviewJobItem(null)}
+          onClaim={() => {
+            setPreviewJobItem(null);
+            claimJob(previewJobItem.id);
+          }}
+          onApply={() => {
+            setPreviewJobItem(null);
+            applyToJob(previewJobItem.id);
+          }}
+        />
+      )}
     </div>
   );
 }

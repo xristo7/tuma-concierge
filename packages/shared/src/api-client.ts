@@ -16,6 +16,7 @@ import type {
   FailedPayment,
   IntegrationsStatus,
   ListDetail,
+  ListItem,
   ListSummary,
   MatchingMode,
   OrderDetail,
@@ -459,6 +460,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     /** Unmatched orders currently open to this rider — nearest riders see each one first, then it widens. */
     async availableJobs() {
       return request<{ jobs: AvailableJob[] }>("/v1/riders/jobs/available");
+    },
+    /** Item-level detail for a still-open job — the available-jobs feed itself withholds this until claimed. */
+    async previewJob(orderId: string) {
+      return request<{ items: ListItem[] }>(`/v1/riders/jobs/${orderId}/preview`);
     },
     async myWallet() {
       return request<Wallet>("/v1/riders/me/wallet");

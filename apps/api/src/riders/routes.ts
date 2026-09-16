@@ -320,6 +320,60 @@ riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), asy
   return c.json({ jobs: jobs.map((entry) => entry.job) });
 });
 
+/**
+ * Item-level detail for a still-open job — the available-jobs feed itself
+ * withholds this (see orders/visibility.ts: toOpenJob), since that feed
+ * reaches every online rider including all the ones who never take it. A
+ * rider actually deciding whether to claim or apply for one specific job
+ * reasonably wants to see what's on the list first, so this exists as a
+ * separate, deliberate lookup rather than widening the feed itself.
+ * Same eligibility window as the feed: still unclaimed, still open
+ * (Create/Match), and not one this rider's been excluded from.
+ */
+riderRoutes.get("/riders/jobs/:id/preview", requireAuth, requireRole("rider"), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+
+  const riderRes = await db.execute({
+    sql: "SELECT verified, is_online FROM riders WHERE user_id = ?",
+    args: [user.sub],
+  });
+  const rider = riderRes.rows[0] as Row | undefined;
+  if (!rider?.verified || !rider.is_online) {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const orderRes = await db.execute({
+    sql: "SELECT id, type, list_id, rider_id, stage FROM orders WHERE id = ?",
+    args: [id],
+  });
+  const order = orderRes.rows[0] as Row | undefined;
+  if (!order) return c.json({ error: "not_found" }, 404);
+  if (order.rider_id || !["Create", "Match"].includes(order.stage as string)) {
+    return c.json({ error: "not_available", message: "This job is no longer open." }, 409);
+  }
+
+  const excludedRes = await db.execute({
+    sql: "SELECT 1 FROM order_rider_exclusions WHERE order_id = ? AND rider_id = ?",
+    args: [id, user.sub],
+  });
+  if (excludedRes.rows.length > 0) {
+    return c.json({ error: "not_available", message: "This job is no longer open." }, 409);
+  }
+
+  const items =
+    order.type === "shopping"
+      ? (
+          await db.execute({
+            sql: "SELECT id, list_id, name, quantity, note, unit_price FROM list_items WHERE list_id = ?",
+            args: [order.list_id as string],
+          })
+        ).rows
+      : [];
+
+  return c.json({ items });
+});
+
 // ---------------------------------------------------------------------------
 // Wallet — escrow payouts land here at Settle instead of going straight to
 // mobile money; riders withdraw the balance out whenever they want.

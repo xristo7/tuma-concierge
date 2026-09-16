@@ -124,6 +124,7 @@ app.get("/v1", (c) =>
       "GET /v1/riders/me",
       "GET /v1/riders/me/orders",
       "GET /v1/riders/jobs/available",
+      "GET /v1/riders/jobs/:id/preview",
       "POST /v1/riders/profile-photo",
       "GET /v1/riders/:userId/photo",
       "POST /v1/users/me/profile-photo",
