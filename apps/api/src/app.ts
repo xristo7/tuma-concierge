@@ -105,6 +105,7 @@ app.get("/v1", (c) =>
       "POST /v1/orders/:id/fee-proposals",
       "POST /v1/orders/:id/fee-proposals/:proposalId/decision",
       "POST /v1/orders/:id/deliver",
+      "POST /v1/orders/:id/arrived",
       "POST /v1/orders/:id/handover",
       "POST /v1/orders/:id/settle",
       "POST /v1/orders/:id/rate",

@@ -29,6 +29,13 @@ function formatAmount(n: number): string {
   return `UGX ${n.toLocaleString("en-UG")}`;
 }
 
+/** SQLite's own `datetime('now')` format — computed here (instead of just
+ * writing it in SQL) so the same value can be reused on the in-memory
+ * message objects handed back in the same response, without a re-read. */
+function sqliteNow(): string {
+  return new Date().toISOString().slice(0, 19).replace("T", " ");
+}
+
 async function logEvent(orderId: string, stage: string, note: string, actorId: string) {
   await db.execute({
     sql: "INSERT INTO order_events (id, order_id, stage, note, actor_id) VALUES (?, ?, ?, ?, ?)",
@@ -1325,6 +1332,42 @@ orderRoutes.post("/orders/:id/deliver", async (c) => {
   return c.json({ order: await getOrder(id) });
 });
 
+/** The rider's own "I've arrived" tap — a distinct signal from starting
+ * delivery, so the customer gets a fresh notification right when it
+ * matters instead of just once, back when the rider set off. */
+orderRoutes.post("/orders/:id/arrived", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertRider(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  if (order.stage !== "Deliver") {
+    return c.json({ error: "invalid_stage", message: `Cannot mark arrived from stage ${order.stage}` }, 409);
+  }
+
+  await touchOrder(id, { stage: "Arrived" });
+  await logEvent(id, "Arrived", "Rider arrived", user.sub);
+
+  if (order.customer_id) {
+    background(
+      c,
+      notifyUser(order.customer_id as string, {
+        title: "Your rider has arrived",
+        body: `${user.name || "Your rider"} is here with your ${order.type === "parcel" ? "parcel" : "order"}.`,
+        url: `/orders/${id}`,
+        tag: `order-${id}`,
+      }),
+    );
+  }
+
+  return c.json({ order: await getOrder(id) });
+});
+
 const handoverSchema = z.object({ pin: z.string().length(4) });
 
 orderRoutes.post("/orders/:id/handover", async (c) => {
@@ -1338,7 +1381,7 @@ orderRoutes.post("/orders/:id/handover", async (c) => {
     if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
     throw e;
   }
-  if (order.stage !== "Deliver") {
+  if (order.stage !== "Deliver" && order.stage !== "Arrived") {
     return c.json({ error: "invalid_stage", message: `Cannot hand over from stage ${order.stage}` }, 409);
   }
 
@@ -1496,6 +1539,63 @@ orderRoutes.post("/orders/:id/rate", async (c) => {
  * works. Falls back to just this order's own (likely empty) messages when
  * there's no rider assigned yet to pair with.
  */
+/**
+ * Loads a thread's full message history and, as a side effect, marks
+ * anything the other party sent as delivered — the app's stand-in for "this
+ * reached the recipient's device," since fetching the thread is the closest
+ * signal available. Combined with `read` (derived from chat_reads, set when
+ * the recipient's client calls POST .../chat/read), that's the full
+ * sent → delivered → read progression the tick UI renders.
+ *
+ * Only meaningful when the viewer is actually one of the two participants —
+ * an admin browsing a thread doesn't move anyone's delivery/read state.
+ */
+async function loadThreadMessages(customerId: string, riderId: string | null, viewerId: string): Promise<Row[]> {
+  const res = riderId
+    ? await db.execute({
+        sql: "SELECT * FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at ASC",
+        args: [customerId, riderId],
+      })
+    : await db.execute({
+        sql: "SELECT * FROM chat_messages WHERE customer_id = ? AND rider_id IS NULL ORDER BY created_at ASC",
+        args: [customerId],
+      });
+  const messages = res.rows as Row[];
+
+  if (viewerId !== customerId && viewerId !== riderId) {
+    return messages.map((m) => ({ ...m, read: false }));
+  }
+
+  const now = sqliteNow();
+  const undeliveredIds = messages
+    .filter((m) => m.sender_id !== viewerId && !m.delivered_at)
+    .map((m) => m.id as string);
+  if (undeliveredIds.length > 0) {
+    const placeholders = undeliveredIds.map(() => "?").join(",");
+    await db.execute({
+      sql: `UPDATE chat_messages SET delivered_at = ? WHERE id IN (${placeholders})`,
+      args: [now, ...undeliveredIds],
+    });
+  }
+  const undelivered = new Set(undeliveredIds);
+
+  const counterpartId = viewerId === customerId ? riderId : customerId;
+  let counterpartReadAt: string | null = null;
+  if (counterpartId) {
+    const readRes = await db.execute({
+      sql: "SELECT last_read_at FROM chat_reads WHERE user_id = ? AND counterpart_id = ?",
+      args: [counterpartId, viewerId],
+    });
+    counterpartReadAt = (readRes.rows[0]?.last_read_at as string | undefined) ?? null;
+  }
+
+  return messages.map((m) => ({
+    ...m,
+    delivered_at: undelivered.has(m.id as string) ? now : m.delivered_at,
+    read: m.sender_id === viewerId && !!counterpartReadAt && (m.created_at as string) <= (counterpartReadAt as string),
+  }));
+}
+
 orderRoutes.get("/orders/:id/chat", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
@@ -1504,16 +1604,15 @@ orderRoutes.get("/orders/:id/chat", async (c) => {
   if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
     return c.json({ error: "forbidden" }, 403);
   }
-  const res = order.rider_id
-    ? await db.execute({
-        sql: "SELECT * FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at ASC",
-        args: [order.customer_id as string, order.rider_id as string],
-      })
-    : await db.execute({
-        sql: "SELECT * FROM chat_messages WHERE order_id = ? ORDER BY created_at ASC",
-        args: [id],
-      });
-  return c.json({ messages: res.rows });
+  if (!order.rider_id) {
+    const res = await db.execute({
+      sql: "SELECT * FROM chat_messages WHERE order_id = ? ORDER BY created_at ASC",
+      args: [id],
+    });
+    return c.json({ messages: (res.rows as Row[]).map((m) => ({ ...m, read: false })) });
+  }
+  const messages = await loadThreadMessages(order.customer_id as string, order.rider_id as string, user.sub);
+  return c.json({ messages });
 });
 
 const chatSchema = z.object({ body: z.string().min(1).max(2000) });
@@ -1646,7 +1745,7 @@ orderRoutes.get("/chat/media/:messageId", async (c) => {
   const user = c.get("user");
 
   const res = await db.execute({
-    sql: "SELECT media_key, customer_id, rider_id FROM chat_messages WHERE id = ?",
+    sql: "SELECT media_key, customer_id, rider_id, sender_id, type, played_at FROM chat_messages WHERE id = ?",
     args: [messageId],
   });
   const row = res.rows[0] as Row | undefined;
@@ -1656,6 +1755,14 @@ orderRoutes.get("/chat/media/:messageId", async (c) => {
   }
   const key = row.media_key as string | null;
   if (!key) return c.json({ error: "not_found" }, 404);
+
+  // Fetching the blob of a voice note is what "playing" it means client-side
+  // (OrderChat only calls this on tap, never eagerly) — record it as played
+  // the first time anyone other than the sender does, powering the
+  // green/blue unplayed/played bubble color.
+  if (row.type === "voice" && row.sender_id !== user.sub && !row.played_at) {
+    background(c, db.execute({ sql: "UPDATE chat_messages SET played_at = datetime('now') WHERE id = ?", args: [messageId] }));
+  }
 
   const bucket = getR2Bucket();
   const object = await bucket.get(key);
@@ -1738,6 +1845,17 @@ orderRoutes.get("/chat/threads", async (c) => {
   const threads = await Promise.all(
     (res.rows as Row[]).map(async (row) => {
       const counterpartId = row.counterpart_id as string;
+      const [custId, ridId] = isCustomer ? [user.sub, counterpartId] : [counterpartId, user.sub];
+      // Best-effort: this poll runs app-wide (BottomNav) while the user is
+      // signed in at all, not just while a specific thread is open — the
+      // broadest available "reached their device" signal for delivered ticks.
+      background(
+        c,
+        db.execute({
+          sql: "UPDATE chat_messages SET delivered_at = datetime('now') WHERE customer_id = ? AND rider_id = ? AND sender_id != ? AND delivered_at IS NULL",
+          args: [custId, ridId, user.sub],
+        }),
+      );
       const lastRes = await db.execute({
         sql: isCustomer
           ? "SELECT type, body, sender_id FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at DESC LIMIT 1"
@@ -1789,15 +1907,12 @@ orderRoutes.get("/chat/threads/:counterpartId", async (c) => {
   const counterpart = counterpartRes.rows[0] as Row | undefined;
   if (!counterpart) return c.json({ error: "not_found" }, 404);
 
-  const messages = await db.execute({
-    sql: "SELECT * FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at ASC",
-    args: [customerId, riderId],
-  });
+  const messages = await loadThreadMessages(customerId, riderId, user.sub);
 
   return c.json({
     orderId,
     counterpartName: counterpart.name,
     counterpartHasPhoto: !!counterpart.profile_photo_key,
-    messages: messages.rows,
+    messages,
   });
 });

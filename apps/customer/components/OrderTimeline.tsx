@@ -1,5 +1,5 @@
 import type { OrderEvent, OrderRow } from "@tuma/shared";
-import { Bike, Check, CheckCircle2, Package, ShoppingBag } from "lucide-react";
+import { Bike, Check, CheckCircle2, MapPin, Package, ShoppingBag } from "lucide-react";
 
 type Step = {
   key: string;
@@ -21,6 +21,7 @@ function stepsFor(order: OrderRow): Step[] {
       matchStages: ["Shop", "Substitute", "Approve"],
     },
     { key: "deliver", label: "On The Way", icon: Bike, matchStages: ["Deliver"] },
+    { key: "arrived", label: "Arrived", icon: MapPin, matchStages: ["Arrived"] },
     { key: "done", label: "Delivered", icon: CheckCircle2, matchStages: ["Handover", "Settle"] },
   ];
 }

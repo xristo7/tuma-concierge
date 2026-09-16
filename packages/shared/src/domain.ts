@@ -202,6 +202,14 @@ export type ChatMessage = {
   type: "text" | "image" | "voice";
   media_key: string | null;
   created_at: string;
+  /** Set once the recipient's client has fetched this message. */
+  delivered_at: string | null;
+  /** Set once the recipient has actually played a voice message — not
+   * meaningful for other message types. */
+  played_at: string | null;
+  /** Whether the recipient has read up to this message — only meaningful
+   * on a message the viewer themself sent (drives their own tick color). */
+  read: boolean;
 };
 
 /** One row in the Chat tab's conversation list — the other party in a customer/rider pair, and their last message. */

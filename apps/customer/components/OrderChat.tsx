@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatMessage } from "@tuma/shared";
-import { Camera, Mic, Pause, Play, Send, Square, Trash2 } from "lucide-react";
+import { Camera, Check, CheckCheck, Mic, Pause, Play, Send, Square, Trash2 } from "lucide-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -59,9 +59,15 @@ function ImageBubble({ messageId }: { messageId: string }) {
   );
 }
 
-function VoiceBubble({ messageId, mine }: { messageId: string; mine: boolean }) {
+/** Green = not played yet, blue = already played — same at-a-glance
+ * "have I heard this one" signal WhatsApp gives on voice notes. `playedAt`
+ * comes from the server (set the first time the listener, not the sender,
+ * fetches the audio); `justPlayed` flips the color immediately for
+ * whoever's pressing play right now, without waiting for the next poll. */
+function VoiceBubble({ messageId, mine, playedAt }: { messageId: string; mine: boolean; playedAt: string | null }) {
   const [status, setStatus] = useState<"idle" | "loading" | "playing">("idle");
   const [error, setError] = useState(false);
+  const [justPlayed, setJustPlayed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
 
@@ -87,6 +93,7 @@ function VoiceBubble({ messageId, mine }: { messageId: string; mine: boolean }) 
     setError(false);
     try {
       const blob = await api.chatMediaBlob(messageId);
+      setJustPlayed(true);
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
       const audio = new Audio(url);
@@ -104,11 +111,13 @@ function VoiceBubble({ messageId, mine }: { messageId: string; mine: boolean }) 
     }
   }
 
+  const played = !!playedAt || justPlayed;
+
   return (
     <button type="button" onClick={toggle} className="flex items-center gap-2 py-0.5 pr-2">
       <span
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-          mine ? "bg-black/10" : "bg-[rgb(var(--surface-muted))]"
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white ${
+          played ? "bg-blue-500" : "bg-green"
         }`}
       >
         {status === "playing" ? (
@@ -117,11 +126,23 @@ function VoiceBubble({ messageId, mine }: { messageId: string; mine: boolean }) 
           <Play className="h-4 w-4" strokeWidth={2} aria-hidden />
         )}
       </span>
-      <span className="text-[13px]">
+      <span className={`text-[13px] ${mine ? "" : played ? "text-ink-500" : "font-semibold text-ink"}`}>
         {status === "loading" ? "Loading…" : error ? "Couldn't play — tap to retry" : "Voice message"}
       </span>
     </button>
   );
+}
+
+/** Sent (single gray) → delivered (double gray) → read (double green) —
+ * shown only on the sender's own outgoing bubbles, same as WhatsApp. */
+function MessageTicks({ message }: { message: ChatMessage }) {
+  if (message.read) {
+    return <CheckCheck className="h-3.5 w-3.5 text-green-500" strokeWidth={2.5} aria-hidden />;
+  }
+  if (message.delivered_at) {
+    return <CheckCheck className="h-3.5 w-3.5 text-ink-500/70" strokeWidth={2.5} aria-hidden />;
+  }
+  return <Check className="h-3.5 w-3.5 text-ink-500/70" strokeWidth={2.5} aria-hidden />;
 }
 
 type Props = {
@@ -318,10 +339,13 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
                 }`}
               >
                 {m.type === "image" && <ImageBubble messageId={m.id} />}
-                {m.type === "voice" && <VoiceBubble messageId={m.id} mine={mine} />}
+                {m.type === "voice" && <VoiceBubble messageId={m.id} mine={mine} playedAt={m.played_at} />}
                 {m.type === "text" && m.body}
               </div>
-              <span className="mt-1 px-1 text-[10px] text-ink-500/70">{formatTime(m.created_at)}</span>
+              <span className="mt-1 flex items-center gap-1 px-1 text-[10px] text-ink-500/70">
+                {formatTime(m.created_at)}
+                {mine && <MessageTicks message={m} />}
+              </span>
             </div>
           </div>
         );

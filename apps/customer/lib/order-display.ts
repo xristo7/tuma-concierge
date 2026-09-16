@@ -8,6 +8,7 @@ export const STAGE_LABELS: Record<OrderStageValue, string> = {
   Substitute: "Substitution review",
   Approve: "Approved",
   Deliver: "En route",
+  Arrived: "Rider has arrived",
   Handover: "Handover",
   Settle: "Delivered",
 };

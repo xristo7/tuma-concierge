@@ -431,9 +431,24 @@ export default function JobDetailPage() {
         )}
 
         {order.stage === "Deliver" && (
+          <>
+            <p className="text-sm text-ink-500">
+              On the way{order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Ask the customer to confirm
+              handover in their app once you arrive.
+            </p>
+            <button
+              disabled={busy}
+              onClick={() => run(() => api.arrivedOrder(orderId))}
+              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
+            >
+              I&apos;ve arrived
+            </button>
+          </>
+        )}
+
+        {order.stage === "Arrived" && (
           <p className="text-sm text-ink-500">
-            On the way{order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Ask the customer to confirm
-            handover in their app once you arrive.
+            The customer&apos;s been notified you&apos;re here. Ask them to confirm handover in their app.
           </p>
         )}
 

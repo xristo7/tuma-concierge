@@ -524,10 +524,12 @@ export default function OrderDetailPage() {
 
         {order.stage === "Approve" && <p className="text-sm text-ink-500">Waiting for your rider to start delivery.</p>}
 
-        {order.stage === "Deliver" && (
+        {(order.stage === "Deliver" || order.stage === "Arrived") && (
           <>
             <p className="text-sm text-ink-500">
-              Your rider is on the way{order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}.
+              {order.stage === "Arrived"
+                ? "Your rider has arrived!"
+                : `Your rider is on the way${order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}.`}
             </p>
             {order.pin_code && (
               <div className="rounded-xl bg-gold/10 p-3 text-center">

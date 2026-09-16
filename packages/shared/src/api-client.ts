@@ -311,6 +311,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         body: JSON.stringify({ etaMinutes }),
       });
     },
+    /** Rider's own "I've arrived" tap — notifies the customer. */
+    async arrivedOrder(orderId: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/arrived`, { method: "POST" });
+    },
     async handoverOrder(orderId: string, pin: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/handover`, {
         method: "POST",
