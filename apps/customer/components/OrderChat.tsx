@@ -1,7 +1,9 @@
 "use client";
 
 import type { ChatMessage } from "@tuma/shared";
-import { Camera, Mic, Pause, Play, Send, Square } from "lucide-react";
+import { Camera, Mic, Pause, Play, Send, Square, Trash2 } from "lucide-react";
+import { PhotoProvider, PhotoView } from "react-photo-view";
+import "react-photo-view/dist/react-photo-view.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
@@ -16,6 +18,13 @@ function formatTime(iso: string): string {
   const d = new Date(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+/** m:ss, for a recording's running length or a preview's fixed one. */
+function formatDuration(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function ImageBubble({ messageId }: { messageId: string }) {
@@ -39,8 +48,15 @@ function ImageBubble({ messageId }: { messageId: string }) {
   }, [messageId]);
 
   if (!url) return <div className="h-40 w-48 animate-pulse rounded-2xl bg-[rgb(var(--surface-muted))]" />;
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={url} alt="Photo" className="max-h-64 w-full max-w-[220px] rounded-2xl object-cover" />;
+  return (
+    // Tapping opens a full-screen viewer (pinch to zoom, drag to pan, swipe
+    // between photos in this conversation) via the PhotoProvider wrapping
+    // the whole message list below.
+    <PhotoView src={url}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt="Photo" className="max-h-64 w-full max-w-[220px] cursor-zoom-in rounded-2xl object-cover" />
+    </PhotoView>
+  );
 }
 
 function VoiceBubble({ messageId, mine }: { messageId: string; mine: boolean }) {
@@ -125,6 +141,11 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  // A stopped recording waits here — played back locally, discarded, or
+  // sent — rather than uploading the instant the mic button is released.
+  const [preview, setPreview] = useState<{ blob: Blob; url: string; duration: number } | null>(null);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -152,7 +173,9 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
     return () => {
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
+      if (preview) URL.revokeObjectURL(preview.url);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function send(e: React.FormEvent) {
@@ -192,18 +215,12 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        setSending(true);
-        try {
-          await api.sendChatMedia(orderId, "voice", blob);
-          load();
-        } catch {
-          setMediaError("Couldn't send that voice message. Please try again.");
-        } finally {
-          setSending(false);
-        }
+        // Hand off to a preview instead of uploading straight away — the
+        // stop button shouldn't double as a silent "send".
+        setPreview({ blob, url: URL.createObjectURL(blob), duration: recordSeconds });
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
@@ -219,6 +236,51 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
     if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     setRecording(false);
     mediaRecorderRef.current?.stop();
+  }
+
+  function discardPreview() {
+    previewAudioRef.current?.pause();
+    previewAudioRef.current = null;
+    if (preview) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+    setPreviewPlaying(false);
+  }
+
+  function togglePreviewPlayback() {
+    if (!preview) return;
+    if (previewPlaying) {
+      previewAudioRef.current?.pause();
+      setPreviewPlaying(false);
+      return;
+    }
+    if (!previewAudioRef.current) {
+      const audio = new Audio(preview.url);
+      audio.onended = () => setPreviewPlaying(false);
+      previewAudioRef.current = audio;
+    }
+    previewAudioRef.current.currentTime = 0;
+    previewAudioRef.current.play().catch(() => {});
+    setPreviewPlaying(true);
+  }
+
+  async function sendPreview() {
+    if (!preview) return;
+    const { blob, url } = preview;
+    setSending(true);
+    setMediaError(null);
+    try {
+      await api.sendChatMedia(orderId, "voice", blob);
+      load();
+      previewAudioRef.current?.pause();
+      previewAudioRef.current = null;
+      URL.revokeObjectURL(url);
+      setPreview(null);
+      setPreviewPlaying(false);
+    } catch {
+      setMediaError("Couldn't send that voice message. Please try again.");
+    } finally {
+      setSending(false);
+    }
   }
 
   const bubbles = (
@@ -280,40 +342,79 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
           }}
         />
 
-        <div className="relative min-w-0 flex-1">
-          {recording ? (
-            <div className="flex h-[46px] items-center gap-2 rounded-full bg-[rgb(var(--surface-muted))] pl-4 pr-2">
-              <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-500" />
-              <span className="flex-1 text-sm text-ink">Recording… {recordSeconds}s</span>
-            </div>
-          ) : (
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="Message…"
-              className="w-full rounded-full border border-[var(--border-faint)] bg-[rgb(var(--surface-input))] py-3.5 pl-4 pr-4 text-sm text-ink outline-none placeholder:text-ink-500 focus:border-gold"
-            />
-          )}
-        </div>
+        {preview ? (
+          // Stopped, not yet sent: listen back, bin it, or send it.
+          <div className="flex h-[46px] flex-1 items-center gap-2 rounded-full bg-[rgb(var(--surface-muted))] pl-2 pr-4">
+            <button
+              type="button"
+              onClick={discardPreview}
+              aria-label="Discard recording"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-500"
+            >
+              <Trash2 className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={togglePreviewPlayback}
+              aria-label={previewPlaying ? "Pause" : "Play back recording"}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold text-[#0A0A0A]"
+            >
+              {previewPlaying ? (
+                <Pause className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+              ) : (
+                <Play className="h-4 w-4" strokeWidth={2.25} aria-hidden />
+              )}
+            </button>
+            <span className="flex-1 text-sm text-ink">{formatDuration(preview.duration)}</span>
+          </div>
+        ) : (
+          <div className="relative min-w-0 flex-1">
+            {recording ? (
+              <div className="flex h-[46px] items-center gap-2 rounded-full bg-[rgb(var(--surface-muted))] pl-4 pr-2">
+                <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-500" />
+                <span className="flex-1 text-sm text-ink">Recording… {formatDuration(recordSeconds)}</span>
+              </div>
+            ) : (
+              <input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="Message…"
+                className="w-full rounded-full border border-[var(--border-faint)] bg-[rgb(var(--surface-input))] py-3.5 pl-4 pr-4 text-sm text-ink outline-none placeholder:text-ink-500 focus:border-gold"
+              />
+            )}
+          </div>
+        )}
 
         {/* Camera and mic/send share the trailing edge on purpose — both
             are "attach something" actions, so they read as one group. */}
-        <button
-          type="button"
-          onClick={() => photoInputRef.current?.click()}
-          disabled={sending || recording}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-500 disabled:opacity-40"
-          aria-label="Send a photo"
-        >
-          <Camera className="h-6 w-6" strokeWidth={1.75} aria-hidden />
-        </button>
+        {!preview && (
+          <button
+            type="button"
+            onClick={() => photoInputRef.current?.click()}
+            disabled={sending || recording}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-500 disabled:opacity-40"
+            aria-label="Send a photo"
+          >
+            <Camera className="h-6 w-6" strokeWidth={1.75} aria-hidden />
+          </button>
+        )}
 
-        {recording ? (
+        {preview ? (
+          <button
+            type="button"
+            onClick={sendPreview}
+            disabled={sending}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gold text-[#0A0A0A] shadow-[0_4px_12px_rgba(201,162,39,0.35)] transition-opacity disabled:opacity-40"
+            aria-label="Send voice message"
+          >
+            <Send className="h-5 w-5" strokeWidth={2.25} />
+          </button>
+        ) : recording ? (
           <button
             type="button"
             onClick={stopRecording}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-600 text-white"
-            aria-label="Stop and send voice message"
+            aria-label="Stop recording"
           >
             <Square className="h-4 w-4" strokeWidth={2.5} aria-hidden />
           </button>
@@ -343,22 +444,26 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
 
   if (variant === "full") {
     return (
-      <div className="flex h-full flex-col bg-cream">
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">{bubbles}</div>
-        <div className="shrink-0 border-t border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2.5">
-          {composer}
+      <PhotoProvider>
+        <div className="flex h-full flex-col bg-cream">
+          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">{bubbles}</div>
+          <div className="shrink-0 border-t border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2.5">
+            {composer}
+          </div>
         </div>
-      </div>
+      </PhotoProvider>
     );
   }
 
   return (
-    <section className="space-y-2.5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Chat</h2>
-      <div className="max-h-80 space-y-3 overflow-y-auto rounded-[28px] bg-[rgb(var(--surface-muted))] p-4">
-        {bubbles}
-      </div>
-      {composer}
-    </section>
+    <PhotoProvider>
+      <section className="space-y-2.5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Chat</h2>
+        <div className="max-h-80 space-y-3 overflow-y-auto rounded-[28px] bg-[rgb(var(--surface-muted))] p-4">
+          {bubbles}
+        </div>
+        {composer}
+      </section>
+    </PhotoProvider>
   );
 }
