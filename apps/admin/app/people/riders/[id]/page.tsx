@@ -138,7 +138,7 @@ export default function RiderDetailPage() {
             disabled={busy}
             onClick={() => run(() => api.adminVerifyRider(userId, !rider.verified))}
             className={`min-h-11 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
-              rider.verified ? "border border-[var(--border-faint)] text-ink" : "bg-gold text-ink"
+              rider.verified ? "border border-[var(--border-faint)] text-ink" : "bg-gold text-ink-gold"
             }`}
           >
             {rider.verified ? "Revoke verification" : "Verify rider"}

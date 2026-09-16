@@ -16,6 +16,10 @@
   --color-ink: 10 10 10;
   --color-ink-500: 92 102 112;
   --color-ink-900: 10 10 10;
+  /* Text on top of solid gold (buttons, badges). Gold never changes
+     between themes, so this must not either — unlike --color-ink, which
+     flips light/dark and would produce near-white text on gold. */
+  --color-ink-gold: 10 10 10;
   --color-green: 27 122 78;
   --color-green-400: 47 168 106;
   --color-green-600: 27 122 78;

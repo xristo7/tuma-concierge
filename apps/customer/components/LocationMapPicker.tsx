@@ -207,7 +207,7 @@ export function LocationMapPicker({
         <button
           onClick={confirm}
           disabled={!marker || resolving}
-          className="flex min-h-12 flex-[2] items-center justify-center gap-2 rounded-full bg-gold text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-50"
+          className="flex min-h-12 flex-[2] items-center justify-center gap-2 rounded-full bg-gold text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-50"
         >
           {resolving && <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />}
           {resolving ? "Finding address…" : "Use this location"}

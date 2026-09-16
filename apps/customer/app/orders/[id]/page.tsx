@@ -149,7 +149,7 @@ function ApplicantPicker({ orderId, onSelected }: { orderId: string; onSelected:
             type="button"
             onClick={() => choose(a.riderId)}
             disabled={busyId === a.riderId}
-            className="min-h-9 w-full rounded-full bg-gold px-3 text-xs font-bold text-ink disabled:opacity-60"
+            className="min-h-9 w-full rounded-full bg-gold px-3 text-xs font-bold text-ink-gold disabled:opacity-60"
           >
             {busyId === a.riderId ? "Choosing…" : "Choose this rider"}
           </button>
@@ -443,7 +443,7 @@ export default function OrderDetailPage() {
                   <button
                     type="submit"
                     disabled={busy}
-                    className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+                    className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
                   >
                     Pay via {mobileMoneyNetworkLabel(detectedNetwork)}
                   </button>
@@ -452,7 +452,7 @@ export default function OrderDetailPage() {
                 <button
                   onClick={doFund}
                   disabled={busy}
-                  className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+                  className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
                 >
                   Confirm — rider fronts the cash
                 </button>
@@ -538,7 +538,7 @@ export default function OrderDetailPage() {
             <button
               disabled={busy}
               onClick={() => run(() => api.handoverOrder(orderId, order.pin_code as string))}
-              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
+              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
             >
               Confirm I received my {order.type === "parcel" ? "parcel" : "order"}
             </button>

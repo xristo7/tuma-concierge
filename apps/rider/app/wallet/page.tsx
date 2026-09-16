@@ -81,7 +81,7 @@ export default function WalletPage() {
         <button
           onClick={withdraw}
           disabled={busy || !wallet || wallet.balance <= 0}
-          className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-50"
+          className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-50"
         >
           {busy ? "Sending…" : "Withdraw to mobile money"}
         </button>

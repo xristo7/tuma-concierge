@@ -37,7 +37,7 @@ export default function OrdersPage() {
         <button
           type="button"
           onClick={() => setShowNewList(true)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-gold px-3.5 py-2 text-sm font-bold text-ink"
+          className="inline-flex items-center gap-1.5 rounded-full bg-gold px-3.5 py-2 text-sm font-bold text-ink-gold"
         >
           <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
           New

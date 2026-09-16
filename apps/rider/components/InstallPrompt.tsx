@@ -82,7 +82,7 @@ export function InstallPrompt() {
         {!iosHint && (
           <button
             onClick={install}
-            className="flex shrink-0 items-center gap-1 rounded-full bg-gold px-3 py-2 text-xs font-bold text-ink"
+            className="flex shrink-0 items-center gap-1 rounded-full bg-gold px-3 py-2 text-xs font-bold text-ink-gold"
           >
             <Download className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
             Install

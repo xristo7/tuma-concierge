@@ -107,7 +107,7 @@ export function RateDeliveryCard({
           type="button"
           onClick={submit}
           disabled={busy || stars === 0}
-          className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
+          className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
         >
           {busy ? "Submitting…" : "Submit rating"}
         </button>

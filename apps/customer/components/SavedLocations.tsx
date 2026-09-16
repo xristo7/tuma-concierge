@@ -122,7 +122,7 @@ export function SavedLocations() {
             <button
               onClick={save}
               disabled={busy}
-              className="flex flex-[2] items-center justify-center gap-1.5 rounded-full bg-gold py-2 text-sm font-bold text-ink disabled:opacity-60"
+              className="flex flex-[2] items-center justify-center gap-1.5 rounded-full bg-gold py-2 text-sm font-bold text-ink-gold disabled:opacity-60"
             >
               <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden />
               Save location

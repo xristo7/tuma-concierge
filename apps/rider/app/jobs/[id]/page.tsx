@@ -253,7 +253,7 @@ export default function JobDetailPage() {
                         type="button"
                         disabled={!draftSubstitute.trim()}
                         onClick={() => saveDraft(item)}
-                        className="w-full rounded-lg bg-gold py-1.5 text-xs font-bold text-ink disabled:opacity-50"
+                        className="w-full rounded-lg bg-gold py-1.5 text-xs font-bold text-ink-gold disabled:opacity-50"
                       >
                         Save change
                       </button>
@@ -278,7 +278,7 @@ export default function JobDetailPage() {
                 type="button"
                 disabled={busy}
                 onClick={sendBatch}
-                className="shrink-0 rounded-full bg-gold px-4 py-2 text-xs font-bold text-ink disabled:opacity-60"
+                className="shrink-0 rounded-full bg-gold px-4 py-2 text-xs font-bold text-ink-gold disabled:opacity-60"
               >
                 Send for approval
               </button>
@@ -361,7 +361,7 @@ export default function JobDetailPage() {
                   type="button"
                   disabled={busy || !feeDraft}
                   onClick={sendFeeProposal}
-                  className="flex-[2] rounded-lg bg-gold py-1.5 text-xs font-bold text-ink disabled:opacity-50"
+                  className="flex-[2] rounded-lg bg-gold py-1.5 text-xs font-bold text-ink-gold disabled:opacity-50"
                 >
                   Send to customer
                 </button>
@@ -423,7 +423,7 @@ export default function JobDetailPage() {
             <button
               type="submit"
               disabled={busy}
-              className="min-h-11 flex-1 rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
+              className="min-h-11 flex-1 rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
             >
               Start delivery
             </button>
@@ -443,7 +443,7 @@ export default function JobDetailPage() {
             <button
               disabled={busy}
               onClick={() => run(() => api.settleOrder(orderId))}
-              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
+              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
             >
               Settle & get paid
             </button>

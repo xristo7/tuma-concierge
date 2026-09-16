@@ -48,7 +48,7 @@ function InviteForm({ onInvited, onCancel }: { onInvited: () => void; onCancel: 
         </p>
         <button
           onClick={onInvited}
-          className="min-h-10 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink"
+          className="min-h-10 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold"
         >
           Done
         </button>
@@ -111,7 +111,7 @@ function InviteForm({ onInvited, onCancel }: { onInvited: () => void; onCancel: 
         ))}
       </div>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-      <button type="submit" disabled={busy} className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60">
+      <button type="submit" disabled={busy} className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60">
         {busy ? "Sending invite…" : "Send invite"}
       </button>
     </form>
@@ -288,7 +288,7 @@ export default function StaffPage() {
         {!showInvite && (
           <button
             onClick={() => setShowInvite(true)}
-            className="flex h-9 items-center gap-1.5 rounded-full bg-gold px-3.5 text-sm font-bold text-ink"
+            className="flex h-9 items-center gap-1.5 rounded-full bg-gold px-3.5 text-sm font-bold text-ink-gold"
           >
             <Plus className="h-4 w-4" strokeWidth={2.5} aria-hidden />
             Invite

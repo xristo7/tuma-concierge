@@ -166,7 +166,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
 
           <button
             onClick={goToLocation}
-            className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)]"
+            className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)]"
           >
             Next: delivery location
           </button>
@@ -211,7 +211,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
             <button
               onClick={submit}
               disabled={busy}
-              className="min-h-12 flex-[2] rounded-full bg-gold px-4 text-base font-bold text-ink shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+              className="min-h-12 flex-[2] rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
             >
               {busy ? "Sending…" : "Send list"}
             </button>

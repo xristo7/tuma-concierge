@@ -129,7 +129,7 @@ export function ChangePasswordPanel() {
       <button
         type="submit"
         disabled={busy}
-        className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
+        className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
       >
         {busy ? "Saving…" : "Update password"}
       </button>

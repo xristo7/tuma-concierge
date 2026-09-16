@@ -198,7 +198,7 @@ export function SaveLocationPrompt({ onClose, onSaved }: { onClose: () => void; 
                 type="button"
                 onClick={() => persist({ area: manualArea.trim() || undefined, address: manualAddress.trim() || undefined })}
                 disabled={busy || needsName}
-                className="flex-[2] rounded-full bg-gold py-2.5 text-sm font-bold text-ink disabled:opacity-60"
+                className="flex-[2] rounded-full bg-gold py-2.5 text-sm font-bold text-ink-gold disabled:opacity-60"
               >
                 {busy ? "Saving…" : "Save location"}
               </button>

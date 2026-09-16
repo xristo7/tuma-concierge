@@ -23,6 +23,7 @@ const config: Config = {
           DEFAULT: "rgb(var(--color-ink) / <alpha-value>)",
           500: "rgb(var(--color-ink-500) / <alpha-value>)",
           900: "rgb(var(--color-ink-900) / <alpha-value>)",
+          gold: "rgb(var(--color-ink-gold) / <alpha-value>)",
         },
         black: {
           DEFAULT: "rgb(var(--color-black) / <alpha-value>)",

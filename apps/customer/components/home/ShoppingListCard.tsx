@@ -22,7 +22,7 @@ export function ShoppingListCard({ onClick }: { onClick: () => void }) {
         <span className="block text-sm text-white/70">Items, groceries, errands</span>
       </span>
 
-      <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gold text-ink shadow-md">
+      <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gold text-ink-gold shadow-md">
         <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
       </span>
     </button>

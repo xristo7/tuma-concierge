@@ -103,7 +103,7 @@ export function VoiceNoteRecorder({
         <button
           type="button"
           onClick={startRecording}
-          className="mx-auto flex items-center gap-2 rounded-full bg-gold px-4 py-2.5 text-sm font-bold text-ink"
+          className="mx-auto flex items-center gap-2 rounded-full bg-gold px-4 py-2.5 text-sm font-bold text-ink-gold"
         >
           <Mic className="h-4 w-4" strokeWidth={2.25} aria-hidden />
           Record a voice note
@@ -146,7 +146,7 @@ export function VoiceNoteRecorder({
           <button
             type="button"
             onClick={useThisRecording}
-            className="rounded-full bg-gold px-4 py-1.5 text-xs font-bold text-ink"
+            className="rounded-full bg-gold px-4 py-1.5 text-xs font-bold text-ink-gold"
           >
             Use this recording
           </button>

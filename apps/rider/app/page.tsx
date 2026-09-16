@@ -163,7 +163,7 @@ export default function JobsHomePage() {
                   <button
                     onClick={() => claimJob(job.id)}
                     disabled={claimingId === job.id}
-                    className="min-h-10 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink disabled:opacity-60"
+                    className="min-h-10 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
                   >
                     {claimingId === job.id ? "Claiming…" : "Claim job"}
                   </button>
@@ -172,7 +172,7 @@ export default function JobsHomePage() {
                     onClick={() => applyToJob(job.id)}
                     disabled={claimingId === job.id || job.applied}
                     className={`min-h-10 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
-                      job.applied ? "bg-[rgb(var(--surface-muted))] text-ink-500" : "bg-gold text-ink"
+                      job.applied ? "bg-[rgb(var(--surface-muted))] text-ink-500" : "bg-gold text-ink-gold"
                     }`}
                   >
                     {claimingId === job.id ? "Applying…" : job.applied ? "Applied ✓" : "Apply"}
