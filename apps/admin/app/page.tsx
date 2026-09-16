@@ -55,7 +55,7 @@ export default function OverviewPage() {
       {/* The single most dangerous thing about this deployment is someone
           treating a wallet balance or a GMV figure as real money while
           payments are mocked. It gets a banner, not a line item. */}
-      {!integrations.mobileMoney.live && (
+      {!integrations.mobileMoney.collection.live && (
         <section
           role="alert"
           className="flex items-start gap-2.5 rounded-xl border-2 border-red-500 bg-red-50 px-3.5 py-3 dark:bg-red-950/40"
@@ -101,17 +101,19 @@ export default function OverviewPage() {
 
       <section className="home-card space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Integrations</h2>
-        <div className="flex items-center gap-2 text-sm">
-          {integrations.mobileMoney.live ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-green" strokeWidth={2} aria-hidden />
-          ) : (
-            <span className="h-4 w-4 shrink-0 rounded-full bg-gold/70" aria-hidden />
-          )}
-          <span className="text-ink">
-            Mobile money ({integrations.mobileMoney.aggregator}, MTN MoMo + Airtel Money) —{" "}
-            {integrations.mobileMoney.live ? "live" : "demo / simulated"}
-          </span>
-        </div>
+        {integrations.mobileMoney.providers.map((provider) => (
+          <div key={provider.key} className="flex items-center gap-2 text-sm">
+            {provider.configured ? (
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-green" strokeWidth={2} aria-hidden />
+            ) : (
+              <span className="h-4 w-4 shrink-0 rounded-full bg-gold/70" aria-hidden />
+            )}
+            <span className="text-ink">
+              {provider.displayName} — {provider.configured ? "connected" : "demo / simulated"}
+              {provider.active ? (provider.priority === 0 ? " · primary" : " · fallback") : " · off"}
+            </span>
+          </div>
+        ))}
         <div className="flex items-center gap-2 text-sm">
           {integrations.storage.configured ? (
             <CheckCircle2 className="h-4 w-4 shrink-0 text-green" strokeWidth={2} aria-hidden />

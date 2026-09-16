@@ -1,0 +1,165 @@
+/**
+ * Customer wallet ledger — the one place balance actually moves, so every
+ * credit/debit is both applied to users.wallet_balance and recorded in
+ * wallet_ledger in the same call. The running balance is a cache; the
+ * ledger is the source of truth an admin (or a support dispute) can always
+ * reconstruct it from.
+ */
+
+import { db } from "../db/client.js";
+import { newId } from "../lib/ids.js";
+import { getWalletSettings } from "../lib/settings.js";
+
+type Row = Record<string, unknown>;
+
+export type LedgerType = "topup" | "order_payment" | "refund" | "adjustment";
+
+export async function getWalletCap(userId: string): Promise<{ cap: number; verified: boolean }> {
+  const res = await db.execute({
+    sql: "SELECT phone_verified_at, email_verified_at FROM users WHERE id = ?",
+    args: [userId],
+  });
+  const row = res.rows[0] as Row | undefined;
+  const verified = !!(row?.phone_verified_at || row?.email_verified_at);
+  const settings = await getWalletSettings();
+  return { cap: verified ? settings.verifiedCap : settings.unverifiedCap, verified };
+}
+
+async function recordLedgerEntry(input: {
+  userId: string;
+  type: LedgerType;
+  amount: number;
+  balanceAfter: number;
+  orderId?: string;
+  topupId?: string;
+  note?: string;
+  actorId?: string;
+}): Promise<void> {
+  await db.execute({
+    sql: `INSERT INTO wallet_ledger (id, user_id, type, amount, balance_after, order_id, topup_id, note, actor_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [
+      newId("wl"),
+      input.userId,
+      input.type,
+      input.amount,
+      input.balanceAfter,
+      input.orderId ?? null,
+      input.topupId ?? null,
+      input.note ?? null,
+      input.actorId ?? null,
+    ],
+  });
+}
+
+/** Always succeeds (crediting has no failure mode besides a DB error) —
+ * returns the balance afterward. */
+export async function creditWallet(
+  userId: string,
+  amount: number,
+  info: { type: LedgerType; orderId?: string; topupId?: string; note?: string; actorId?: string },
+): Promise<number> {
+  await db.execute({
+    sql: "UPDATE users SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE id = ?",
+    args: [amount, userId],
+  });
+  const res = await db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [userId] });
+  const balance = Number((res.rows[0] as Row)?.wallet_balance ?? 0);
+  await recordLedgerEntry({ userId, amount, balanceAfter: balance, ...info });
+  return balance;
+}
+
+/**
+ * Debits iff the balance covers it — the WHERE clause makes the check and
+ * the write atomic in one statement, so two requests racing to spend the
+ * same balance can't both succeed (the loser's UPDATE simply matches zero
+ * rows). Returns the balance afterward, or null if there wasn't enough.
+ */
+export async function debitWallet(
+  userId: string,
+  amount: number,
+  info: { type: LedgerType; orderId?: string; note?: string; actorId?: string },
+): Promise<number | null> {
+  const res = await db.execute({
+    sql: "UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = datetime('now') WHERE id = ? AND wallet_balance >= ?",
+    args: [amount, userId, amount],
+  });
+  if ((res.rowsAffected ?? 0) === 0) return null;
+  const balanceRes = await db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [userId] });
+  const balance = Number((balanceRes.rows[0] as Row)?.wallet_balance ?? 0);
+  await recordLedgerEntry({ userId, amount: -amount, balanceAfter: balance, ...info });
+  return balance;
+}
+
+/**
+ * Pays for an order directly out of the customer's wallet — debits the
+ * ledger and, in the same call, inserts a `payments` row exactly like a
+ * successful mobile money collection would (provider "wallet", already
+ * `status = 'successful'` since there's no external gateway round trip to
+ * wait on). That's what lets this slot into the existing escrow/settle
+ * accounting — POST /orders/:id/settle sums successful collections
+ * regardless of provider, so a wallet-funded order pays the rider out the
+ * same way an escrow one does, with no changes needed there.
+ *
+ * Returns the new payments.id, or null if the balance was insufficient.
+ */
+export async function payFromWallet(input: { userId: string; amount: number; orderId: string; note?: string }): Promise<string | null> {
+  const balance = await debitWallet(input.userId, input.amount, {
+    type: "order_payment",
+    orderId: input.orderId,
+    note: input.note,
+  });
+  if (balance === null) return null;
+
+  const paymentId = newId("pay");
+  await db.execute({
+    sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, amount, currency, status)
+          VALUES (?, ?, 'collection', 'wallet', NULL, ?, 'UGX', 'successful')`,
+    args: [paymentId, input.orderId, input.amount],
+  });
+  return paymentId;
+}
+
+/**
+ * Admin-issued refund of an order's collected payment(s) back to the
+ * customer's wallet — the confirmed shape for "refunds from cancelled
+ * orders return to the wallet" without a full self-service cancellation
+ * flow (which doesn't exist in the app yet; this is a deliberate scope
+ * boundary, see the wallet feature's design notes). Refunds at most what
+ * was actually collected for the order, and only once.
+ */
+export async function refundOrderToWallet(input: {
+  orderId: string;
+  customerId: string;
+  actorId: string;
+  note?: string;
+}): Promise<{ refunded: number } | { error: "nothing_to_refund" | "already_refunded" }> {
+  const [collectedRes, refundedRes] = await Promise.all([
+    db.execute({
+      sql: "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE order_id = ? AND type = 'collection' AND status = 'successful'",
+      args: [input.orderId],
+    }),
+    db.execute({
+      sql: "SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE order_id = ? AND type = 'refund' AND status = 'successful'",
+      args: [input.orderId],
+    }),
+  ]);
+  const collected = Number((collectedRes.rows[0] as Row)?.total ?? 0);
+  const alreadyRefunded = Number((refundedRes.rows[0] as Row)?.total ?? 0);
+  const refundable = collected - alreadyRefunded;
+  if (collected === 0) return { error: "nothing_to_refund" };
+  if (refundable <= 0) return { error: "already_refunded" };
+
+  await db.execute({
+    sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, amount, currency, status)
+          VALUES (?, ?, 'refund', 'wallet', NULL, ?, 'UGX', 'successful')`,
+    args: [newId("pay"), input.orderId, refundable],
+  });
+  await creditWallet(input.customerId, refundable, {
+    type: "refund",
+    orderId: input.orderId,
+    note: input.note ?? "Order refund",
+    actorId: input.actorId,
+  });
+  return { refunded: refundable };
+}

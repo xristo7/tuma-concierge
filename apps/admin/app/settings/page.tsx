@@ -1,32 +1,45 @@
 "use client";
 
-import { MATCHING_MODE_DESCRIPTIONS, MATCHING_MODE_LABELS, type MatchingMode } from "@tuma/shared";
-import { Route, Settings as SettingsIcon } from "lucide-react";
+import { hasPermission, MATCHING_MODE_DESCRIPTIONS, MATCHING_MODE_LABELS, type MatchingMode, type PaymentProviderIdentity, type PaymentProviderInfo } from "@tuma/shared";
+import { CreditCard, Route, Settings as SettingsIcon, Wallet as WalletIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
+import { useAuth } from "../../lib/auth-context";
 
 const ALL_MODES: MatchingMode[] = ["first_to_claim", "nearest_window", "customer_selects"];
+const ALL_PROVIDERS: PaymentProviderIdentity[] = ["yo", "flutterwave"];
 
 export default function SettingsPage() {
+  const { user } = useAuth();
+  const canManagePayments = hasPermission(user?.adminRole ?? null, "payments.manage");
   const [deliveryRatePerKm, setDeliveryRatePerKm] = useState("");
   const [serviceRangeKm, setServiceRangeKm] = useState("");
   const [enabledModes, setEnabledModes] = useState<MatchingMode[]>(["first_to_claim"]);
   const [nearestWindowSeconds, setNearestWindowSeconds] = useState("");
   const [maxAssignmentMinutes, setMaxAssignmentMinutes] = useState("");
+  const [activeProviders, setActiveProviders] = useState<PaymentProviderIdentity[]>(["yo"]);
+  const [providerInfo, setProviderInfo] = useState<PaymentProviderInfo[]>([]);
+  const [walletUnverifiedCap, setWalletUnverifiedCap] = useState("");
+  const [walletVerifiedCap, setWalletVerifiedCap] = useState("");
+  const [walletMaxTopup, setWalletMaxTopup] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    api
-      .getSettings()
-      .then((res) => {
-        setDeliveryRatePerKm(String(res.settings.deliveryRatePerKm));
-        setServiceRangeKm(String(res.settings.serviceRangeKm));
-        setEnabledModes(res.settings.enabledModes);
-        setNearestWindowSeconds(String(res.settings.nearestWindowSeconds));
-        setMaxAssignmentMinutes(String(res.settings.maxAssignmentMinutes));
+    Promise.all([api.getSettings(), api.adminIntegrations()])
+      .then(([settingsRes, integrationsRes]) => {
+        setDeliveryRatePerKm(String(settingsRes.settings.deliveryRatePerKm));
+        setServiceRangeKm(String(settingsRes.settings.serviceRangeKm));
+        setEnabledModes(settingsRes.settings.enabledModes);
+        setNearestWindowSeconds(String(settingsRes.settings.nearestWindowSeconds));
+        setMaxAssignmentMinutes(String(settingsRes.settings.maxAssignmentMinutes));
+        setActiveProviders(settingsRes.settings.paymentsActiveProviders);
+        setWalletUnverifiedCap(String(settingsRes.settings.walletUnverifiedCap));
+        setWalletVerifiedCap(String(settingsRes.settings.walletVerifiedCap));
+        setWalletMaxTopup(String(settingsRes.settings.walletMaxTopup));
+        setProviderInfo(integrationsRes.integrations.mobileMoney.providers);
       })
       .catch((err) => setError(errorMessage(err)))
       .finally(() => setLoading(false));
@@ -34,6 +47,16 @@ export default function SettingsPage() {
 
   function toggleMode(mode: MatchingMode) {
     setEnabledModes((prev) => (prev.includes(mode) ? prev.filter((m) => m !== mode) : [...prev, mode]));
+  }
+
+  function toggleProvider(provider: PaymentProviderIdentity) {
+    setActiveProviders((prev) =>
+      prev.includes(provider) ? prev.filter((p) => p !== provider) : [...prev, provider],
+    );
+  }
+
+  function makePrimary(provider: PaymentProviderIdentity) {
+    setActiveProviders((prev) => [provider, ...prev.filter((p) => p !== provider)]);
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -48,12 +71,28 @@ export default function SettingsPage() {
         enabledModes: enabledModes.length > 0 ? enabledModes : ["first_to_claim"],
         nearestWindowSeconds: Number(nearestWindowSeconds),
         maxAssignmentMinutes: Number(maxAssignmentMinutes),
+        // Omitted entirely (not just disabled inputs) for an admin without
+        // payments.manage — the API rejects the whole request if these are
+        // present without it, and this admin may still need to save the
+        // unrelated fields above.
+        ...(canManagePayments
+          ? {
+              paymentsActiveProviders: activeProviders.length > 0 ? activeProviders : (["yo"] as PaymentProviderIdentity[]),
+              walletUnverifiedCap: Number(walletUnverifiedCap),
+              walletVerifiedCap: Number(walletVerifiedCap),
+              walletMaxTopup: Number(walletMaxTopup),
+            }
+          : {}),
       });
       setDeliveryRatePerKm(String(res.settings.deliveryRatePerKm));
       setServiceRangeKm(String(res.settings.serviceRangeKm));
       setEnabledModes(res.settings.enabledModes);
       setNearestWindowSeconds(String(res.settings.nearestWindowSeconds));
       setMaxAssignmentMinutes(String(res.settings.maxAssignmentMinutes));
+      setActiveProviders(res.settings.paymentsActiveProviders);
+      setWalletUnverifiedCap(String(res.settings.walletUnverifiedCap));
+      setWalletVerifiedCap(String(res.settings.walletVerifiedCap));
+      setWalletMaxTopup(String(res.settings.walletMaxTopup));
       setSaved(true);
     } catch (err) {
       setError(errorMessage(err));
@@ -95,6 +134,124 @@ export default function SettingsPage() {
               </p>
             </div>
           </section>
+
+          {canManagePayments && (
+          <>
+          <section className="home-card space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+                <CreditCard className="h-4.5 w-4.5" strokeWidth={1.75} aria-hidden />
+              </span>
+              <h2 className="text-sm font-semibold text-ink">Payments</h2>
+            </div>
+            <p className="text-xs text-ink-500">
+              Turn on one or both aggregators. With both on, the first is used until it has no working API
+              keys, then the second takes over automatically — a switch never happens mid-payment.
+            </p>
+            <div className="space-y-2">
+              {ALL_PROVIDERS.map((provider) => {
+                const info = providerInfo.find((p) => p.key === provider);
+                const isActive = activeProviders.includes(provider);
+                const isPrimary = isActive && activeProviders[0] === provider;
+                return (
+                  <div key={provider} className="rounded-xl border border-[var(--border-faint)] p-3">
+                    <label className="flex items-start gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={isActive}
+                        onChange={() => toggleProvider(provider)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-gold"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-semibold text-ink">{info?.displayName ?? provider}</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                              info?.configured ? "bg-green/15 text-green" : "bg-[rgb(var(--surface-muted))] text-ink-500"
+                            }`}
+                          >
+                            {info?.configured ? "API keys set" : "No API keys yet"}
+                          </span>
+                          {isPrimary && (
+                            <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[11px] font-semibold text-gold">
+                              Primary
+                            </span>
+                          )}
+                        </span>
+                        {!info?.configured && (
+                          <span className="mt-0.5 block text-xs text-ink-500">
+                            Turning this on won&apos;t take effect until its secret keys are added.
+                          </span>
+                        )}
+                        {isActive && !isPrimary && (
+                          <button
+                            type="button"
+                            onClick={() => makePrimary(provider)}
+                            className="mt-1 text-xs font-semibold text-gold"
+                          >
+                            Make primary
+                          </button>
+                        )}
+                      </span>
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="home-card space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+                <WalletIcon className="h-4.5 w-4.5" strokeWidth={1.75} aria-hidden />
+              </span>
+              <h2 className="text-sm font-semibold text-ink">Customer wallet limits</h2>
+            </div>
+            <p className="text-xs text-ink-500">
+              Closed-loop store credit — customers top up and spend it on orders, no cash-out. Balance is capped
+              by verification, the same way mobile money limits unverified accounts.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-ink-500" htmlFor="walletUnverified">
+                  Unverified cap (UGX)
+                </label>
+                <input
+                  id="walletUnverified"
+                  inputMode="numeric"
+                  value={walletUnverifiedCap}
+                  onChange={(e) => setWalletUnverifiedCap(e.target.value.replace(/[^\d]/g, ""))}
+                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-ink-500" htmlFor="walletVerified">
+                  Verified cap (UGX)
+                </label>
+                <input
+                  id="walletVerified"
+                  inputMode="numeric"
+                  value={walletVerifiedCap}
+                  onChange={(e) => setWalletVerifiedCap(e.target.value.replace(/[^\d]/g, ""))}
+                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <label className="text-xs font-semibold text-ink-500" htmlFor="walletMaxTopup">
+                  Max amount per top-up (UGX)
+                </label>
+                <input
+                  id="walletMaxTopup"
+                  inputMode="numeric"
+                  value={walletMaxTopup}
+                  onChange={(e) => setWalletMaxTopup(e.target.value.replace(/[^\d]/g, ""))}
+                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                />
+              </div>
+            </div>
+          </section>
+          </>
+          )}
 
           <section className="home-card space-y-3">
             <div className="flex items-center gap-2">

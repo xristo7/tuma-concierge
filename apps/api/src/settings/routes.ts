@@ -1,16 +1,38 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { logActivity } from "../admin/activity.js";
-import { requirePermission } from "../admin/permissions.js";
+import { hasPermission, requirePermission } from "../admin/permissions.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { clientIp } from "../lib/ratelimit.js";
-import { getDeliverySettings, getMatchingSettings, setMatchingModesEnabled, setSetting } from "../lib/settings.js";
+import {
+  getActiveProviders,
+  getDeliverySettings,
+  getMatchingSettings,
+  getWalletSettings,
+  setActiveProviders,
+  setMatchingModesEnabled,
+  setSetting,
+  type PaymentProviderIdentity,
+} from "../lib/settings.js";
+import { paymentsIntegrationStatus } from "../payments/service.js";
 
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching] = await Promise.all([getDeliverySettings(), getMatchingSettings()]);
-  return { ...delivery, ...matching };
+  const [delivery, matching, activeProviders, wallet] = await Promise.all([
+    getDeliverySettings(),
+    getMatchingSettings(),
+    getActiveProviders(),
+    getWalletSettings(),
+  ]);
+  return {
+    ...delivery,
+    ...matching,
+    paymentsActiveProviders: activeProviders,
+    walletUnverifiedCap: wallet.unverifiedCap,
+    walletVerifiedCap: wallet.verifiedCap,
+    walletMaxTopup: wallet.maxTopup,
+  };
 }
 
 /** Any signed-in user: the customer app needs the current rate/range (to show
@@ -28,7 +50,13 @@ const updateSchema = z.object({
   enabledModes: z.array(z.enum(["first_to_claim", "nearest_window", "customer_selects"])).optional(),
   nearestWindowSeconds: z.number().int().positive().max(3600).optional(),
   maxAssignmentMinutes: z.number().int().positive().max(120).optional(),
+  paymentsActiveProviders: z.array(z.enum(["yo", "flutterwave"])).min(1).max(2).optional(),
+  walletUnverifiedCap: z.number().int().positive().max(100_000_000).optional(),
+  walletVerifiedCap: z.number().int().positive().max(100_000_000).optional(),
+  walletMaxTopup: z.number().int().positive().max(100_000_000).optional(),
 });
+
+const PAYMENTS_FIELDS = ["paymentsActiveProviders", "walletUnverifiedCap", "walletVerifiedCap", "walletMaxTopup"] as const;
 
 settingsRoutes.put(
   "/admin/settings",
@@ -39,6 +67,13 @@ settingsRoutes.put(
     const user = c.get("user");
     const parsed = updateSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+    // Which payment aggregator moves real money is a bigger blast radius
+    // than delivery pricing — require the more specific permission too,
+    // rather than letting anyone with generic settings.manage flip it.
+    if (PAYMENTS_FIELDS.some((f) => parsed.data[f] != null) && !hasPermission(user.adminRole, "payments.manage")) {
+      return c.json({ error: "forbidden", message: "Requires the payments.manage permission" }, 403);
+    }
 
     const before = await fullSettings();
 
@@ -56,6 +91,18 @@ settingsRoutes.put(
     }
     if (parsed.data.maxAssignmentMinutes != null) {
       await setSetting("max_assignment_minutes", String(parsed.data.maxAssignmentMinutes));
+    }
+    if (parsed.data.paymentsActiveProviders != null) {
+      await setActiveProviders(parsed.data.paymentsActiveProviders as PaymentProviderIdentity[]);
+    }
+    if (parsed.data.walletUnverifiedCap != null) {
+      await setSetting("wallet_unverified_cap", String(parsed.data.walletUnverifiedCap));
+    }
+    if (parsed.data.walletVerifiedCap != null) {
+      await setSetting("wallet_verified_cap", String(parsed.data.walletVerifiedCap));
+    }
+    if (parsed.data.walletMaxTopup != null) {
+      await setSetting("wallet_max_topup", String(parsed.data.walletMaxTopup));
     }
 
     const after = await fullSettings();

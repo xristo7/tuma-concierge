@@ -156,6 +156,10 @@ export type DeliverySettings = {
   enabledModes: MatchingMode[];
   nearestWindowSeconds: number;
   maxAssignmentMinutes: number;
+  paymentsActiveProviders: PaymentProviderIdentity[];
+  walletUnverifiedCap: number;
+  walletVerifiedCap: number;
+  walletMaxTopup: number;
 };
 
 export type OrderEvent = {
@@ -357,7 +361,13 @@ export type AdminStats = {
 };
 
 export type IntegrationsStatus = {
-  mobileMoney: { provider: string; live: boolean; aggregator: string; networks: string[] };
+  mobileMoney: {
+    activeProviders: PaymentProviderIdentity[];
+    providers: PaymentProviderInfo[];
+    collection: { provider: string; live: boolean };
+    disbursement: { provider: string; live: boolean };
+    networks: string[];
+  };
   storage: { configured: boolean };
 };
 
@@ -432,6 +442,58 @@ export type WalletWithdrawal = {
 export type Wallet = {
   balance: number;
   withdrawals: WalletWithdrawal[];
+};
+
+/** A customer's own top-up/spend history entry — the audit trail behind
+ * their wallet_balance (see apps/api/src/wallet/service.ts). */
+export type WalletLedgerEntry = {
+  id: string;
+  user_id: string;
+  type: "topup" | "order_payment" | "refund" | "adjustment";
+  amount: number;
+  balance_after: number;
+  order_id: string | null;
+  topup_id: string | null;
+  note: string | null;
+  created_at: string;
+};
+
+/** One top-up attempt — mirrors WalletWithdrawal's shape on the rider side. */
+export type WalletTopup = {
+  id: string;
+  user_id: string;
+  amount: number;
+  provider: string;
+  provider_ref: string | null;
+  method: "mobile_money" | "card";
+  msisdn: string | null;
+  network: string | null;
+  status: "pending" | "successful" | "failed";
+  created_at: string;
+  updated_at: string;
+};
+
+/** Closed-loop store credit — top up and spend, no cash-out. Balance is
+ * capped by verification tier (see PaymentProviderInfo/wallet settings). */
+export type CustomerWallet = {
+  balance: number;
+  cap: number;
+  verified: boolean;
+  ledger: WalletLedgerEntry[];
+};
+
+/** Which payment aggregator identity — the underlying provider a payment
+ * settled through, independent of live-vs-simulated. */
+export type PaymentProviderIdentity = "yo" | "flutterwave";
+
+export type PaymentProviderInfo = {
+  key: PaymentProviderIdentity;
+  displayName: string;
+  configured: boolean;
+  supportsDisbursement: boolean;
+  active: boolean;
+  /** Position in the admin's priority order, or -1 if not active. */
+  priority: number;
 };
 
 export type CreateListBody = {

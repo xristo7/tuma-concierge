@@ -11,6 +11,7 @@ import { settingsRoutes } from "./settings/routes.js";
 import { userRoutes } from "./users/routes.js";
 import { verifyRoutes } from "./verify/routes.js";
 import { voiceRoutes } from "./voice/routes.js";
+import { walletRoutes } from "./wallet/routes.js";
 
 /** Hono app shared by the Node entry (local dev) and the Cloudflare Worker entry. */
 const app = new Hono();
@@ -119,6 +120,10 @@ app.get("/v1", (c) =>
       "POST /v1/push/unsubscribe",
       "GET /v1/payments/:id/refresh",
       "POST /v1/payments/yo/callback",
+      "POST /v1/payments/flutterwave/callback",
+      "GET /v1/wallet",
+      "POST /v1/wallet/topup",
+      "GET /v1/wallet/topups/:id/refresh",
       "POST /v1/riders/apply",
       "POST /v1/riders/status",
       "GET /v1/riders/me",
@@ -137,6 +142,7 @@ app.get("/v1", (c) =>
       "GET /v1/admin/integrations",
       "GET /v1/admin/customers",
       "GET /v1/admin/customers/:id",
+      "POST /v1/admin/orders/:id/refund-to-wallet",
       "GET /v1/admin/orders",
       "POST /v1/admin/users/:id/status",
       "GET /v1/admin/staff",
@@ -166,6 +172,7 @@ app.route("/v1", riderRoutes);
 app.route("/v1", userRoutes);
 app.route("/v1", locationRoutes);
 app.route("/v1", settingsRoutes);
+app.route("/v1", walletRoutes);
 // adminRoutes' admin gate is scoped to /admin/* (see admin/routes.ts), so
 // mount order here is no longer load-bearing — it used to be registered as
 // "*" on this shared /v1 router, which meant anything mounted after it

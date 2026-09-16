@@ -167,8 +167,16 @@ export default function OrderDetailPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msisdn, setMsisdn] = useState("");
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const detectedNetwork = useMemo(() => detectMobileMoneyNetwork(msisdn), [msisdn]);
   const matching = useRef(false);
+
+  useEffect(() => {
+    api
+      .getWallet()
+      .then((w) => setWalletBalance(w.balance))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     const res = await api.getOrder(orderId);
@@ -238,11 +246,17 @@ export default function OrderDetailPage() {
     }
   }
 
-  async function doFund() {
+  async function doFund(useWallet = false) {
     setBusy(true);
     setError(null);
     try {
-      await api.fundOrder(orderId, detail?.order.payment_rail === "escrow" ? { msisdn } : {});
+      const input =
+        detail?.order.payment_rail === "escrow" ? (useWallet ? { useWallet: true } : { msisdn }) : {};
+      const res = await api.fundOrder(orderId, input);
+      if (res.redirectUrl) {
+        window.location.href = res.redirectUrl;
+        return;
+      }
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -419,38 +433,50 @@ export default function OrderDetailPage() {
             <>
               <p className="text-sm text-ink-500">A rider is ready. Pay to send your {order.type === "parcel" ? "parcel" : "list"}.</p>
               {order.payment_rail === "escrow" ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    doFund();
-                  }}
-                  className="space-y-2"
-                >
-                  <div className="space-y-1">
-                    <input
-                      required
-                      value={msisdn}
-                      onChange={(e) => setMsisdn(e.target.value)}
-                      placeholder="Mobile money number (e.g. 0772345678)"
-                      className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-                    />
-                    {detectedNetwork && (
-                      <p className="px-1 text-xs font-semibold text-ink-500">
-                        {mobileMoneyNetworkLabel(detectedNetwork)} detected
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={busy}
-                    className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+                <div className="space-y-2">
+                  {walletBalance != null && walletBalance >= (order.final_total ?? order.estimated_total ?? 0) && (
+                    <button
+                      type="button"
+                      onClick={() => doFund(true)}
+                      disabled={busy}
+                      className="min-h-12 w-full rounded-full border-2 border-gold px-4 text-base font-bold text-ink disabled:opacity-60"
+                    >
+                      Pay from wallet ({formatUgx(walletBalance)} available)
+                    </button>
+                  )}
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      doFund(false);
+                    }}
+                    className="space-y-2"
                   >
-                    Pay via {mobileMoneyNetworkLabel(detectedNetwork)}
-                  </button>
-                </form>
+                    <div className="space-y-1">
+                      <input
+                        required
+                        value={msisdn}
+                        onChange={(e) => setMsisdn(e.target.value)}
+                        placeholder="Mobile money number (e.g. 0772345678)"
+                        className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                      />
+                      {detectedNetwork && (
+                        <p className="px-1 text-xs font-semibold text-ink-500">
+                          {mobileMoneyNetworkLabel(detectedNetwork)} detected
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={busy}
+                      className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+                    >
+                      Pay via {mobileMoneyNetworkLabel(detectedNetwork)}
+                    </button>
+                  </form>
+                </div>
               ) : (
                 <button
-                  onClick={doFund}
+                  onClick={() => doFund()}
                   disabled={busy}
                   className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
                 >

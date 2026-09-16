@@ -11,6 +11,7 @@
  */
 
 import { newId } from "../../lib/ids.js";
+import type { GatewayChargeInput, GatewayResult, PaymentGatewayAdapter } from "../gateway.js";
 import type { YoDepositWithdrawInput, YoResult, YoTransactionStatus } from "./wire.js";
 
 const SETTLE_AFTER_MS = 6000;
@@ -42,3 +43,35 @@ export function mockCheckStatus(transactionReference: string, createdAt: string)
   const roll = stableHash(transactionReference) % 100;
   return roll < SIMULATED_FAILURE_RATE * 100 ? "FAILED" : "SUCCEEDED";
 }
+
+function toGatewayInput(input: GatewayChargeInput): YoDepositWithdrawInput {
+  return {
+    referenceId: input.referenceId,
+    msisdn: input.msisdn ?? "",
+    network: input.network ?? "mtn_momo",
+    amount: input.amount,
+    narrative: input.narrative,
+  };
+}
+
+export const mockYoAdapter: PaymentGatewayAdapter = {
+  key: "yo_mock",
+  displayName: "Yo! Payments (simulated)",
+  isConfigured: () => true,
+  supportsDisbursement: true,
+  // Matches the real adapter: still worth validating the phone number
+  // looks like a real MTN/Airtel Uganda number even in simulation, rather
+  // than silently letting a typo through just because nothing's live.
+  requiresNetwork: true,
+  async depositFunds(input): Promise<GatewayResult> {
+    const result = await mockDepositFunds(toGatewayInput(input));
+    return { status: result.status, transactionReference: result.transactionReference };
+  },
+  async withdrawFunds(input): Promise<GatewayResult> {
+    const result = await mockWithdrawFunds(toGatewayInput(input));
+    return { status: result.status, transactionReference: result.transactionReference };
+  },
+  async checkStatus(transactionReference, createdAt): Promise<GatewayResult> {
+    return { status: mockCheckStatus(transactionReference, createdAt), transactionReference };
+  },
+};

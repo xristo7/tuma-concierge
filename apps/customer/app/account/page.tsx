@@ -1,7 +1,7 @@
 "use client";
 
 import { MATCHING_MODE_DESCRIPTIONS, MATCHING_MODE_LABELS, type MatchingMode } from "@tuma/shared";
-import { LogOut, Shield } from "lucide-react";
+import { LogOut, Shield, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
@@ -84,6 +84,14 @@ export default function AccountPage() {
           <span className="block text-sm text-ink-500">{user?.phone}</span>
         </span>
       </section>
+
+      <Link
+        href="/wallet"
+        className="home-card flex items-center gap-3 !rounded-2xl !py-3 text-sm font-semibold text-ink"
+      >
+        <Wallet className="h-5 w-5 text-gold" strokeWidth={1.75} aria-hidden />
+        Wallet
+      </Link>
 
       <MatchingPreference />
 

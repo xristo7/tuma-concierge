@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { db } from "../db/client.js";
 import { requireAuth } from "../auth/middleware.js";
 import { newId } from "../lib/ids.js";
+import { verifyWebhookSignature } from "./flutterwave/wire.js";
 import { checkPaymentStatus } from "./service.js";
 
 export const paymentRoutes = new Hono();
@@ -151,6 +152,41 @@ paymentRoutes.post("/payments/yo/callback", async (c) => {
     return c.json({ received: true, matched: true, changed });
   } catch (err) {
     console.error("Yo! callback status check failed:", err);
+    return c.json({ received: true, matched: true, changed: false });
+  }
+});
+
+/**
+ * Real Flutterwave webhook target (`https://api.tumaffe.online/v1/payments/flutterwave/callback`
+ * registered in the Flutterwave dashboard, not a request param). Same two
+ * rules as the Yo! callback above: the `verif-hash` header has to match
+ * the configured secret, and the body only tells us *which* transaction to
+ * re-check — the status itself is always read back from Flutterwave's own
+ * verify endpoint, never trusted from the webhook payload directly.
+ */
+paymentRoutes.post("/payments/flutterwave/callback", async (c) => {
+  if (!verifyWebhookSignature(c.req.header("verif-hash"))) {
+    console.warn("Rejected unauthenticated Flutterwave callback from", c.req.header("cf-connecting-ip") ?? "unknown");
+    return c.json({ error: "unauthorized" }, 401);
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { data?: { tx_ref?: string } };
+  const reference = (body.data?.tx_ref ?? "").trim();
+  if (!reference) return c.json({ received: true, matched: false });
+
+  const res = await db.execute({
+    sql: "SELECT * FROM payments WHERE provider_ref = ? OR id = ? LIMIT 1",
+    args: [reference, reference],
+  });
+  const payment = res.rows[0] as Row | undefined;
+  if (!payment) return c.json({ received: true, matched: false });
+  if (payment.status !== "pending") return c.json({ received: true, matched: true, changed: false });
+
+  try {
+    const changed = await applyPaymentStatus(payment, "flutterwave-callback");
+    return c.json({ received: true, matched: true, changed });
+  } catch (err) {
+    console.error("Flutterwave callback status check failed:", err);
     return c.json({ received: true, matched: true, changed: false });
   }
 });

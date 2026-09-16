@@ -12,6 +12,7 @@ import type {
   ChatThreadDetail,
   CreateListBody,
   CreateListResponse,
+  CustomerWallet,
   DeliverySettings,
   FailedPayment,
   IntegrationsStatus,
@@ -23,12 +24,14 @@ import type {
   OrderRow,
   OrderType,
   Payment,
+  PaymentProviderIdentity,
   Rider,
   RiderApplicant,
   SavedLocation,
   StaffMember,
   UserStatus,
   Wallet,
+  WalletTopup,
 } from "./domain.js";
 
 export type CreateApiClientOptions = {
@@ -256,11 +259,14 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async cancelOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/cancel`, { method: "POST" });
     },
-    async fundOrder(orderId: string, input: { msisdn?: string } = {}) {
-      return request<{ order: OrderRow; payment?: { id: string; status: string } }>(
-        `/v1/orders/${orderId}/fund`,
-        { method: "POST", body: JSON.stringify(input) },
-      );
+    async fundOrder(orderId: string, input: { msisdn?: string; useWallet?: boolean } = {}) {
+      return request<{
+        order: OrderRow;
+        payment?: { id: string; status: string; network: string | null };
+        redirectUrl?: string;
+        funded?: boolean;
+        rail?: string;
+      }>(`/v1/orders/${orderId}/fund`, { method: "POST", body: JSON.stringify(input) });
     },
     async proposeSubstitution(
       orderId: string,
@@ -489,6 +495,24 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async deleteLocation(id: string) {
       return request<{ ok: true }>(`/v1/locations/${id}`, { method: "DELETE" });
+    },
+
+    // Customer wallet — closed-loop store credit (top up, spend, no cash-out).
+    async getWallet() {
+      return request<CustomerWallet>("/v1/wallet");
+    },
+    async topUpWallet(input: { amount: number; msisdn?: string }) {
+      return request<{ topupId: string; status: "pending"; network: string | null; redirectUrl?: string }>(
+        "/v1/wallet/topup",
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    async refreshTopup(id: string) {
+      return request<{ topup: WalletTopup }>(`/v1/wallet/topups/${id}/refresh`);
+    },
+    /** Admin: refunds an order's collected payment back to the customer's wallet. */
+    async adminRefundToWallet(orderId: string) {
+      return request<{ ok: true; refunded: number }>(`/v1/admin/orders/${orderId}/refund-to-wallet`, { method: "POST" });
     },
 
     // Delivery pricing settings (rate per km, service range) — public read, admin write.

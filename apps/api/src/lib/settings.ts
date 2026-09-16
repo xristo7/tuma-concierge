@@ -21,6 +21,19 @@ const DEFAULTS = {
    * nobody's been assigned by this long after the order was created, the
    * app auto-assigns rather than leaving the customer waiting indefinitely. */
   max_assignment_minutes: "5",
+  /** Which payment aggregators are on offer, in priority order — the first
+   * entry is primary, a second entry is the fallback used once the primary
+   * has no working credentials. JSON array of "yo" | "flutterwave". See
+   * ../payments/service.ts resolveProvider(). */
+  payments_active_providers: '["yo"]',
+  /** Wallet balance ceilings (UGX), tiered by verification the same way
+   * mobile money itself limits unverified accounts — see
+   * ../wallet/routes.ts. */
+  wallet_unverified_cap: "200000",
+  wallet_verified_cap: "2000000",
+  /** Ceiling on a single top-up request, independent of the balance cap —
+   * stops one oversized top-up from being the only thing that matters. */
+  wallet_max_topup: "1000000",
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -82,4 +95,42 @@ export async function getMatchingSettings(): Promise<{
 export async function setMatchingModesEnabled(modes: MatchingMode[]): Promise<void> {
   const valid = modes.filter((m) => ALL_MATCHING_MODES.includes(m));
   await setSetting("matching_modes_enabled", JSON.stringify(valid.length > 0 ? valid : ["first_to_claim"]));
+}
+
+export type PaymentProviderIdentity = "yo" | "flutterwave";
+const ALL_PROVIDER_IDENTITIES: PaymentProviderIdentity[] = ["yo", "flutterwave"];
+
+/** Priority-ordered list of admin-enabled providers — first is primary, a
+ * second is the fallback. Falls back to just "yo" (today's only provider)
+ * if the stored value is missing/corrupt/empty. */
+export async function getActiveProviders(): Promise<PaymentProviderIdentity[]> {
+  const raw = await getSetting("payments_active_providers");
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const providers = Array.isArray(parsed)
+      ? parsed.filter((p): p is PaymentProviderIdentity => ALL_PROVIDER_IDENTITIES.includes(p as PaymentProviderIdentity))
+      : [];
+    return providers.length > 0 ? providers : ["yo"];
+  } catch {
+    return ["yo"];
+  }
+}
+
+export async function setActiveProviders(providers: PaymentProviderIdentity[]): Promise<void> {
+  const valid = providers.filter((p) => ALL_PROVIDER_IDENTITIES.includes(p));
+  const deduped = [...new Set(valid)];
+  await setSetting("payments_active_providers", JSON.stringify(deduped.length > 0 ? deduped : ["yo"]));
+}
+
+export async function getWalletSettings(): Promise<{ unverifiedCap: number; verifiedCap: number; maxTopup: number }> {
+  const [unverified, verified, maxTopup] = await Promise.all([
+    getSetting("wallet_unverified_cap"),
+    getSetting("wallet_verified_cap"),
+    getSetting("wallet_max_topup"),
+  ]);
+  return {
+    unverifiedCap: Number(unverified) || Number(DEFAULTS.wallet_unverified_cap),
+    verifiedCap: Number(verified) || Number(DEFAULTS.wallet_verified_cap),
+    maxTopup: Number(maxTopup) || Number(DEFAULTS.wallet_max_topup),
+  };
 }

@@ -10,6 +10,7 @@
  */
 
 import { mobileMoneyCurrencyCode, type MobileMoneyNetwork } from "@tuma/shared";
+import type { GatewayChargeInput, GatewayResult, PaymentGatewayAdapter } from "../gateway.js";
 
 export type YoTransactionStatus = "PENDING" | "SUCCEEDED" | "FAILED" | "INDETERMINATE";
 
@@ -136,3 +137,36 @@ export async function checkStatus(transactionReference: string): Promise<YoResul
   });
   return parseResult(xml);
 }
+
+function toGatewayResult(result: YoResult): GatewayResult {
+  return {
+    status: result.status,
+    transactionReference: result.transactionReference,
+    providerTransactionId: result.providerTransactionId,
+    statusMessage: result.statusMessage,
+  };
+}
+
+function toYoInput(input: GatewayChargeInput): YoDepositWithdrawInput {
+  if (!input.msisdn || !input.network) {
+    throw new Error("Yo! Payments requires a resolved mobile money number and network");
+  }
+  return { referenceId: input.referenceId, msisdn: input.msisdn, network: input.network, amount: input.amount, narrative: input.narrative };
+}
+
+export const yoAdapter: PaymentGatewayAdapter = {
+  key: "yo",
+  displayName: "Yo! Payments",
+  isConfigured: isYoConfigured,
+  supportsDisbursement: true,
+  requiresNetwork: true,
+  async depositFunds(input) {
+    return toGatewayResult(await depositFunds(toYoInput(input)));
+  },
+  async withdrawFunds(input) {
+    return toGatewayResult(await withdrawFunds(toYoInput(input)));
+  },
+  async checkStatus(transactionReference) {
+    return toGatewayResult(await checkStatus(transactionReference));
+  },
+};

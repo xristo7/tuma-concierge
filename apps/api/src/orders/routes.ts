@@ -12,13 +12,14 @@ import { notifyUser } from "../lib/webpush.js";
 import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
 import { redactOrder } from "./visibility.js";
 import type { MatchingMode, MobileMoneyNetwork } from "@tuma/shared";
-import {
-  activeProvider,
-  initiateCollection,
-  mobileMoneyNetworkLabel,
-  UnsupportedNetworkError,
-} from "../payments/service.js";
+import { initiateCollection, mobileMoneyNetworkLabel, UnsupportedNetworkError } from "../payments/service.js";
 import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
+import { appBaseUrl } from "../verify/service.js";
+import { payFromWallet } from "../wallet/service.js";
+
+function paymentReturnUrl(orderId: string): string {
+  return `${appBaseUrl("customer")}/orders/${orderId}?payment_return=1`;
+}
 
 export const orderRoutes = new Hono();
 orderRoutes.use("*", requireAuth);
@@ -958,7 +959,9 @@ orderRoutes.post("/orders/:id/cancel", async (c) => {
 // Fund (escrow via mobile money collection, or float)
 // ---------------------------------------------------------------------------
 
-const fundSchema = z.object({ msisdn: z.string().min(6).max(20) });
+const fundSchema = z
+  .object({ msisdn: z.string().min(6).max(20).optional(), useWallet: z.boolean().optional() })
+  .refine((data) => !!data.msisdn || !!data.useWallet, { message: "Provide a mobile money number or pay from wallet" });
 
 orderRoutes.post("/orders/:id/fund", async (c) => {
   const id = c.req.param("id");
@@ -990,13 +993,37 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
   const parsed = fundSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
+  if (parsed.data.useWallet) {
+    const paymentId = await payFromWallet({
+      userId: user.sub,
+      amount,
+      orderId: id,
+      note: `Order ${id}`,
+    });
+    if (!paymentId) return c.json({ error: "insufficient_wallet_balance" }, 409);
+
+    await touchOrder(id, { stage: "Shop" });
+    await logEvent(id, "Fund", "Paid from wallet — shopping started", user.sub);
+    return c.json({ order: await getOrder(id), payment: { id: paymentId, status: "successful", network: null } });
+  }
+
   const paymentId = newId("pay");
   let providerRef: string;
-  let network: MobileMoneyNetwork;
+  let network: MobileMoneyNetwork | null;
+  let provider: string;
+  let redirectUrl: string | undefined;
   try {
-    const initiated = await initiateCollection({ referenceId: paymentId, msisdn: parsed.data.msisdn, amount });
+    const initiated = await initiateCollection({
+      referenceId: paymentId,
+      msisdn: parsed.data.msisdn,
+      amount,
+      name: user.name,
+      returnUrl: paymentReturnUrl(id),
+    });
     providerRef = initiated.providerRef;
     network = initiated.network;
+    provider = initiated.provider;
+    redirectUrl = initiated.redirectUrl;
   } catch (err) {
     if (err instanceof UnsupportedNetworkError) {
       return c.json({ error: "unsupported_network", message: err.message }, 400);
@@ -1011,13 +1038,22 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
   await db.execute({
     sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, msisdn, network, amount, currency, status)
           VALUES (?, ?, 'collection', ?, ?, ?, ?, ?, 'UGX', 'pending')`,
-    args: [paymentId, id, activeProvider(), providerRef, parsed.data.msisdn, network, amount],
+    args: [paymentId, id, provider, providerRef, parsed.data.msisdn ?? null, network, amount],
   });
 
   await touchOrder(id, { stage: "Fund" });
-  await logEvent(id, "Fund", `${mobileMoneyNetworkLabel(network)} collection requested`, user.sub);
+  await logEvent(
+    id,
+    "Fund",
+    network ? `${mobileMoneyNetworkLabel(network)} collection requested` : "Collection requested",
+    user.sub,
+  );
 
-  return c.json({ order: await getOrder(id), payment: { id: paymentId, status: "pending", network } });
+  return c.json({
+    order: await getOrder(id),
+    payment: { id: paymentId, status: "pending", network },
+    redirectUrl,
+  });
 });
 
 // ---------------------------------------------------------------------------

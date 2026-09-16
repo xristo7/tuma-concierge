@@ -17,6 +17,7 @@ import {
 } from "./permissions.js";
 import { countSuperAdmins, inviteStaff, listStaff, resetStaffPassword } from "./staff.js";
 import { clientIp } from "../lib/ratelimit.js";
+import { refundOrderToWallet } from "../wallet/service.js";
 
 export const adminRoutes = new Hono();
 // Scoped to /admin/* rather than "*" on purpose. This router is mounted on
@@ -91,7 +92,7 @@ adminRoutes.get("/admin/integrations", requirePermission("integrations.view"), a
 
   return c.json({
     integrations: {
-      mobileMoney: paymentsIntegrationStatus(),
+      mobileMoney: await paymentsIntegrationStatus(),
       storage: { configured: storageConfigured },
     },
     recentFailedPayments: failed.rows,
@@ -137,6 +138,43 @@ adminRoutes.get("/admin/customers/:id", requirePermission("customers.view"), asy
   });
 
   return c.json({ customer, orders: ordersRes.rows });
+});
+
+/**
+ * Refunds an order's collected payment(s) back to the customer's wallet —
+ * the standing mechanism for "refunds return to the wallet" without a
+ * full self-service cancellation flow, which this app doesn't have yet.
+ * Refunds at most what was actually collected, and only once per order.
+ */
+adminRoutes.post("/admin/orders/:id/refund-to-wallet", requirePermission("payments.manage"), async (c) => {
+  const id = c.req.param("id") as string;
+  const admin = c.get("user");
+
+  const orderRes = await db.execute({ sql: "SELECT customer_id FROM orders WHERE id = ?", args: [id] });
+  const order = orderRes.rows[0] as Record<string, unknown> | undefined;
+  if (!order) return c.json({ error: "not_found" }, 404);
+
+  const result = await refundOrderToWallet({
+    orderId: id,
+    customerId: order.customer_id as string,
+    actorId: admin.sub,
+    note: `Refunded by ${admin.name || "an admin"}`,
+  });
+  if ("error" in result) {
+    const message = result.error === "already_refunded" ? "This order has already been fully refunded" : "Nothing was collected on this order to refund";
+    return c.json({ error: result.error, message }, 409);
+  }
+
+  await logActivity({
+    actor: { sub: admin.sub, name: admin.name, adminRole: isAdminRole(admin.adminRole) ? admin.adminRole : null },
+    action: "payments.refund_to_wallet",
+    entityType: "order",
+    entityId: id,
+    summary: `Refunded UGX ${result.refunded.toLocaleString()} to the customer's wallet`,
+    ip: clientIp(c),
+  });
+
+  return c.json({ ok: true, refunded: result.refunded });
 });
 
 // ---------------------------------------------------------------------------

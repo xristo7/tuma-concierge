@@ -12,7 +12,7 @@ import { clientIp } from "../lib/ratelimit.js";
 import { getDeliverySettings } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { redactOrders, toOpenJob } from "../orders/visibility.js";
-import { activeProvider, checkPaymentStatus, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
+import { checkPaymentStatus, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
 import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
 
 export const riderRoutes = new Hono();
@@ -422,11 +422,13 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
 
   const withdrawalId = newId("wd");
   let providerRef: string;
-  let network: MobileMoneyNetwork;
+  let network: MobileMoneyNetwork | null;
+  let provider: string;
   try {
     const initiated = await initiateDisbursement({ referenceId: withdrawalId, msisdn, amount: balance });
     providerRef = initiated.providerRef;
     network = initiated.network;
+    provider = initiated.provider;
   } catch (err) {
     // The debit already went through, so hand the money back before failing.
     await db.execute({
@@ -443,7 +445,7 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
   await db.execute({
     sql: `INSERT INTO wallet_withdrawals (id, rider_id, amount, provider, provider_ref, msisdn, network, status)
           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-    args: [withdrawalId, user.sub, balance, activeProvider(), providerRef, msisdn, network],
+    args: [withdrawalId, user.sub, balance, provider, providerRef, msisdn, network],
   });
 
   return c.json({ withdrawalId, amount: balance, status: "pending" }, 201);
