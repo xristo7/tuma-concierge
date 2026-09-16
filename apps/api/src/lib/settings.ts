@@ -34,6 +34,11 @@ const DEFAULTS = {
   /** Ceiling on a single top-up request, independent of the balance cap —
    * stops one oversized top-up from being the only thing that matters. */
   wallet_max_topup: "1000000",
+  /** How long any voice recording (a shopping list, an order note, a fee-
+   * proposal reason, a chat voice message) may run before it auto-stops.
+   * Nobody's meant to be recording minutes of audio here — this is a cap,
+   * not a target. */
+  voice_note_max_seconds: "60",
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -133,4 +138,8 @@ export async function getWalletSettings(): Promise<{ unverifiedCap: number; veri
     verifiedCap: Number(verified) || Number(DEFAULTS.wallet_verified_cap),
     maxTopup: Number(maxTopup) || Number(DEFAULTS.wallet_max_topup),
   };
+}
+
+export async function getVoiceNoteMaxSeconds(): Promise<number> {
+  return Number(await getSetting("voice_note_max_seconds")) || Number(DEFAULTS.voice_note_max_seconds);
 }

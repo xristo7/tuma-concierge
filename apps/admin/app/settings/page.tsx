@@ -1,7 +1,7 @@
 "use client";
 
 import { hasPermission, MATCHING_MODE_DESCRIPTIONS, MATCHING_MODE_LABELS, type MatchingMode, type PaymentProviderIdentity, type PaymentProviderInfo } from "@tuma/shared";
-import { CreditCard, Route, Settings as SettingsIcon, Wallet as WalletIcon } from "lucide-react";
+import { CreditCard, Mic, Route, Settings as SettingsIcon, Wallet as WalletIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [walletUnverifiedCap, setWalletUnverifiedCap] = useState("");
   const [walletVerifiedCap, setWalletVerifiedCap] = useState("");
   const [walletMaxTopup, setWalletMaxTopup] = useState("");
+  const [voiceNoteMaxSeconds, setVoiceNoteMaxSeconds] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +40,7 @@ export default function SettingsPage() {
         setWalletUnverifiedCap(String(settingsRes.settings.walletUnverifiedCap));
         setWalletVerifiedCap(String(settingsRes.settings.walletVerifiedCap));
         setWalletMaxTopup(String(settingsRes.settings.walletMaxTopup));
+        setVoiceNoteMaxSeconds(String(settingsRes.settings.voiceNoteMaxSeconds));
         setProviderInfo(integrationsRes.integrations.mobileMoney.providers);
       })
       .catch((err) => setError(errorMessage(err)))
@@ -71,6 +73,7 @@ export default function SettingsPage() {
         enabledModes: enabledModes.length > 0 ? enabledModes : ["first_to_claim"],
         nearestWindowSeconds: Number(nearestWindowSeconds),
         maxAssignmentMinutes: Number(maxAssignmentMinutes),
+        voiceNoteMaxSeconds: Number(voiceNoteMaxSeconds),
         // Omitted entirely (not just disabled inputs) for an admin without
         // payments.manage — the API rejects the whole request if these are
         // present without it, and this admin may still need to save the
@@ -93,6 +96,7 @@ export default function SettingsPage() {
       setWalletUnverifiedCap(String(res.settings.walletUnverifiedCap));
       setWalletVerifiedCap(String(res.settings.walletVerifiedCap));
       setWalletMaxTopup(String(res.settings.walletMaxTopup));
+      setVoiceNoteMaxSeconds(String(res.settings.voiceNoteMaxSeconds));
       setSaved(true);
     } catch (err) {
       setError(errorMessage(err));
@@ -332,6 +336,32 @@ export default function SettingsPage() {
                 &ldquo;Nearest available&rdquo; collects applicants for this long before auto-assigning the
                 closest one. &ldquo;Max assignment&rdquo; is the overall safety net — past this, an order gets
                 auto-assigned no matter the mode, so nobody waits forever.
+              </p>
+            </div>
+          </section>
+
+          <section className="home-card space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+                <Mic className="h-4.5 w-4.5" strokeWidth={1.75} aria-hidden />
+              </span>
+              <h2 className="text-sm font-semibold text-ink">Voice recordings</h2>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-ink-500" htmlFor="voiceMax">
+                Max recording length (sec)
+              </label>
+              <input
+                id="voiceMax"
+                inputMode="numeric"
+                value={voiceNoteMaxSeconds}
+                onChange={(e) => setVoiceNoteMaxSeconds(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="60"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+              <p className="text-xs text-ink-500">
+                Applies everywhere someone records audio — a shopping list, an order note, a fee-proposal
+                reason, or a chat voice message. Recording auto-stops once it hits this length.
               </p>
             </div>
           </section>

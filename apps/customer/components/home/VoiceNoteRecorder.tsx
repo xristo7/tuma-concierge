@@ -3,6 +3,7 @@
 import { Loader2, Mic, Play, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
+import { useVoiceNoteMaxSeconds } from "../../lib/useVoiceNoteMaxSeconds";
 
 type Status = "idle" | "recording" | "recorded" | "transcribing" | "error";
 
@@ -15,6 +16,7 @@ export function VoiceNoteRecorder({
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ transcript: string; count: number } | null>(null);
+  const maxSeconds = useVoiceNoteMaxSeconds();
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -29,6 +31,15 @@ export function VoiceNoteRecorder({
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // Nobody's meant to record minutes of audio here — auto-stop (not just
+  // warn) once the admin-set cap is hit.
+  useEffect(() => {
+    if (status === "recording" && seconds >= maxSeconds) {
+      stopRecording();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seconds, status, maxSeconds]);
 
   async function startRecording() {
     setError(null);
@@ -113,7 +124,9 @@ export function VoiceNoteRecorder({
       {status === "recording" && (
         <div className="flex items-center justify-center gap-3">
           <span className="flex h-2.5 w-2.5 animate-pulse rounded-full bg-red-600" />
-          <span className="text-sm font-semibold text-ink">Recording… {seconds}s</span>
+          <span className="text-sm font-semibold text-ink">
+            Recording… {seconds}s / {maxSeconds}s
+          </span>
           <button
             type="button"
             onClick={stopRecording}

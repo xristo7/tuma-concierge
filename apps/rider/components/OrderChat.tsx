@@ -10,6 +10,7 @@ import { useAuth } from "../lib/auth-context";
 import { getQueuedMessages, queueMessage, removeQueuedMessage, type QueuedMessage } from "../lib/chat-outbox";
 import { compressImage } from "../lib/image-compress";
 import { useLivePolling } from "../lib/use-live-polling";
+import { useVoiceNoteMaxSeconds } from "../lib/useVoiceNoteMaxSeconds";
 
 const ROLE_STYLES: Record<string, { bg: string; label: string }> = {
   customer: { bg: "bg-green", label: "C" },
@@ -165,6 +166,7 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
   const [sending, setSending] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const maxRecordSeconds = useVoiceNoteMaxSeconds();
   const [mediaError, setMediaError] = useState<string | null>(null);
   // A stopped recording waits here — played back locally, discarded, or
   // sent — rather than uploading the instant the mic button is released.
@@ -227,6 +229,16 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Nobody's meant to record minutes of audio here — auto-stop (not just
+  // warn) once the admin-set cap is hit. Lands in the same review-before-
+  // send preview a manual tap on "Stop" would.
+  useEffect(() => {
+    if (recording && recordSeconds >= maxRecordSeconds) {
+      stopRecording();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording, recordSeconds, maxRecordSeconds]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -454,7 +466,9 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
             {recording ? (
               <div className="flex h-[46px] items-center gap-2 rounded-full bg-[rgb(var(--surface-muted))] pl-4 pr-2">
                 <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-red-500" />
-                <span className="flex-1 text-sm text-ink">Recording… {formatDuration(recordSeconds)}</span>
+                <span className="flex-1 text-sm text-ink">
+                  Recording… {formatDuration(recordSeconds)} / {formatDuration(maxRecordSeconds)}
+                </span>
               </div>
             ) : (
               <input

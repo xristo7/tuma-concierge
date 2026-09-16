@@ -8,6 +8,7 @@ import {
   getActiveProviders,
   getDeliverySettings,
   getMatchingSettings,
+  getVoiceNoteMaxSeconds,
   getWalletSettings,
   setActiveProviders,
   setMatchingModesEnabled,
@@ -19,11 +20,12 @@ import { paymentsIntegrationStatus } from "../payments/service.js";
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, wallet] = await Promise.all([
+  const [delivery, matching, activeProviders, wallet, voiceNoteMaxSeconds] = await Promise.all([
     getDeliverySettings(),
     getMatchingSettings(),
     getActiveProviders(),
     getWalletSettings(),
+    getVoiceNoteMaxSeconds(),
   ]);
   return {
     ...delivery,
@@ -32,6 +34,7 @@ async function fullSettings() {
     walletUnverifiedCap: wallet.unverifiedCap,
     walletVerifiedCap: wallet.verifiedCap,
     walletMaxTopup: wallet.maxTopup,
+    voiceNoteMaxSeconds,
   };
 }
 
@@ -54,6 +57,7 @@ const updateSchema = z.object({
   walletUnverifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletVerifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletMaxTopup: z.number().int().positive().max(100_000_000).optional(),
+  voiceNoteMaxSeconds: z.number().int().positive().max(600).optional(),
 });
 
 const PAYMENTS_FIELDS = ["paymentsActiveProviders", "walletUnverifiedCap", "walletVerifiedCap", "walletMaxTopup"] as const;
@@ -103,6 +107,9 @@ settingsRoutes.put(
     }
     if (parsed.data.walletMaxTopup != null) {
       await setSetting("wallet_max_topup", String(parsed.data.walletMaxTopup));
+    }
+    if (parsed.data.voiceNoteMaxSeconds != null) {
+      await setSetting("voice_note_max_seconds", String(parsed.data.voiceNoteMaxSeconds));
     }
 
     const after = await fullSettings();

@@ -160,6 +160,9 @@ export type DeliverySettings = {
   walletUnverifiedCap: number;
   walletVerifiedCap: number;
   walletMaxTopup: number;
+  /** How long any voice recording may run before it auto-stops — a shopping
+   * list, an order note, a fee-proposal reason, or a chat voice message. */
+  voiceNoteMaxSeconds: number;
 };
 
 export type OrderEvent = {
