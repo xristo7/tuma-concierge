@@ -7,16 +7,22 @@ import { OfflineBanner } from "../components/OfflineBanner";
 import { PushNotifications } from "../components/PushNotifications";
 import { ServiceWorkerRegister } from "../components/ServiceWorkerRegister";
 import { AuthProvider } from "../lib/auth-context";
+import { LanguageProvider } from "../lib/i18n";
 
 // Runs before paint so there's no flash of the wrong theme — reads the
 // user's saved choice, falling back to their OS preference.
 const THEME_INIT_SCRIPT = `
 (function () {
   try {
-    var stored = localStorage.getItem("tuma-theme");
-    var theme = stored === "light" || stored === "dark"
-      ? stored
-      : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    var stored = localStorage.getItem("tuma-theme"); // "light" | "dark" | "auto" | null
+    var mode = stored === "light" || stored === "dark" || stored === "auto" ? stored : "auto";
+    var theme;
+    if (mode === "auto") {
+      var hour = new Date().getHours();
+      theme = hour >= 6 && hour < 19 ? "light" : "dark";
+    } else {
+      theme = mode;
+    }
     document.documentElement.setAttribute("data-theme", theme);
   } catch (e) {}
 })();
@@ -35,13 +41,14 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Tuma",
   },
 };
 
 export const viewport: Viewport = {
   themeColor: "#153A75",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -58,8 +65,10 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <OfflineBanner />
         <AuthProvider>
-          <AppShell>{children}</AppShell>
-          <PushNotifications />
+          <LanguageProvider>
+            <AppShell>{children}</AppShell>
+            <PushNotifications />
+          </LanguageProvider>
         </AuthProvider>
         <InstallPrompt />
       </body>

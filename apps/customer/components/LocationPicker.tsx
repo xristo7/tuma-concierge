@@ -164,46 +164,38 @@ export function LocationPicker({
 
       {point.mode === "map" && (
         <div className="space-y-2">
-          {pinnedLabel ? (
+          {pinnedLabel && (
             <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-ink">{pinnedLabel}</p>
-                <button
-                  type="button"
-                  onClick={() => setShowPicker(true)}
-                  className="mt-1 text-xs font-bold text-gold underline"
-                >
-                  Change pin
-                </button>
-              </div>
+              <p className="min-w-0 flex-1 truncate text-sm font-medium text-ink">{pinnedLabel}</p>
             </div>
-          ) : (
+          )}
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setShowPicker(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-faint)] py-3 text-sm font-bold text-ink"
+              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-[var(--border-faint)] py-3 text-xs font-bold text-ink"
             >
-              <Map className="h-4 w-4 text-gold" strokeWidth={2.25} aria-hidden />
-              Choose on map
+              <Map className="h-3.5 w-3.5 text-gold" strokeWidth={2.25} aria-hidden />
+              {pinnedLabel ? "Change pin" : "Choose on map"}
             </button>
-          )}
-          <button
-            type="button"
-            onClick={useMyLocation}
-            className={`mx-auto flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-bold ${
-              point.geoStatus === "done" && !pinnedLabel
-                ? "border-gold bg-gold/10 text-ink"
-                : "border-[var(--border-faint)] text-ink"
-            }`}
-          >
-            <LocateFixed className="h-3.5 w-3.5 text-gold" strokeWidth={2.25} aria-hidden />
-            {point.geoStatus === "locating"
-              ? "Locating…"
-              : point.geoStatus === "done" && !pinnedLabel
-                ? "Using current location"
-                : "Use my current location instead"}
-          </button>
+            <button
+              type="button"
+              onClick={useMyLocation}
+              className={`flex w-full items-center justify-center gap-1.5 rounded-xl border py-3 text-xs font-bold ${
+                point.geoStatus === "done" && !pinnedLabel
+                  ? "border-gold bg-gold/10 text-ink"
+                  : "border-[var(--border-faint)] text-ink"
+              }`}
+            >
+              <LocateFixed className="h-3.5 w-3.5 text-gold" strokeWidth={2.25} aria-hidden />
+              {point.geoStatus === "locating"
+                ? "Locating…"
+                : point.geoStatus === "done" && !pinnedLabel
+                  ? "Using current location"
+                  : "Use my current location instead"}
+            </button>
+          </div>
           {point.geoStatus === "error" && <p className="text-xs text-red-600">Couldn&apos;t get your location.</p>}
 
           <div className="space-y-2">

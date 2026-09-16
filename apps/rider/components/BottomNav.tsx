@@ -6,14 +6,15 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
+import { useTranslate, type TranslationKey } from "../lib/i18n";
 import { useLivePolling } from "../lib/use-live-polling";
 
-const tabs: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/", label: "Jobs", icon: Briefcase },
-  { href: "/active", label: "Active", icon: Navigation },
-  { href: "/chat", label: "Chat", icon: MessageCircle },
-  { href: "/wallet", label: "Wallet", icon: Wallet },
-  { href: "/account", label: "Account", icon: User },
+const tabs: { href: string; labelKey: TranslationKey; icon: LucideIcon }[] = [
+  { href: "/", labelKey: "nav_jobs", icon: Briefcase },
+  { href: "/active", labelKey: "nav_active", icon: Navigation },
+  { href: "/chat", labelKey: "nav_chat", icon: MessageCircle },
+  { href: "/wallet", labelKey: "nav_wallet", icon: Wallet },
+  { href: "/account", labelKey: "nav_account", icon: User },
 ];
 
 const UNREAD_POLL_MS = 15000;
@@ -21,6 +22,7 @@ const UNREAD_POLL_MS = 15000;
 export function BottomNav() {
   const pathname = usePathname();
   const [hasUnread, setHasUnread] = useState(false);
+  const t = useTranslate();
 
   useLivePolling(
     () => {
@@ -54,7 +56,7 @@ export function BottomNav() {
                     <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-gold" aria-hidden />
                   )}
                 </span>
-                <span>{tab.label}</span>
+                <span>{t(tab.labelKey)}</span>
               </Link>
             </li>
           );

@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { CustomerAvatar } from "../../../components/CustomerAvatar";
-import { OrderChat } from "../../../components/OrderChat";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { VoiceReasonRecorder } from "../../../components/VoiceReasonRecorder";
 import { api, errorMessage } from "../../../lib/api";
@@ -515,7 +514,6 @@ export default function JobDetailPage() {
           Open full-screen chat
         </Link>
       )}
-      <OrderChat orderId={orderId} />
     </div>
   );
 }

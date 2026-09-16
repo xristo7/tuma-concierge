@@ -3,9 +3,8 @@
 import type { MobileMoneyNetwork, OrderDetail, OrderRating, RiderApplicant } from "@tuma/shared";
 import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel } from "@tuma/shared";
 import { MapPin, MessageCircle, Star, ThumbsUp, TriangleAlert, User } from "lucide-react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { OrderChat } from "../../../components/OrderChat";
 import { OrderTimeline } from "../../../components/OrderTimeline";
 import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
@@ -28,6 +27,7 @@ function RiderSummaryCard({
   createdAt: string;
   settledAt: string;
 }) {
+  const router = useRouter();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -69,7 +69,7 @@ function RiderSummaryCard({
       </span>
       <button
         type="button"
-        onClick={() => document.getElementById("order-chat")?.scrollIntoView({ behavior: "smooth" })}
+        onClick={() => router.push(`/chat/${riderId}`)}
         className="flex shrink-0 items-center gap-1.5 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink"
       >
         <MessageCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
@@ -584,10 +584,6 @@ export default function OrderDetailPage() {
         )}
       </section>
       )}
-
-      <div id="order-chat">
-        <OrderChat orderId={orderId} />
-      </div>
     </div>
   );
 }

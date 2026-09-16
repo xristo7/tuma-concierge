@@ -4,7 +4,9 @@ import { detectMobileMoneyNetwork, isRiderProfileComplete, mobileMoneyNetworkLab
 import { CheckCircle2, LogOut, MapPin, Upload, User } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AppearanceSettings } from "../../components/AppearanceSettings";
 import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
+import { LanguageSettings } from "../../components/LanguageSettings";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 import { compressImage } from "../../lib/image-compress";
@@ -217,6 +219,10 @@ export default function AccountPage() {
           </span>
         )}
       </section>
+
+      <AppearanceSettings />
+
+      <LanguageSettings />
 
       <ChangePasswordPanel />
 

@@ -4,7 +4,9 @@ import { MATCHING_MODE_DESCRIPTIONS, MATCHING_MODE_LABELS, type MatchingMode } f
 import { LogOut, Shield, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AppearanceSettings } from "../../components/AppearanceSettings";
 import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
+import { LanguageSettings } from "../../components/LanguageSettings";
 import { ProfilePhoto } from "../../components/ProfilePhoto";
 import { SavedLocations } from "../../components/SavedLocations";
 import { api, errorMessage } from "../../lib/api";
@@ -94,6 +96,10 @@ export default function AccountPage() {
       </Link>
 
       <MatchingPreference />
+
+      <AppearanceSettings />
+
+      <LanguageSettings />
 
       <ChangePasswordPanel />
 
