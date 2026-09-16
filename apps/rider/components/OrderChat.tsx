@@ -155,7 +155,10 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
   const load = useCallback(() => {
     api
       .getChat(orderId)
-      .then((res) => setMessages(res.messages))
+      .then((res) => {
+        setMessages(res.messages);
+        if (res.messages.length > 0) void api.markChatRead(orderId).catch(() => {});
+      })
       .catch(() => {});
   }, [orderId]);
 

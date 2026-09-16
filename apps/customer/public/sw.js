@@ -22,3 +22,50 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
   }
 });
+
+// A push arrives as an opaque encrypted blob the browser has already
+// decrypted for us by the time this fires — showNotification() is what
+// actually produces the popup + system notification sound on the phone.
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    // Non-JSON payload — fall back to the defaults below.
+  }
+  const title = data.title || "Tuma";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || "You have a new message",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: data.tag || "tuma-chat",
+      data: { url: data.url || "/" },
+    }),
+  );
+});
+
+// Tapping the notification should land on the actual conversation, reusing
+// an already-open tab rather than stacking a new one.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const client of allClients) {
+        if ("focus" in client) {
+          if ("navigate" in client) {
+            try {
+              await client.navigate(targetUrl);
+            } catch {
+              // Some browsers refuse cross-origin navigate; focusing is still useful.
+            }
+          }
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    })(),
+  );
+});

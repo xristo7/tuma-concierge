@@ -3,7 +3,9 @@
 import { Briefcase, MessageCircle, Navigation, User, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import { api } from "../lib/api";
 
 const tabs: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/", label: "Jobs", icon: Briefcase },
@@ -13,8 +15,29 @@ const tabs: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/account", label: "Account", icon: User },
 ];
 
+const UNREAD_POLL_MS = 15000;
+
 export function BottomNav() {
   const pathname = usePathname();
+  const [hasUnread, setHasUnread] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    function poll() {
+      api
+        .getChatThreads()
+        .then((res) => {
+          if (!cancelled) setHasUnread(res.threads.some((t) => t.unread));
+        })
+        .catch(() => {});
+    }
+    poll();
+    const interval = setInterval(poll, UNREAD_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-faint)] bg-[rgb(var(--surface-card))] pb-[env(safe-area-inset-bottom)]">
@@ -31,7 +54,12 @@ export function BottomNav() {
                   active ? "text-gold" : "text-ink-500"
                 }`}
               >
-                <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
+                <span className="relative">
+                  <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
+                  {tab.href === "/chat" && hasUnread && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-gold" aria-hidden />
+                  )}
+                </span>
                 <span>{tab.label}</span>
               </Link>
             </li>

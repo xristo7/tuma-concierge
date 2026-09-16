@@ -3,6 +3,7 @@
 import type { AuthUser } from "@tuma/shared";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, TOKEN_KEY, USER_KEY } from "./api";
+import { unsubscribeFromPush } from "./push";
 
 type AuthState = {
   user: AuthUser | null;
@@ -68,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // session goes either way — but without it the token stays valid on the
     // server for the rest of its life.
     const revoked = api.logout().catch(() => undefined);
+    void unsubscribeFromPush();
     window.localStorage.removeItem(TOKEN_KEY);
     window.localStorage.removeItem(USER_KEY);
     setUser(null);

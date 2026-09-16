@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { InArgs } from "@libsql/client";
 import { db } from "../db/client.js";
@@ -8,6 +8,7 @@ import { newId, newPin } from "../lib/ids.js";
 import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { consume, tooManyRequests } from "../lib/ratelimit.js";
 import { getDeliverySettings, getMatchingSettings, getMaxOrderValue } from "../lib/settings.js";
+import { notifyUser } from "../lib/webpush.js";
 import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
 import { redactOrder } from "./visibility.js";
 import type { MatchingMode, MobileMoneyNetwork } from "@tuma/shared";
@@ -1574,6 +1575,17 @@ orderRoutes.post("/orders/:id/chat", async (c) => {
             VALUES (?, ?, ?, ?, '', ?, ?, ?, ?)`,
       args: [messageId, id, user.sub, user.role, type, key, order.customer_id as string, order.rider_id as string | null],
     });
+    for (const recipientId of chatRecipientIds(order, user.sub, user.role)) {
+      background(
+        c,
+        notifyUser(recipientId, {
+          title: user.name || "New message",
+          body: chatPreview(type, null),
+          url: `/chat/${user.sub}`,
+          tag: `chat-${order.customer_id}-${order.rider_id}`,
+        }),
+      );
+    }
     return c.json({ id: messageId }, 201);
   }
 
@@ -1586,7 +1598,40 @@ orderRoutes.post("/orders/:id/chat", async (c) => {
           VALUES (?, ?, ?, ?, ?, 'text', ?, ?)`,
     args: [messageId, id, user.sub, user.role, parsed.data.body, order.customer_id as string, order.rider_id as string | null],
   });
+  for (const recipientId of chatRecipientIds(order, user.sub, user.role)) {
+    background(
+      c,
+      notifyUser(recipientId, {
+        title: user.name || "New message",
+        body: chatPreview("text", parsed.data.body),
+        url: `/chat/${user.sub}`,
+        tag: `chat-${order.customer_id}-${order.rider_id}`,
+      }),
+    );
+  }
   return c.json({ id: messageId }, 201);
+});
+
+/** Advances the caller's read pointer for this order's conversation to now
+ * — clears the unread badge for whichever counterpart they share it with. */
+orderRoutes.post("/orders/:id/chat/read", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const counterpartId = user.sub === order.customer_id ? (order.rider_id as string | null) : (order.customer_id as string);
+  if (!counterpartId) return c.json({ ok: true });
+
+  await db.execute({
+    sql: `INSERT INTO chat_reads (user_id, counterpart_id, last_read_at) VALUES (?, ?, datetime('now'))
+          ON CONFLICT(user_id, counterpart_id) DO UPDATE SET last_read_at = excluded.last_read_at`,
+    args: [user.sub, counterpartId],
+  });
+  return c.json({ ok: true });
 });
 
 /**
@@ -1627,6 +1672,33 @@ function chatPreview(type: unknown, body: unknown): string {
   return (body as string | null) ?? "";
 }
 
+/** Who should be notified about a new message — the other party in a
+ * customer/rider pair, or (a support intervention) both of them when the
+ * sender is an admin. Empty when there's no counterpart yet (no rider
+ * assigned) or the only other party is the sender themself. */
+function chatRecipientIds(order: Row, senderId: string, senderRole: string): string[] {
+  const customerId = order.customer_id as string;
+  const riderId = order.rider_id as string | null;
+  if (senderRole === "admin") {
+    return [customerId, riderId].filter((rid): rid is string => !!rid && rid !== senderId);
+  }
+  const recipientId = senderId === customerId ? riderId : customerId;
+  return recipientId ? [recipientId] : [];
+}
+
+/** Runs a best-effort background task past the point the response is sent.
+ * On a Cloudflare Worker, ctx.waitUntil keeps the task alive after the
+ * response returns; outside one (local Node dev) there's no such hook, so
+ * it just runs unawaited — the process stays up on its own there. */
+function background(c: Context, task: Promise<unknown>): void {
+  const settled = task.catch((err) => console.error("Background task failed:", err));
+  try {
+    c.executionCtx.waitUntil(settled);
+  } catch {
+    void settled;
+  }
+}
+
 /** Every counterpart this user has ever exchanged chat messages with, most recent first — powers the Chat tab's conversation list. */
 orderRoutes.get("/chat/threads", async (c) => {
   const user = c.get("user");
@@ -1657,22 +1729,32 @@ orderRoutes.get("/chat/threads", async (c) => {
         },
   );
 
+  const readsRes = await db.execute({
+    sql: "SELECT counterpart_id, last_read_at FROM chat_reads WHERE user_id = ?",
+    args: [user.sub],
+  });
+  const lastReadAt = new Map((readsRes.rows as Row[]).map((r) => [r.counterpart_id as string, r.last_read_at as string]));
+
   const threads = await Promise.all(
     (res.rows as Row[]).map(async (row) => {
       const counterpartId = row.counterpart_id as string;
       const lastRes = await db.execute({
         sql: isCustomer
-          ? "SELECT type, body FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at DESC LIMIT 1"
-          : "SELECT type, body FROM chat_messages WHERE rider_id = ? AND customer_id = ? ORDER BY created_at DESC LIMIT 1",
+          ? "SELECT type, body, sender_id FROM chat_messages WHERE customer_id = ? AND rider_id = ? ORDER BY created_at DESC LIMIT 1"
+          : "SELECT type, body, sender_id FROM chat_messages WHERE rider_id = ? AND customer_id = ? ORDER BY created_at DESC LIMIT 1",
         args: [user.sub, counterpartId],
       });
       const last = lastRes.rows[0] as Row | undefined;
+      const lastAt = row.last_at as string;
+      const readAt = lastReadAt.get(counterpartId);
+      const unread = last?.sender_id !== user.sub && (!readAt || lastAt > readAt);
       return {
         counterpartId,
         counterpartName: row.counterpart_name as string,
         counterpartHasPhoto: !!row.profile_photo_key,
         lastMessagePreview: chatPreview(last?.type, last?.body),
-        lastMessageAt: row.last_at as string,
+        lastMessageAt: lastAt,
+        unread,
       };
     }),
   );

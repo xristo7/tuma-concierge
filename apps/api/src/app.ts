@@ -5,6 +5,7 @@ import { authRoutes } from "./auth/routes.js";
 import { locationRoutes } from "./locations/routes.js";
 import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
+import { pushRoutes } from "./push/routes.js";
 import { riderRoutes } from "./riders/routes.js";
 import { settingsRoutes } from "./settings/routes.js";
 import { userRoutes } from "./users/routes.js";
@@ -112,6 +113,9 @@ app.get("/v1", (c) =>
       "GET /v1/chat/media/:messageId",
       "GET /v1/chat/threads",
       "GET /v1/chat/threads/:counterpartId",
+      "POST /v1/orders/:id/chat/read",
+      "POST /v1/push/subscribe",
+      "POST /v1/push/unsubscribe",
       "GET /v1/payments/:id/refresh",
       "POST /v1/payments/yo/callback",
       "POST /v1/riders/apply",
@@ -155,6 +159,7 @@ app.route("/v1/auth", authRoutes);
 app.route("/v1/auth", verifyRoutes);
 app.route("/v1", orderRoutes);
 app.route("/v1", paymentRoutes);
+app.route("/v1", pushRoutes);
 app.route("/v1", riderRoutes);
 app.route("/v1", userRoutes);
 app.route("/v1", locationRoutes);

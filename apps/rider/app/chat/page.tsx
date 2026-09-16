@@ -88,9 +88,14 @@ export default function ChatListPage() {
               <ThreadAvatar counterpartId={t.counterpartId} hasPhoto={t.counterpartHasPhoto} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-bold text-ink">{t.counterpartName}</span>
-                <span className="block truncate text-xs text-ink-500">{t.lastMessagePreview}</span>
+                <span className={`block truncate text-xs ${t.unread ? "font-semibold text-ink" : "text-ink-500"}`}>
+                  {t.lastMessagePreview}
+                </span>
               </span>
-              <span className="shrink-0 text-[11px] text-ink-500">{formatTime(t.lastMessageAt)}</span>
+              <span className="flex shrink-0 flex-col items-end gap-1.5">
+                <span className="text-[11px] text-ink-500">{formatTime(t.lastMessageAt)}</span>
+                {t.unread && <span className="h-2 w-2 rounded-full bg-gold" aria-hidden />}
+              </span>
             </Link>
           </li>
         ))}

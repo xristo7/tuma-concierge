@@ -370,6 +370,24 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async getChatThread(counterpartId: string) {
       return request<ChatThreadDetail>(`/v1/chat/threads/${counterpartId}`);
     },
+    /** Marks this order's conversation as read up to now — clears the unread badge for its counterpart. */
+    async markChatRead(orderId: string) {
+      return request<{ ok: true }>(`/v1/orders/${orderId}/chat/read`, { method: "POST" });
+    },
+
+    // Push notifications
+    async subscribePush(subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) {
+      return request<{ ok: true }>("/v1/push/subscribe", {
+        method: "POST",
+        body: JSON.stringify(subscription),
+      });
+    },
+    async unsubscribePush(endpoint: string) {
+      return request<{ ok: true }>("/v1/push/unsubscribe", {
+        method: "POST",
+        body: JSON.stringify({ endpoint }),
+      });
+    },
 
     // Payments
     async refreshPayment(paymentId: string) {

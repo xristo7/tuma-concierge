@@ -211,6 +211,7 @@ export type ChatThread = {
   counterpartHasPhoto: boolean;
   lastMessagePreview: string;
   lastMessageAt: string;
+  unread: boolean;
 };
 
 /** Opening a conversation by counterpart (not by a specific order) — the whole shared history, plus which order a new message attaches to. */

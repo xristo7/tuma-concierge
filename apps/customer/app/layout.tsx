@@ -3,6 +3,7 @@ import Script from "next/script";
 import "./globals.css";
 import { AppShell } from "../components/AppShell";
 import { InstallPrompt } from "../components/InstallPrompt";
+import { PushNotifications } from "../components/PushNotifications";
 import { ServiceWorkerRegister } from "../components/ServiceWorkerRegister";
 import { AuthProvider } from "../lib/auth-context";
 
@@ -56,6 +57,7 @@ export default function RootLayout({
         <ServiceWorkerRegister />
         <AuthProvider>
           <AppShell>{children}</AppShell>
+          <PushNotifications />
         </AuthProvider>
         <InstallPrompt />
       </body>
