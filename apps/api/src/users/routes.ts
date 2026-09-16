@@ -9,6 +9,7 @@
 import { Hono } from "hono";
 import { db } from "../db/client.js";
 import { requireAuth } from "../auth/middleware.js";
+import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
 
 export const userRoutes = new Hono();
@@ -22,10 +23,10 @@ userRoutes.post("/users/me/profile-photo", async (c) => {
   const form = await c.req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) return c.json({ error: "missing_file" }, 400);
-  if (!ALLOWED_PHOTO_MIME.has(file.type)) return c.json({ error: "unsupported_file_type" }, 400);
+  if (!ALLOWED_PHOTO_MIME.has(baseMimeType(file.type))) return c.json({ error: "unsupported_file_type" }, 400);
   if (file.size > MAX_PROFILE_PHOTO_BYTES) return c.json({ error: "file_too_large" }, 400);
 
-  const ext = file.type.split("/")[1];
+  const ext = extensionForMime(file.type, "jpg");
   const key = `users/${user.sub}/profile-photo.${ext}`;
   const bucket = getR2Bucket();
   await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });

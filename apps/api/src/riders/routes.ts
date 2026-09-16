@@ -7,6 +7,7 @@ import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId } from "../lib/ids.js";
+import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { clientIp } from "../lib/ratelimit.js";
 import { getDeliverySettings } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
@@ -123,10 +124,10 @@ riderRoutes.post("/riders/id-document", requireAuth, requireRole("rider"), async
   const form = await c.req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) return c.json({ error: "missing_file" }, 400);
-  if (!ALLOWED_ID_MIME.has(file.type)) return c.json({ error: "unsupported_file_type" }, 400);
+  if (!ALLOWED_ID_MIME.has(baseMimeType(file.type))) return c.json({ error: "unsupported_file_type" }, 400);
   if (file.size > MAX_ID_DOCUMENT_BYTES) return c.json({ error: "file_too_large" }, 400);
 
-  const ext = file.type === "application/pdf" ? "pdf" : file.type.split("/")[1];
+  const ext = extensionForMime(file.type, "bin");
   const key = `riders/${user.sub}/national-id.${ext}`;
   const bucket = getR2Bucket();
   await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
@@ -165,10 +166,10 @@ riderRoutes.post("/riders/profile-photo", requireAuth, requireRole("rider"), asy
   const form = await c.req.formData().catch(() => null);
   const file = form?.get("file");
   if (!(file instanceof File)) return c.json({ error: "missing_file" }, 400);
-  if (!ALLOWED_PHOTO_MIME.has(file.type)) return c.json({ error: "unsupported_file_type" }, 400);
+  if (!ALLOWED_PHOTO_MIME.has(baseMimeType(file.type))) return c.json({ error: "unsupported_file_type" }, 400);
   if (file.size > MAX_PROFILE_PHOTO_BYTES) return c.json({ error: "file_too_large" }, 400);
 
-  const ext = file.type.split("/")[1];
+  const ext = extensionForMime(file.type, "jpg");
   const key = `riders/${user.sub}/profile-photo.${ext}`;
   const bucket = getR2Bucket();
   await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });

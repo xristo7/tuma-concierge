@@ -12,6 +12,38 @@ function formatTime(iso: string): string {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+function ThreadAvatar({ counterpartId, hasPhoto }: { counterpartId: string; hasPhoto: boolean }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!hasPhoto) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    api
+      .userPhotoBlob(counterpartId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [counterpartId, hasPhoto]);
+
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" />;
+  }
+  return (
+    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+      <User className="h-6 w-6" strokeWidth={1.75} aria-hidden />
+    </span>
+  );
+}
+
 export default function ChatListPage() {
   const [threads, setThreads] = useState<ChatThread[] | null>(null);
 
@@ -53,9 +85,7 @@ export default function ChatListPage() {
               href={`/chat/${t.counterpartId}`}
               className="home-card flex items-center gap-3 !rounded-2xl !px-3 !py-3"
             >
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
-                <User className="h-6 w-6" strokeWidth={1.75} aria-hidden />
-              </span>
+              <ThreadAvatar counterpartId={t.counterpartId} hasPhoto={t.counterpartHasPhoto} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-bold text-ink">{t.counterpartName}</span>
                 <span className="block truncate text-xs text-ink-500">{t.lastMessagePreview}</span>

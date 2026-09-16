@@ -5,6 +5,7 @@ import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
+import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { consume, tooManyRequests } from "../lib/ratelimit.js";
 import { getDeliverySettings, getMatchingSettings, getMaxOrderValue } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
@@ -417,10 +418,10 @@ orderRoutes.post("/orders/:id/voice-note", async (c) => {
   const form = await c.req.formData().catch(() => null);
   const file = form?.get("audio");
   if (!(file instanceof File)) return c.json({ error: "missing_audio" }, 400);
-  if (!ALLOWED_VOICE_NOTE_MIME.has(file.type)) return c.json({ error: "unsupported_file_type" }, 400);
+  if (!ALLOWED_VOICE_NOTE_MIME.has(baseMimeType(file.type))) return c.json({ error: "unsupported_file_type" }, 400);
   if (file.size > MAX_VOICE_NOTE_BYTES) return c.json({ error: "file_too_large" }, 400);
 
-  const ext = file.type.split("/")[1] ?? "webm";
+  const ext = extensionForMime(file.type, "webm");
   const key = `orders/${id}/voice-note.${ext}`;
   const bucket = getR2Bucket();
   await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
@@ -1559,11 +1560,11 @@ orderRoutes.post("/orders/:id/chat", async (c) => {
     }
     const allowed = type === "image" ? ALLOWED_CHAT_IMAGE_MIME : ALLOWED_VOICE_NOTE_MIME;
     const maxBytes = type === "image" ? MAX_CHAT_IMAGE_BYTES : MAX_VOICE_NOTE_BYTES;
-    if (!allowed.has(file.type)) return c.json({ error: "unsupported_file_type" }, 400);
+    if (!allowed.has(baseMimeType(file.type))) return c.json({ error: "unsupported_file_type" }, 400);
     if (file.size > maxBytes) return c.json({ error: "file_too_large" }, 400);
 
     const messageId = newId("msg");
-    const ext = file.type.split("/")[1] ?? (type === "image" ? "jpg" : "webm");
+    const ext = extensionForMime(file.type, type === "image" ? "jpg" : "webm");
     const key = `orders/${id}/chat/${messageId}.${ext}`;
     const bucket = getR2Bucket();
     await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
@@ -1645,7 +1646,7 @@ orderRoutes.get("/chat/threads", async (c) => {
           args: [user.sub],
         }
       : {
-          sql: `SELECT cm.customer_id as counterpart_id, u.name as counterpart_name, NULL as profile_photo_key,
+          sql: `SELECT cm.customer_id as counterpart_id, u.name as counterpart_name, u.profile_photo_key,
                        MAX(cm.created_at) as last_at
                 FROM chat_messages cm
                 JOIN users u ON u.id = cm.customer_id
@@ -1701,7 +1702,7 @@ orderRoutes.get("/chat/threads/:counterpartId", async (c) => {
   const counterpartRes = await db.execute(
     isCustomer
       ? { sql: "SELECT u.name, r.profile_photo_key FROM users u LEFT JOIN riders r ON r.user_id = u.id WHERE u.id = ?", args: [counterpartId] }
-      : { sql: "SELECT name FROM users WHERE id = ?", args: [counterpartId] },
+      : { sql: "SELECT name, profile_photo_key FROM users WHERE id = ?", args: [counterpartId] },
   );
   const counterpart = counterpartRes.rows[0] as Row | undefined;
   if (!counterpart) return c.json({ error: "not_found" }, 404);
@@ -1714,7 +1715,7 @@ orderRoutes.get("/chat/threads/:counterpartId", async (c) => {
   return c.json({
     orderId,
     counterpartName: counterpart.name,
-    counterpartHasPhoto: isCustomer ? !!counterpart.profile_photo_key : false,
+    counterpartHasPhoto: !!counterpart.profile_photo_key,
     messages: messages.rows,
   });
 });
