@@ -7,6 +7,7 @@ import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { riderRoutes } from "./riders/routes.js";
 import { settingsRoutes } from "./settings/routes.js";
+import { userRoutes } from "./users/routes.js";
 import { verifyRoutes } from "./verify/routes.js";
 import { voiceRoutes } from "./voice/routes.js";
 
@@ -120,6 +121,9 @@ app.get("/v1", (c) =>
       "GET /v1/riders/jobs/available",
       "POST /v1/riders/profile-photo",
       "GET /v1/riders/:userId/photo",
+      "POST /v1/users/me/profile-photo",
+      "DELETE /v1/users/me/profile-photo",
+      "GET /v1/users/:userId/photo",
       "GET /v1/admin/riders",
       "GET /v1/admin/riders/:userId/id-document",
       "POST /v1/admin/riders/:userId/verify",
@@ -129,6 +133,14 @@ app.get("/v1", (c) =>
       "GET /v1/admin/customers/:id",
       "GET /v1/admin/orders",
       "POST /v1/admin/users/:id/status",
+      "GET /v1/admin/staff",
+      "GET /v1/admin/staff/roles",
+      "POST /v1/admin/staff",
+      "POST /v1/admin/staff/:id/role",
+      "POST /v1/admin/staff/:id/status",
+      "POST /v1/admin/staff/:id/reset-password",
+      "GET /v1/admin/activity",
+      "POST /v1/admin/activity/:id/revert",
       "GET /v1/locations",
       "POST /v1/locations",
       "DELETE /v1/locations/:id",
@@ -144,6 +156,7 @@ app.route("/v1/auth", verifyRoutes);
 app.route("/v1", orderRoutes);
 app.route("/v1", paymentRoutes);
 app.route("/v1", riderRoutes);
+app.route("/v1", userRoutes);
 app.route("/v1", locationRoutes);
 app.route("/v1", settingsRoutes);
 // adminRoutes' admin gate is scoped to /admin/* (see admin/routes.ts), so

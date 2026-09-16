@@ -1,11 +1,12 @@
 "use client";
 
-import type { AdminRider } from "@tuma/shared";
+import { hasPermission, type AdminRider } from "@tuma/shared";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../../../../lib/api";
+import { useAuth } from "../../../../lib/auth-context";
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
@@ -20,6 +21,9 @@ function Row({ label, value }: { label: string; value: string | null | undefined
 export default function RiderDetailPage() {
   const params = useParams<{ id: string }>();
   const userId = params.id;
+  const { user } = useAuth();
+  const canVerify = hasPermission(user?.adminRole ?? null, "riders.verify");
+  const canManage = hasPermission(user?.adminRole ?? null, "riders.manage");
   const [rider, setRider] = useState<AdminRider | null>(null);
   const [docUrl, setDocUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -129,26 +133,30 @@ export default function RiderDetailPage() {
             View document <ExternalLink className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
           </a>
         )}
-        <button
-          disabled={busy}
-          onClick={() => run(() => api.adminVerifyRider(userId, !rider.verified))}
-          className={`min-h-11 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
-            rider.verified ? "border border-[var(--border-faint)] text-ink" : "bg-gold text-ink"
-          }`}
-        >
-          {rider.verified ? "Revoke verification" : "Verify rider"}
-        </button>
+        {canVerify && (
+          <button
+            disabled={busy}
+            onClick={() => run(() => api.adminVerifyRider(userId, !rider.verified))}
+            className={`min-h-11 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
+              rider.verified ? "border border-[var(--border-faint)] text-ink" : "bg-gold text-ink"
+            }`}
+          >
+            {rider.verified ? "Revoke verification" : "Verify rider"}
+          </button>
+        )}
       </section>
 
-      <button
-        disabled={busy}
-        onClick={() => run(() => api.adminSetUserStatus(userId, suspended ? "active" : "suspended"))}
-        className={`min-h-11 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
-          suspended ? "bg-green text-white" : "border border-red-200 text-red-700"
-        }`}
-      >
-        {suspended ? "Reactivate account" : "Suspend account"}
-      </button>
+      {canManage && (
+        <button
+          disabled={busy}
+          onClick={() => run(() => api.adminSetUserStatus(userId, suspended ? "active" : "suspended"))}
+          className={`min-h-11 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
+            suspended ? "bg-green text-white" : "border border-red-200 text-red-700"
+          }`}
+        >
+          {suspended ? "Reactivate account" : "Suspend account"}
+        </button>
+      )}
     </div>
   );
 }

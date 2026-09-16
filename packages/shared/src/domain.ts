@@ -1,5 +1,7 @@
 /** Core domain DTOs — kept in sync with apps/api's real (non-stub) responses. */
 
+import type { AdminRole } from "./permissions.js";
+
 export type ListStatus = "draft" | "active" | "delivered" | "cancelled";
 
 export type ListSummary = {
@@ -305,6 +307,18 @@ export type AuthUser = {
    * against. Such an account gains one through "forgot password" instead
    * (an OTP to its verified email, same as any other reset). */
   passwordSet: boolean;
+  /** Non-null only for role === "admin" — which kind of staff member this
+   * is. See @tuma/shared's permissions.ts for what each role can do. */
+  adminRole: AdminRole | null;
+  /** True right after a staff account is invited or has its password reset
+   * by another admin. The API rejects nearly everything else while this is
+   * true — the admin app should route straight to a "set your password"
+   * screen rather than let a request fail first. */
+  forcePasswordChange: boolean;
+  /** A customer's own photo, shown to the rider assigned to their order —
+   * the same trust signal riders already give customers, the other way
+   * round. Also used for a staff member's own avatar. */
+  hasProfilePhoto: boolean;
 };
 
 /** True once either phone or email has been confirmed via OTP — the two
@@ -424,4 +438,40 @@ export type CreateListResponse = {
   itemCount: number;
   createdAt: string;
   nextPath: string;
+};
+
+/** A staff account, as listed on the admin Staff page. */
+export type StaffMember = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  status: UserStatus;
+  admin_role: AdminRole;
+  force_password_change: number;
+  invited_at: string | null;
+  invited_by_name: string | null;
+  last_login_at: string | null;
+};
+
+/**
+ * One row from the admin activity log. before_json/after_json are raw JSON
+ * strings (or null, for actions that don't capture a snapshot) — parse them
+ * only where a UI actually needs to render the diff.
+ */
+export type ActivityLogEntry = {
+  id: string;
+  actor_id: string;
+  actor_name: string;
+  actor_role: AdminRole | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  summary: string;
+  before_json: string | null;
+  after_json: string | null;
+  revertible: number;
+  reverted_at: string | null;
+  reverted_by: string | null;
+  created_at: string;
 };

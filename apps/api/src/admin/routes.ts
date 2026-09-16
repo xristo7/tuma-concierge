@@ -5,6 +5,18 @@ import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { paymentsIntegrationStatus } from "../payments/service.js";
 import { getR2Bucket } from "../storage/r2.js";
+import { logActivity, revertActivity } from "./activity.js";
+import {
+  ADMIN_ROLES,
+  ADMIN_ROLE_LABELS,
+  ADMIN_ROLE_DESCRIPTIONS,
+  hasPermission,
+  isAdminRole,
+  requirePermission,
+  requireSuperAdmin,
+} from "./permissions.js";
+import { countSuperAdmins, inviteStaff, listStaff, resetStaffPassword } from "./staff.js";
+import { clientIp } from "../lib/ratelimit.js";
 
 export const adminRoutes = new Hono();
 // Scoped to /admin/* rather than "*" on purpose. This router is mounted on
@@ -21,7 +33,7 @@ type Row = Record<string, unknown>;
 // Platform overview
 // ---------------------------------------------------------------------------
 
-adminRoutes.get("/admin/stats", async (c) => {
+adminRoutes.get("/admin/stats", requirePermission("stats.view"), async (c) => {
   const [users, riders, ordersByStage, paymentsByStatus, settled] = await Promise.all([
     db.execute(
       `SELECT role, COUNT(*) as n FROM users WHERE role IN ('customer', 'rider') GROUP BY role`,
@@ -64,7 +76,7 @@ adminRoutes.get("/admin/stats", async (c) => {
   });
 });
 
-adminRoutes.get("/admin/integrations", async (c) => {
+adminRoutes.get("/admin/integrations", requirePermission("integrations.view"), async (c) => {
   let storageConfigured = true;
   try {
     getR2Bucket();
@@ -90,7 +102,7 @@ adminRoutes.get("/admin/integrations", async (c) => {
 // Customers
 // ---------------------------------------------------------------------------
 
-adminRoutes.get("/admin/customers", async (c) => {
+adminRoutes.get("/admin/customers", requirePermission("customers.view"), async (c) => {
   const q = c.req.query("q")?.trim();
   const res = await db.execute(
     q
@@ -108,8 +120,8 @@ adminRoutes.get("/admin/customers", async (c) => {
   return c.json({ customers: res.rows });
 });
 
-adminRoutes.get("/admin/customers/:id", async (c) => {
-  const id = c.req.param("id");
+adminRoutes.get("/admin/customers/:id", requirePermission("customers.view"), async (c) => {
+  const id = c.req.param("id") as string;
   const userRes = await db.execute({
     sql: `SELECT id, name, phone, email, status, created_at FROM users WHERE id = ? AND role = 'customer'`,
     args: [id],
@@ -131,7 +143,7 @@ adminRoutes.get("/admin/customers/:id", async (c) => {
 // Orders (platform-wide, read only)
 // ---------------------------------------------------------------------------
 
-adminRoutes.get("/admin/orders", async (c) => {
+adminRoutes.get("/admin/orders", requirePermission("orders.view"), async (c) => {
   const stage = c.req.query("stage")?.trim();
   const type = c.req.query("type")?.trim();
   const limit = Math.max(1, Math.min(Number(c.req.query("limit") ?? "30") || 30, 100));
@@ -167,15 +179,27 @@ adminRoutes.get("/admin/orders", async (c) => {
 const statusSchema = z.object({ status: z.enum(["active", "suspended"]) });
 
 adminRoutes.post("/admin/users/:id/status", async (c) => {
-  const id = c.req.param("id");
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
   const parsed = statusSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
-  const existing = await db.execute({ sql: "SELECT id, role FROM users WHERE id = ?", args: [id] });
+  const existing = await db.execute({ sql: "SELECT id, name, role, status FROM users WHERE id = ?", args: [id] });
   const row = existing.rows[0] as Row | undefined;
   if (!row) return c.json({ error: "not_found" }, 404);
   if (row.role === "admin") {
-    return c.json({ error: "cannot_manage_admin", message: "Admin accounts can't be suspended here" }, 400);
+    return c.json(
+      { error: "cannot_manage_admin", message: "Use /admin/staff to manage staff accounts" },
+      400,
+    );
+  }
+  // Which permission applies depends on who's being suspended — a
+  // Customer Manager can't touch a rider's account and vice versa, so this
+  // has to check the target's own role rather than a single fixed
+  // permission for the whole route.
+  const permission = row.role === "rider" ? "riders.manage" : "customers.manage";
+  if (!hasPermission(user.adminRole, permission)) {
+    return c.json({ error: "forbidden", message: "Your role doesn't include this action." }, 403);
   }
 
   // Suspending has to end sessions that already exist, not just block the
@@ -195,5 +219,232 @@ adminRoutes.post("/admin/users/:id/status", async (c) => {
     sql: "SELECT id, name, phone, email, role, status FROM users WHERE id = ?",
     args: [id],
   });
+
+  await logActivity({
+    actor: user,
+    action: "user.status",
+    entityType: row.role as string,
+    entityId: id,
+    summary: `${parsed.data.status === "suspended" ? "Suspended" : "Reactivated"} ${row.role} ${row.name as string}`,
+    before: { status: row.status },
+    after: { status: parsed.data.status },
+    revertible: true,
+    ip: clientIp(c),
+  });
+
   return c.json({ user: res.rows[0] });
+});
+
+// ---------------------------------------------------------------------------
+// Staff accounts — invite, list, change role/status, reset password.
+// Super Admin only: this is the one thing no other role gets a permission
+// for, so it's checked directly rather than through hasPermission.
+// ---------------------------------------------------------------------------
+
+adminRoutes.get("/admin/staff", requireSuperAdmin(), async (c) => {
+  return c.json({ staff: await listStaff() });
+});
+
+const inviteStaffSchema = z.object({
+  name: z.string().min(1).max(80),
+  email: z.string().email().max(160),
+  phone: z.string().min(6).max(20).optional(),
+  adminRole: z.enum(ADMIN_ROLES),
+});
+
+adminRoutes.post("/admin/staff", requireSuperAdmin(), async (c) => {
+  const user = c.get("user");
+  const parsed = inviteStaffSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  const result = await inviteStaff({ ...parsed.data, invitedBy: user.sub });
+  if (!result.ok) {
+    return c.json({ error: result.error }, 409);
+  }
+
+  await logActivity({
+    actor: user,
+    action: "staff.invite",
+    entityType: "user",
+    entityId: result.user.id as string,
+    summary: `Invited ${parsed.data.name} as ${ADMIN_ROLE_LABELS[parsed.data.adminRole]}`,
+    after: { adminRole: parsed.data.adminRole, email: parsed.data.email },
+    ip: clientIp(c),
+  });
+
+  const emailFailed = "_emailFailed" in result.user;
+  return c.json(
+    {
+      staff: result.user,
+      ...(emailFailed
+        ? {
+            emailFailed: true,
+            tempPassword: (result.user as Row)._tempPassword,
+            message: "The invite email failed to send — share this temporary password with them another way.",
+          }
+        : {}),
+    },
+    201,
+  );
+});
+
+const changeRoleSchema = z.object({ adminRole: z.enum(ADMIN_ROLES) });
+
+adminRoutes.post("/admin/staff/:id/role", requireSuperAdmin(), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const parsed = changeRoleSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  const existing = await db.execute({
+    sql: "SELECT id, name, admin_role FROM users WHERE id = ? AND role = 'admin'",
+    args: [id],
+  });
+  const row = existing.rows[0] as Row | undefined;
+  if (!row) return c.json({ error: "not_found" }, 404);
+
+  // Never let the platform end up with zero active Super Admins — that's a
+  // lockout nobody inside the system could undo.
+  if (row.admin_role === "super_admin" && parsed.data.adminRole !== "super_admin") {
+    const remaining = await countSuperAdmins(id);
+    if (remaining === 0) {
+      return c.json(
+        { error: "last_super_admin", message: "At least one active Super Admin must remain." },
+        400,
+      );
+    }
+  }
+
+  await db.execute({
+    sql: "UPDATE users SET admin_role = ?, sessions_valid_from = datetime('now'), updated_at = datetime('now') WHERE id = ?",
+    args: [parsed.data.adminRole, id],
+  });
+
+  await logActivity({
+    actor: user,
+    action: "staff.role_change",
+    entityType: "user",
+    entityId: id,
+    summary: `Changed ${row.name as string}'s role from ${ADMIN_ROLE_LABELS[row.admin_role as keyof typeof ADMIN_ROLE_LABELS]} to ${ADMIN_ROLE_LABELS[parsed.data.adminRole]}`,
+    before: { adminRole: row.admin_role },
+    after: { adminRole: parsed.data.adminRole },
+    revertible: true,
+    ip: clientIp(c),
+  });
+
+  return c.json({ ok: true });
+});
+
+adminRoutes.post("/admin/staff/:id/status", requireSuperAdmin(), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const parsed = statusSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  if (id === user.sub) {
+    return c.json({ error: "cannot_manage_self", message: "You can't change your own status here." }, 400);
+  }
+
+  const existing = await db.execute({
+    sql: "SELECT id, name, status, admin_role FROM users WHERE id = ? AND role = 'admin'",
+    args: [id],
+  });
+  const row = existing.rows[0] as Row | undefined;
+  if (!row) return c.json({ error: "not_found" }, 404);
+
+  if (parsed.data.status === "suspended" && row.admin_role === "super_admin") {
+    const remaining = await countSuperAdmins(id);
+    if (remaining === 0) {
+      return c.json(
+        { error: "last_super_admin", message: "At least one active Super Admin must remain." },
+        400,
+      );
+    }
+  }
+
+  await db.execute({
+    sql: `UPDATE users
+          SET status = ?,
+              sessions_valid_from = CASE WHEN ? = 'suspended' THEN datetime('now') ELSE sessions_valid_from END,
+              updated_at = datetime('now')
+          WHERE id = ?`,
+    args: [parsed.data.status, parsed.data.status, id],
+  });
+
+  await logActivity({
+    actor: user,
+    action: "staff.status",
+    entityType: "user",
+    entityId: id,
+    summary: `${parsed.data.status === "suspended" ? "Suspended" : "Reactivated"} staff member ${row.name as string}`,
+    before: { status: row.status },
+    after: { status: parsed.data.status },
+    revertible: true,
+    ip: clientIp(c),
+  });
+
+  return c.json({ ok: true });
+});
+
+adminRoutes.post("/admin/staff/:id/reset-password", requireSuperAdmin(), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const result = await resetStaffPassword(id);
+  if (!result.ok) return c.json({ error: result.error }, 404);
+
+  await logActivity({
+    actor: user,
+    action: "staff.reset_password",
+    entityType: "user",
+    entityId: id,
+    summary: `Reset password for staff member`,
+    ip: clientIp(c),
+  });
+
+  return c.json(
+    result.emailed
+      ? { ok: true, emailed: true }
+      : { ok: true, emailed: false, tempPassword: result.tempPassword, message: "No email on file — share this temporary password another way." },
+  );
+});
+
+adminRoutes.get("/admin/staff/roles", requireSuperAdmin(), (c) => {
+  return c.json({
+    roles: ADMIN_ROLES.map((role) => ({ role, label: ADMIN_ROLE_LABELS[role], description: ADMIN_ROLE_DESCRIPTIONS[role] })),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Activity log
+// ---------------------------------------------------------------------------
+
+adminRoutes.get("/admin/activity", requirePermission("activity_log.view"), async (c) => {
+  const limit = Math.max(1, Math.min(Number(c.req.query("limit") ?? "50") || 50, 200));
+  const before = c.req.query("before")?.trim();
+
+  const res = await db.execute(
+    before
+      ? {
+          sql: `SELECT * FROM admin_activity_log WHERE created_at < ? ORDER BY created_at DESC LIMIT ?`,
+          args: [before, limit],
+        }
+      : { sql: `SELECT * FROM admin_activity_log ORDER BY created_at DESC LIMIT ?`, args: [limit] },
+  );
+  return c.json({ entries: res.rows });
+});
+
+adminRoutes.post("/admin/activity/:id/revert", requireSuperAdmin(), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const result = await revertActivity(id, user);
+  if (!result.ok) {
+    const messages: Record<string, string> = {
+      not_found: "That log entry doesn't exist.",
+      not_revertible: "This action can't be reverted.",
+      already_reverted: "This action has already been reverted.",
+      no_handler: "This action type doesn't support reverting yet.",
+    };
+    return c.json({ error: result.error, message: messages[result.error] }, 400);
+  }
+  return c.json({ ok: true });
 });

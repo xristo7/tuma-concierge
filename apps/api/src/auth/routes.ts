@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import { Hono } from "hono";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
+import { isAdminRole } from "@tuma/shared";
+import { logActivity } from "../admin/activity.js";
 import { db } from "../db/client.js";
 import {
   checkLockout,
@@ -182,6 +184,22 @@ authRoutes.post("/login", async (c) => {
   }
 
   await clearFailures(accountKey);
+
+  if (row.role === "admin") {
+    // Staff logins are what the activity log exists to answer questions
+    // about — recorded here rather than in requireAuth so a login shows up
+    // even though it's the one request that doesn't have a token yet.
+    await db.execute({ sql: "UPDATE users SET last_login_at = datetime('now') WHERE id = ?", args: [row.id] });
+    await logActivity({
+      actor: { sub: row.id, name: row.name, adminRole: isAdminRole(row.admin_role) ? row.admin_role : null },
+      action: "auth.login",
+      entityType: "user",
+      entityId: row.id,
+      summary: `${row.name as string} logged in`,
+      ip: clientIp(c),
+    });
+  }
+
   const token = await signToken({ sub: row.id, role: row.role, phone: row.phone });
   return c.json({
     token,
@@ -455,7 +473,7 @@ authRoutes.post("/password/reset/confirm", async (c) => {
   // account's route to gaining a password it actually knows (see 0020).
   await db.execute({
     sql: `UPDATE users SET password_hash = ?, sessions_valid_from = datetime('now'),
-                 password_set_at = datetime('now'), updated_at = datetime('now')
+                 password_set_at = datetime('now'), force_password_change = 0, updated_at = datetime('now')
           WHERE id = ?`,
     args: [passwordHash, row.id],
   });
@@ -518,7 +536,7 @@ authRoutes.post("/password/change", requireAuth, async (c) => {
   // Settings shouldn't log you out mid-flow.
   await db.execute({
     sql: `UPDATE users SET password_hash = ?, sessions_valid_from = datetime('now'),
-                 password_set_at = datetime('now'), updated_at = datetime('now')
+                 password_set_at = datetime('now'), force_password_change = 0, updated_at = datetime('now')
           WHERE id = ?`,
     args: [passwordHash, user.sub],
   });

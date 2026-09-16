@@ -1,4 +1,6 @@
+import type { AdminRole } from "./permissions.js";
 import type {
+  ActivityLogEntry,
   AdminCustomer,
   AdminOrderRow,
   AdminRider,
@@ -23,6 +25,7 @@ import type {
   Rider,
   RiderApplicant,
   SavedLocation,
+  StaffMember,
   UserStatus,
   Wallet,
 } from "./domain.js";
@@ -516,6 +519,69 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         method: "POST",
         body: JSON.stringify({ status }),
       });
+    },
+
+    // Staff accounts — Super Admin only, enforced server-side.
+    async adminListStaff() {
+      return request<{ staff: StaffMember[] }>("/v1/admin/staff");
+    },
+    async adminStaffRoles() {
+      return request<{ roles: Array<{ role: AdminRole; label: string; description: string }> }>(
+        "/v1/admin/staff/roles",
+      );
+    },
+    async adminInviteStaff(input: { name: string; email: string; phone?: string; adminRole: AdminRole }) {
+      return request<{ staff: StaffMember; emailFailed?: boolean; tempPassword?: string; message?: string }>(
+        "/v1/admin/staff",
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    async adminChangeStaffRole(userId: string, adminRole: AdminRole) {
+      return request<{ ok: true }>(`/v1/admin/staff/${userId}/role`, {
+        method: "POST",
+        body: JSON.stringify({ adminRole }),
+      });
+    },
+    async adminSetStaffStatus(userId: string, status: UserStatus) {
+      return request<{ ok: true }>(`/v1/admin/staff/${userId}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      });
+    },
+    async adminResetStaffPassword(userId: string) {
+      return request<{ ok: true; emailed: boolean; tempPassword?: string; message?: string }>(
+        `/v1/admin/staff/${userId}/reset-password`,
+        { method: "POST" },
+      );
+    },
+
+    // Activity log
+    async adminActivityLog(options: { limit?: number; before?: string } = {}) {
+      const params = new URLSearchParams();
+      if (options.limit) params.set("limit", String(options.limit));
+      if (options.before) params.set("before", options.before);
+      const qs = params.toString();
+      return request<{ entries: ActivityLogEntry[] }>(`/v1/admin/activity${qs ? `?${qs}` : ""}`);
+    },
+    async adminRevertActivity(id: string) {
+      return request<{ ok: true }>(`/v1/admin/activity/${id}/revert`, { method: "POST" });
+    },
+
+    // A user's own profile photo (primarily customers) — riders keep their
+    // separate uploadRiderProfilePhoto/riderPhotoBlob below.
+    async uploadUserProfilePhoto(file: Blob) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await f(`${root}/v1/users/me/profile-photo`, { method: "POST", headers: authHeaders(), body: form });
+      return json<{ hasProfilePhoto: true }>(res);
+    },
+    async deleteUserProfilePhoto() {
+      return request<{ hasProfilePhoto: false }>("/v1/users/me/profile-photo", { method: "DELETE" });
+    },
+    async userPhotoBlob(userId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/users/${userId}/photo`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load photo`);
+      return res.blob();
     },
   };
 }

@@ -17,3 +17,17 @@ export function randomInt(max: number): number {
   } while (value >= limit);
   return value % max;
 }
+
+/** Alphabet for generated tokens (temporary staff passwords): no 0/O/1/I/l —
+ * characters a person could misread from an email or a screen share, since
+ * these are meant to be typed in by hand at least once. */
+const TOKEN_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+
+/** A random string of `length` characters from the CSPRNG, grouped with
+ * hyphens every `groupSize` characters for readability (e.g. "AB3D-EF7H"). */
+export function randomToken(length: number, groupSize = 5): string {
+  let out = "";
+  for (let i = 0; i < length; i += 1) out += TOKEN_ALPHABET[randomInt(TOKEN_ALPHABET.length)];
+  if (!groupSize) return out;
+  return (out.match(new RegExp(`.{1,${groupSize}}`, "g")) ?? [out]).join("-");
+}

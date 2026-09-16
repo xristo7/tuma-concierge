@@ -128,3 +128,88 @@ export async function sendVerificationEmail(to: string, code: string, verifyLink
     throw new Error(`Resend send failed: ${res.status} ${await res.text()}`);
   }
 }
+
+/** Branded "you've been invited" email for a new staff account — the
+ * temporary password shown here stops working the moment they set their
+ * own (requireAuth blocks everything else in the meantime), so there's no
+ * separate expiry to manage here the way the OTP codes above need one. */
+function buildStaffInviteHtml(name: string, roleLabel: string, tempPassword: string, loginUrl: string): string {
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#F1EEE8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
+            <tr>
+              <td align="center" style="padding-bottom:24px;">
+                <img src="${logoUrl()}" alt="Tuma" height="28" style="height:28px;width:auto;" />
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#FFFFFF;border-radius:20px;padding:36px 32px;box-shadow:0 4px 16px rgba(10,10,10,0.06);">
+                <h1 style="margin:0 0 8px;font-size:20px;color:#0A0A0A;text-align:center;">You've been added to Tuma</h1>
+                <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#5C6670;text-align:center;">
+                  Hi ${escapeHtml(name)} — you've been invited to the Tuma admin portal as <strong>${escapeHtml(roleLabel)}</strong>.
+                </p>
+                <p style="margin:0 0 8px;font-size:12px;color:#5C6670;text-align:center;">Your temporary password:</p>
+                <p style="margin:0 0 24px;text-align:center;">
+                  <span style="display:inline-block;font-size:18px;font-weight:700;letter-spacing:1px;color:#0A0A0A;background:#F7F3EE;border-radius:8px;padding:10px 18px;">${escapeHtml(tempPassword)}</span>
+                </p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td align="center" style="padding-bottom:12px;">
+                      <a href="${loginUrl}" style="display:inline-block;background:#C9A227;color:#0A0A0A;font-weight:700;font-size:15px;text-decoration:none;padding:14px 32px;border-radius:999px;">Log in</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0;font-size:12px;color:#5C6670;text-align:center;">
+                  You'll be asked to set your own password the moment you log in — nothing else in the
+                  portal is reachable until you do.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding-top:24px;font-size:12px;line-height:1.6;color:#5C6670;text-align:center;">
+                If you weren't expecting this, you can ignore this email — the temporary password
+                won't be enough on its own to sign in without it also matching your account.
+                <br />© Tuma
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+function buildStaffInviteText(name: string, roleLabel: string, tempPassword: string, loginUrl: string): string {
+  return `Hi ${name} — you've been invited to the Tuma admin portal as ${roleLabel}.\n\nTemporary password: ${tempPassword}\n\nLog in: ${loginUrl}\n\nYou'll be asked to set your own password immediately — nothing else works until you do.`;
+}
+
+export async function sendStaffInviteEmail(
+  to: string,
+  name: string,
+  roleLabel: string,
+  tempPassword: string,
+  loginUrl: string,
+): Promise<void> {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey()}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromAddress(),
+      to: [to],
+      subject: "You've been added to the Tuma admin portal",
+      html: buildStaffInviteHtml(name, roleLabel, tempPassword, loginUrl),
+      text: buildStaffInviteText(name, roleLabel, tempPassword, loginUrl),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Resend send failed: ${res.status} ${await res.text()}`);
+  }
+}

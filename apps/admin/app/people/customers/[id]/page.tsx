@@ -1,16 +1,19 @@
 "use client";
 
-import type { AdminCustomer, AdminOrderRow } from "@tuma/shared";
+import { hasPermission, type AdminCustomer, type AdminOrderRow } from "@tuma/shared";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../../../../lib/api";
+import { useAuth } from "../../../../lib/auth-context";
 import { formatUgx, orderTitle, stageLabel } from "../../../../lib/order-display";
 
 export default function CustomerDetailPage() {
   const params = useParams<{ id: string }>();
   const customerId = params.id;
+  const { user } = useAuth();
+  const canManage = hasPermission(user?.adminRole ?? null, "customers.manage");
   const [customer, setCustomer] = useState<AdminCustomer | null>(null);
   const [orders, setOrders] = useState<AdminOrderRow[]>([]);
   const [busy, setBusy] = useState(false);
@@ -82,15 +85,17 @@ export default function CustomerDetailPage() {
         </ul>
       </section>
 
-      <button
-        disabled={busy}
-        onClick={() => run(() => api.adminSetUserStatus(customerId, suspended ? "active" : "suspended"))}
-        className={`min-h-11 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
-          suspended ? "bg-green text-white" : "border border-red-200 text-red-700"
-        }`}
-      >
-        {suspended ? "Reactivate account" : "Suspend account"}
-      </button>
+      {canManage && (
+        <button
+          disabled={busy}
+          onClick={() => run(() => api.adminSetUserStatus(customerId, suspended ? "active" : "suspended"))}
+          className={`min-h-11 w-full rounded-full px-4 text-sm font-bold disabled:opacity-60 ${
+            suspended ? "bg-green text-white" : "border border-red-200 text-red-700"
+          }`}
+        >
+          {suspended ? "Reactivate account" : "Suspend account"}
+        </button>
+      )}
     </div>
   );
 }

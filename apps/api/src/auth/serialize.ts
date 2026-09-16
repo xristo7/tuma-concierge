@@ -1,3 +1,5 @@
+import { isAdminRole } from "@tuma/shared";
+
 type UserRow = {
   id: string;
   phone: string | null;
@@ -8,6 +10,9 @@ type UserRow = {
   email_verified_at: string | null;
   default_matching_mode: string | null;
   password_set_at: string | null;
+  admin_role: string | null;
+  force_password_change: number | null;
+  profile_photo_key: string | null;
 };
 
 /** Shapes a raw `users` row into the public `AuthUser` DTO. */
@@ -26,5 +31,8 @@ export function toAuthUser(row: Record<string, unknown>) {
     // password — the random value set at creation was never shown to
     // anyone, so "change password" would have nothing to check it against.
     passwordSet: r.password_set_at != null,
+    adminRole: isAdminRole(r.admin_role) ? r.admin_role : null,
+    forcePasswordChange: r.force_password_change === 1,
+    hasProfilePhoto: r.profile_photo_key != null,
   };
 }

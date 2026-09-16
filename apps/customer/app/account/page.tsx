@@ -1,10 +1,11 @@
 "use client";
 
 import { MATCHING_MODE_DESCRIPTIONS, MATCHING_MODE_LABELS, type MatchingMode } from "@tuma/shared";
-import { LogOut, Shield, User } from "lucide-react";
+import { LogOut, Shield } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
+import { ProfilePhoto } from "../../components/ProfilePhoto";
 import { SavedLocations } from "../../components/SavedLocations";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
@@ -77,9 +78,7 @@ export default function AccountPage() {
       <h1 className="text-xl font-bold text-ink">Account</h1>
 
       <section className="home-card flex items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
-          <User className="h-6 w-6" strokeWidth={1.75} aria-hidden />
-        </span>
+        <ProfilePhoto />
         <span>
           <span className="block text-[15px] font-bold text-ink">{user?.name ?? "—"}</span>
           <span className="block text-sm text-ink-500">{user?.phone}</span>

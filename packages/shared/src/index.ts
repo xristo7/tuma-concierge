@@ -11,6 +11,15 @@ export {
   mobileMoneyCurrencyCode,
 } from "./mobile-money.js";
 export type { MobileMoneyNetwork } from "./mobile-money.js";
+export {
+  ADMIN_ROLES,
+  ADMIN_ROLE_LABELS,
+  ADMIN_ROLE_DESCRIPTIONS,
+  isAdminRole,
+  hasPermission,
+  permissionsFor,
+} from "./permissions.js";
+export type { AdminRole, Permission } from "./permissions.js";
 export type {
   ListStatus,
   ListSummary,
@@ -46,4 +55,6 @@ export type {
   RiderApplicant,
   ChatThread,
   ChatThreadDetail,
+  StaffMember,
+  ActivityLogEntry,
 } from "./domain.js";

@@ -5,6 +5,7 @@ import { MapPin, MessageCircle, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { CustomerAvatar } from "../../../components/CustomerAvatar";
 import { OrderChat } from "../../../components/OrderChat";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { VoiceReasonRecorder } from "../../../components/VoiceReasonRecorder";
@@ -145,7 +146,10 @@ export default function JobDetailPage() {
   return (
     <div className="space-y-6 px-4 pb-24 pt-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-bold text-ink">{jobTitle(order)}</h1>
+        <div className="flex items-center gap-3">
+          {order.customer_id && <CustomerAvatar customerId={order.customer_id} />}
+          <h1 className="text-xl font-bold text-ink">{jobTitle(order)}</h1>
+        </div>
         <p className="text-sm font-semibold text-green">{stageLabel(order.stage, order.type)}</p>
         {order.type === "parcel" && order.pickup_area && (
           <p className="flex items-center gap-1.5 text-sm text-ink-500">

@@ -1,10 +1,13 @@
 import { isRiderProfileComplete, type MobileMoneyNetwork, type Rider } from "@tuma/shared";
 import { Hono } from "hono";
 import { z } from "zod";
+import { logActivity } from "../admin/activity.js";
+import { requirePermission } from "../admin/permissions.js";
 import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId } from "../lib/ids.js";
+import { clientIp } from "../lib/ratelimit.js";
 import { getDeliverySettings } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { redactOrders, toOpenJob } from "../orders/visibility.js";
@@ -439,7 +442,7 @@ riderRoutes.get("/riders/me/wallet/withdrawals/:id/refresh", requireAuth, requir
 // Admin — mock manual KYC/verification (no real document/ID provider yet)
 // ---------------------------------------------------------------------------
 
-riderRoutes.get("/admin/riders", requireAuth, requireRole("admin"), async (c) => {
+riderRoutes.get("/admin/riders", requireAuth, requireRole("admin"), requirePermission("riders.view"), async (c) => {
   const res = await db.execute(
     `SELECT u.id, u.name, u.phone, u.email, u.status, r.*
      FROM riders r JOIN users u ON u.id = r.user_id ORDER BY r.created_at DESC`,
@@ -448,34 +451,66 @@ riderRoutes.get("/admin/riders", requireAuth, requireRole("admin"), async (c) =>
 });
 
 /** Streams a rider's National ID scan from R2 for manual admin review. Never a public route. */
-riderRoutes.get("/admin/riders/:userId/id-document", requireAuth, requireRole("admin"), async (c) => {
-  const userId = c.req.param("userId") as string;
-  const res = await db.execute({ sql: "SELECT national_id_key FROM riders WHERE user_id = ?", args: [userId] });
-  const key = res.rows[0]?.national_id_key as string | null | undefined;
-  if (!key) return c.json({ error: "not_found" }, 404);
+riderRoutes.get(
+  "/admin/riders/:userId/id-document",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("riders.view"),
+  async (c) => {
+    const userId = c.req.param("userId") as string;
+    const res = await db.execute({ sql: "SELECT national_id_key FROM riders WHERE user_id = ?", args: [userId] });
+    const key = res.rows[0]?.national_id_key as string | null | undefined;
+    if (!key) return c.json({ error: "not_found" }, 404);
 
-  const bucket = getR2Bucket();
-  const object = await bucket.get(key);
-  if (!object) return c.json({ error: "not_found" }, 404);
+    const bucket = getR2Bucket();
+    const object = await bucket.get(key);
+    if (!object) return c.json({ error: "not_found" }, 404);
 
-  return new Response(object.body, {
-    headers: uploadResponseHeaders(object.httpMetadata?.contentType, "application/octet-stream"),
-  });
-});
+    return new Response(object.body, {
+      headers: uploadResponseHeaders(object.httpMetadata?.contentType, "application/octet-stream"),
+    });
+  },
+);
 
 const verifySchema = z.object({ verified: z.boolean() });
 
-riderRoutes.post("/admin/riders/:userId/verify", requireAuth, requireRole("admin"), async (c) => {
-  const userId = c.req.param("userId") as string;
-  const parsed = verifySchema.safeParse(await c.req.json().catch(() => ({})));
-  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+riderRoutes.post(
+  "/admin/riders/:userId/verify",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("riders.verify"),
+  async (c) => {
+    const userId = c.req.param("userId") as string;
+    const user = c.get("user");
+    const parsed = verifySchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
-  const result = await db.execute({
-    sql: "UPDATE riders SET verified = ?, updated_at = datetime('now') WHERE user_id = ?",
-    args: [parsed.data.verified ? 1 : 0, userId],
-  });
-  if (result.rowsAffected === 0) return c.json({ error: "not_found" }, 404);
+    const before = await db.execute({
+      sql: `SELECT r.verified, u.name FROM riders r JOIN users u ON u.id = r.user_id WHERE r.user_id = ?`,
+      args: [userId],
+    });
+    const beforeRow = before.rows[0] as Row | undefined;
+    if (!beforeRow) return c.json({ error: "not_found" }, 404);
 
-  const res = await db.execute({ sql: "SELECT * FROM riders WHERE user_id = ?", args: [userId] });
-  return c.json({ rider: res.rows[0] });
-});
+    const result = await db.execute({
+      sql: "UPDATE riders SET verified = ?, updated_at = datetime('now') WHERE user_id = ?",
+      args: [parsed.data.verified ? 1 : 0, userId],
+    });
+    if (result.rowsAffected === 0) return c.json({ error: "not_found" }, 404);
+
+    await logActivity({
+      actor: user,
+      action: "rider.verify",
+      entityType: "rider",
+      entityId: userId,
+      summary: `${parsed.data.verified ? "Verified" : "Un-verified"} rider ${beforeRow.name as string}`,
+      before: { verified: beforeRow.verified },
+      after: { verified: parsed.data.verified ? 1 : 0 },
+      revertible: true,
+      ip: clientIp(c),
+    });
+
+    const res = await db.execute({ sql: "SELECT * FROM riders WHERE user_id = ?", args: [userId] });
+    return c.json({ rider: res.rows[0] });
+  },
+);

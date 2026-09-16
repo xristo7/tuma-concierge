@@ -7,7 +7,7 @@ import { BrandHeader } from "./BrandHeader";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isAuthPage = pathname === "/login";
+  const isAuthPage = pathname === "/login" || pathname === "/set-password";
 
   return (
     <AuthGate>
