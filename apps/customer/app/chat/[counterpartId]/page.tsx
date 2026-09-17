@@ -59,7 +59,7 @@ export default function ChatThreadPage() {
   }
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))]">
+    <div className="h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom))]">
       <div className="mx-auto flex h-full max-w-lg flex-col bg-cream">
         <header className="flex shrink-0 items-center gap-3 border-b border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2.5">
           <button
