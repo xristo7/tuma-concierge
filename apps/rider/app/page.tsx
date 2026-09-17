@@ -132,8 +132,13 @@ export default function JobsHomePage() {
                     {job.distanceKm != null ? `${job.distanceKm} km away` : "Distance unknown"}
                   </span>
                 </span>
-                <span className="shrink-0 text-sm font-bold text-ink">
-                  {formatUgx(job.final_total ?? job.estimated_total)}
+                <span className="shrink-0 text-right">
+                  <span className="block text-sm font-bold text-ink">
+                    {formatUgx(job.final_total ?? job.estimated_total)}
+                  </span>
+                  <span className="block text-xs text-ink-500">
+                    {formatUgx(job.delivery_fee ?? job.final_total ?? job.estimated_total)} delivery
+                  </span>
                 </span>
               </div>
               {job.outOfServiceRange && (
