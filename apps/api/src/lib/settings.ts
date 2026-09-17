@@ -4,6 +4,12 @@ import { db } from "../db/client.js";
 const DEFAULTS = {
   delivery_rate_per_km: "1000",
   service_range_km: "7",
+  /** Flat delivery fee (UGX) charged on top of a shopping order's item
+   * costs. Unlike a parcel ride there's no pickup point to measure a
+   * distance from at order-creation time (the "pickup" is wherever the
+   * rider ends up shopping, unknown until one claims the job) — so this
+   * is a flat admin-set amount rather than distance × rate. */
+  shopping_delivery_fee: "3000",
   /** Ceiling on what a single order may charge into escrow (UGX). Guards
    * against a fat-fingered or forged estimate turning into a payment
    * request nobody meant to make. */
@@ -56,11 +62,20 @@ export async function setSetting(key: SettingKey, value: string): Promise<void> 
   });
 }
 
-export async function getDeliverySettings(): Promise<{ deliveryRatePerKm: number; serviceRangeKm: number }> {
-  const [rate, range] = await Promise.all([getSetting("delivery_rate_per_km"), getSetting("service_range_km")]);
+export async function getDeliverySettings(): Promise<{
+  deliveryRatePerKm: number;
+  serviceRangeKm: number;
+  shoppingDeliveryFee: number;
+}> {
+  const [rate, range, shoppingFee] = await Promise.all([
+    getSetting("delivery_rate_per_km"),
+    getSetting("service_range_km"),
+    getSetting("shopping_delivery_fee"),
+  ]);
   return {
     deliveryRatePerKm: Number(rate) || Number(DEFAULTS.delivery_rate_per_km),
     serviceRangeKm: Number(range) || Number(DEFAULTS.service_range_km),
+    shoppingDeliveryFee: Number(shoppingFee) || Number(DEFAULTS.shopping_delivery_fee),
   };
 }
 

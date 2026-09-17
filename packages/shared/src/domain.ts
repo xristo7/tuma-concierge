@@ -65,6 +65,7 @@ export type OrderRow = {
   currency: string;
   estimated_total: number | null;
   final_total: number | null;
+  delivery_fee: number | null;
   pickup_area: string | null;
   pickup_address: string | null;
   pickup_lat: number | null;
@@ -101,6 +102,7 @@ export type AvailableJob = Pick<
   | "currency"
   | "estimated_total"
   | "final_total"
+  | "delivery_fee"
   | "pickup_area"
   | "destination_area"
   | "pickup_lat"
@@ -153,6 +155,10 @@ export const MATCHING_MODE_DESCRIPTIONS: Record<MatchingMode, string> = {
 export type DeliverySettings = {
   deliveryRatePerKm: number;
   serviceRangeKm: number;
+  /** Flat delivery fee (UGX) added on top of a shopping order's item costs
+   * — see apps/api/src/lib/settings.ts for why shopping can't be priced by
+   * distance the way a parcel ride is. */
+  shoppingDeliveryFee: number;
   enabledModes: MatchingMode[];
   nearestWindowSeconds: number;
   maxAssignmentMinutes: number;

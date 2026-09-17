@@ -50,6 +50,7 @@ settingsRoutes.get("/settings", async (c) => {
 const updateSchema = z.object({
   deliveryRatePerKm: z.number().positive().max(1_000_000).optional(),
   serviceRangeKm: z.number().positive().max(1000).optional(),
+  shoppingDeliveryFee: z.number().int().nonnegative().max(1_000_000).optional(),
   enabledModes: z.array(z.enum(["first_to_claim", "nearest_window", "customer_selects"])).optional(),
   nearestWindowSeconds: z.number().int().positive().max(3600).optional(),
   maxAssignmentMinutes: z.number().int().positive().max(120).optional(),
@@ -86,6 +87,9 @@ settingsRoutes.put(
     }
     if (parsed.data.serviceRangeKm != null) {
       await setSetting("service_range_km", String(parsed.data.serviceRangeKm));
+    }
+    if (parsed.data.shoppingDeliveryFee != null) {
+      await setSetting("shopping_delivery_fee", String(parsed.data.shoppingDeliveryFee));
     }
     if (parsed.data.enabledModes != null) {
       await setMatchingModesEnabled(parsed.data.enabledModes);

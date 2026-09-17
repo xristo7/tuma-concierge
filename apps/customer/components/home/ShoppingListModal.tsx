@@ -30,6 +30,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   const [delivery, setDelivery] = useState<PointState>(emptyPoint);
   const [paymentRail, setPaymentRail] = useState<"escrow" | "float">("escrow");
   const [voiceNote, setVoiceNote] = useState<Blob | null>(null);
+  const [deliveryFee, setDeliveryFee] = useState(0);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,10 +40,15 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
       .getLocations()
       .then((res) => setLocations(res.locations))
       .catch(() => {});
+    api
+      .getSettings()
+      .then((res) => setDeliveryFee(res.settings.shoppingDeliveryFee))
+      .catch(() => {});
   }, []);
 
   const listTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unitCost) || 0), 0);
-  const total = mode === "voice" ? Number(voiceTotal) || 0 : listTotal;
+  const itemsTotal = mode === "voice" ? Number(voiceTotal) || 0 : listTotal;
+  const total = itemsTotal + deliveryFee;
 
   function updateItem(i: number, patch: Partial<Item>) {
     setItems((prev) => prev.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
@@ -103,7 +109,9 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
         destinationLat: d.lat,
         destinationLng: d.lng,
         paymentRail,
-        estimatedTotal: total || undefined,
+        // The delivery fee is added server-side (see the API's shoppingDeliveryFee) —
+        // this is just the items estimate, not itemsTotal + deliveryFee.
+        estimatedTotal: itemsTotal || undefined,
       });
       if (voiceNote) {
         api.uploadOrderVoiceNote(order.id, voiceNote).catch(() => {});
@@ -207,9 +215,19 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          <div className="flex items-center justify-between rounded-xl bg-[rgb(var(--surface-muted))] px-4 py-3">
-            <span className="text-sm font-semibold text-ink">Total</span>
-            <span className="text-base font-bold text-ink">{currency(total)}</span>
+          <div className="space-y-1.5 rounded-xl bg-[rgb(var(--surface-muted))] px-4 py-3">
+            <div className="flex items-center justify-between text-sm text-ink-500">
+              <span>Items total</span>
+              <span>{currency(itemsTotal)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm text-ink-500">
+              <span>Delivery fee</span>
+              <span>{currency(deliveryFee)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-[var(--border-faint)] pt-1.5">
+              <span className="text-sm font-semibold text-ink">You&apos;ll pay</span>
+              <span className="text-base font-bold text-ink">{currency(total)}</span>
+            </div>
           </div>
 
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

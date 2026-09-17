@@ -272,10 +272,16 @@ orderRoutes.post("/orders", async (c) => {
   // figure above the platform ceiling either way.
   let distanceKm: number | null = null;
   let estimatedTotal = d.estimatedTotal ?? null;
+  // The delivery-fee portion of estimatedTotal, stored separately since
+  // substitutions/fee proposals only ever adjust the items portion — see
+  // migrations/0025_order_delivery_fee.sql.
+  let deliveryFee: number | null = null;
   if (d.type === "parcel" && d.pickupLat != null && d.pickupLng != null && d.destinationLat != null && d.destinationLng != null) {
     distanceKm = haversineKm(d.pickupLat, d.pickupLng, d.destinationLat, d.destinationLng);
     const { deliveryRatePerKm } = await getDeliverySettings();
     estimatedTotal = Math.round(distanceKm * deliveryRatePerKm);
+    // A parcel ride has no items — its whole total IS the delivery fee.
+    deliveryFee = estimatedTotal;
   } else if (d.type === "shopping") {
     const priced = await db.execute({
       sql: `SELECT COUNT(*) AS total, COUNT(unit_price) AS priced,
@@ -286,11 +292,13 @@ orderRoutes.post("/orders", async (c) => {
     const row = priced.rows[0] as Row | undefined;
     const itemCount = Number(row?.total ?? 0);
     const pricedCount = Number(row?.priced ?? 0);
+    const { shoppingDeliveryFee } = await getDeliverySettings();
+    deliveryFee = shoppingDeliveryFee;
     // Every item carries a price → the list itself is the quote, and the
-    // client's separate estimate is redundant at best.
-    if (itemCount > 0 && pricedCount === itemCount) {
-      estimatedTotal = Number(row?.sum_priced ?? 0);
-    }
+    // client's separate estimate is redundant at best. Either way, the
+    // flat delivery fee is added on top of the items cost.
+    const itemsTotal = itemCount > 0 && pricedCount === itemCount ? Number(row?.sum_priced ?? 0) : (d.estimatedTotal ?? 0);
+    estimatedTotal = itemsTotal + shoppingDeliveryFee;
   }
 
   if (estimatedTotal != null) {
@@ -327,12 +335,12 @@ orderRoutes.post("/orders", async (c) => {
   const orderId = newId("ord");
   await db.execute({
     sql: `INSERT INTO orders (
-            id, list_id, customer_id, stage, type, payment_rail, estimated_total,
+            id, list_id, customer_id, stage, type, payment_rail, estimated_total, delivery_fee,
             pickup_area, pickup_address, pickup_lat, pickup_lng,
             destination_area, destination_address, destination_lat, destination_lng, distance_km,
             matching_mode, matching_deadline_at
           )
-          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       orderId,
       d.listId,
@@ -340,6 +348,7 @@ orderRoutes.post("/orders", async (c) => {
       d.type,
       d.paymentRail,
       estimatedTotal,
+      deliveryFee,
       d.pickupArea ?? null,
       d.pickupAddress ?? null,
       d.pickupLat ?? null,

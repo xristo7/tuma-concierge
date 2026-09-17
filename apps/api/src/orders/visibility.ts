@@ -57,6 +57,7 @@ export function toOpenJob(
     currency: order.currency,
     estimated_total: order.estimated_total,
     final_total: order.final_total,
+    delivery_fee: order.delivery_fee,
     pickup_area: order.pickup_area,
     destination_area: order.destination_area,
     pickup_lat: coarse(order.pickup_lat),

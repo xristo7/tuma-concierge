@@ -260,9 +260,15 @@ export default function JobDetailPage() {
               );
             })}
           </ul>
-          <div className="flex justify-between border-t border-[var(--border-faint)] pt-2 text-sm font-semibold">
-            <span>Total</span>
-            <span>{formatUgx(order.final_total ?? order.estimated_total)}</span>
+          <div className="space-y-1 border-t border-[var(--border-faint)] pt-2 text-sm font-semibold">
+            <div className="flex justify-between">
+              <span>Items total</span>
+              <span>{formatUgx((order.final_total ?? order.estimated_total ?? 0) - (order.delivery_fee ?? 0))}</span>
+            </div>
+            <div className="flex justify-between text-ink-500">
+              <span>Delivery fee</span>
+              <span>{formatUgx(order.delivery_fee ?? 0)}</span>
+            </div>
           </div>
           {pendingCount > 0 && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-gold bg-gold/10 p-3">
@@ -285,7 +291,7 @@ export default function JobDetailPage() {
       ) : (
         <section className="home-card flex justify-between text-sm font-semibold">
           <span>Delivery fee</span>
-          <span>{formatUgx(order.final_total ?? order.estimated_total)}</span>
+          <span>{formatUgx(order.delivery_fee ?? order.final_total ?? order.estimated_total)}</span>
         </section>
       )}
 

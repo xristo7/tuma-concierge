@@ -89,7 +89,7 @@ export function JobPreviewModal({ job, busy, offline, onClose, onClaim, onApply 
 
         <div className="flex justify-between border-t border-[var(--border-faint)] pt-3 text-sm font-bold text-ink">
           <span>Delivery fee</span>
-          <span>{formatUgx(job.final_total ?? job.estimated_total)}</span>
+          <span>{formatUgx(job.delivery_fee ?? job.final_total ?? job.estimated_total)}</span>
         </div>
 
         {offline && (
