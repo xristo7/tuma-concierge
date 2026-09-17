@@ -541,8 +541,8 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
   if (variant === "full") {
     return (
       <PhotoProvider>
-        <div className="flex h-full flex-col bg-cream">
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">{bubbles}</div>
+        <div className="flex min-h-0 flex-1 flex-col bg-cream">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">{bubbles}</div>
           <div className="shrink-0 border-t border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2.5">
             {composer}
           </div>
