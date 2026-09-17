@@ -14,13 +14,24 @@ export function Modal({
 }) {
   useEffect(() => {
     document.body.style.overflow = "hidden";
+
+    // Android draws its status bar as opaque OS chrome, colored from this
+    // meta tag — it's never covered by page content, so without this the
+    // bar stays the app's normal navy while everything below it dims,
+    // leaving a bright, uncovered-looking seam right at the top of the
+    // screen. Swap it to match the dim overlay while the modal is open.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const previousThemeColor = meta?.getAttribute("content") ?? null;
+    meta?.setAttribute("content", "#0a0a0a");
+
     return () => {
       document.body.style.overflow = "";
+      if (meta && previousThemeColor !== null) meta.setAttribute("content", previousThemeColor);
     };
   }, []);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/60 backdrop-blur-sm sm:items-center">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center">
       <div
         className="flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-[28px] bg-cream shadow-2xl sm:rounded-[28px]"
         role="dialog"
