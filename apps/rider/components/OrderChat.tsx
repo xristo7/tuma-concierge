@@ -12,12 +12,6 @@ import { compressImage } from "../lib/image-compress";
 import { useLivePolling } from "../lib/use-live-polling";
 import { useVoiceNoteMaxSeconds } from "../lib/useVoiceNoteMaxSeconds";
 
-const ROLE_STYLES: Record<string, { bg: string; label: string }> = {
-  customer: { bg: "bg-green", label: "C" },
-  rider: { bg: "bg-gold", label: "R" },
-  admin: { bg: "bg-ink", label: "A" },
-};
-
 function formatTime(iso: string): string {
   const d = new Date(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
   if (Number.isNaN(d.getTime())) return "";
@@ -366,24 +360,11 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
       {messages.length === 0 && queued.length === 0 && (
         <p className="py-8 text-center text-xs text-ink-500">No messages yet — say hello to your customer.</p>
       )}
-      {messages.map((m, i) => {
+      {messages.map((m) => {
         const mine = m.sender_id === user?.id;
-        const prev = messages[i - 1];
-        const showAvatar = !mine && (!prev || prev.sender_id !== m.sender_id);
-        const role = ROLE_STYLES[m.sender_role] ?? ROLE_STYLES.admin;
 
         return (
           <div key={m.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
-            {!mine && (
-              <span
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white ${
-                  showAvatar ? role.bg : "opacity-0"
-                }`}
-                aria-hidden
-              >
-                {role.label}
-              </span>
-            )}
             <div className={`flex max-w-[75%] flex-col ${mine ? "items-end" : "items-start"}`}>
               <div
                 className={`text-[14px] leading-snug shadow-sm ${m.type === "text" ? "px-4 py-2.5" : "p-1.5"} ${
