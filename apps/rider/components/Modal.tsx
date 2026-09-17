@@ -1,7 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export function Modal({
   title,
@@ -12,7 +13,10 @@ export function Modal({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    setMounted(true);
     document.body.style.overflow = "hidden";
 
     // Android draws its status bar as opaque OS chrome, colored from this
@@ -30,7 +34,14 @@ export function Modal({
     };
   }, []);
 
-  return (
+  if (!mounted) return null;
+
+  // Portaled to <body> rather than rendered in place — a sticky-positioned
+  // ancestor (the page header) can end up painting above a same-context
+  // fixed overlay regardless of z-index in some browsers, leaving a strip
+  // of the header visible through the dim/blur. Being a direct child of
+  // <body> keeps this out of that stacking-context fight entirely.
+  return createPortal(
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center">
       <div
         className="flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-[28px] bg-cream shadow-2xl sm:rounded-[28px]"
@@ -50,6 +61,7 @@ export function Modal({
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
