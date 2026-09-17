@@ -4,7 +4,7 @@ import type { OrderDetail } from "@tuma/shared";
 import { MapPin, MessageCircle, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CustomerAvatar } from "../../../components/CustomerAvatar";
 import { DeliveryNavigation } from "../../../components/DeliveryNavigation";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
@@ -31,6 +31,7 @@ export default function JobDetailPage() {
   const [feeDraft, setFeeDraft] = useState("");
   const [feeReason, setFeeReason] = useState("");
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const res = await api.getOrder(orderId);
@@ -39,6 +40,14 @@ export default function JobDetailPage() {
   }, [orderId]);
 
   useLivePolling(() => void load().catch(() => {}), 4000, [load]);
+
+  useEffect(() => {
+    if (detail?.order.stage !== "Settle") return;
+    api
+      .myWallet()
+      .then((w) => setWalletBalance(w.balance))
+      .catch(() => {});
+  }, [detail?.order.stage]);
 
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -474,9 +483,33 @@ export default function JobDetailPage() {
         )}
 
         {order.stage === "Settle" && (
-          <p className="text-sm font-semibold text-green">
-            Completed — {formatUgx(order.final_total ?? order.estimated_total)} settled.
-          </p>
+          <div className="space-y-3 text-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">You earned</p>
+              <p className="text-3xl font-extrabold text-green">
+                {formatUgx(order.delivery_fee ?? order.final_total ?? order.estimated_total)}
+              </p>
+              {order.type === "shopping" && order.payment_rail === "escrow" && order.delivery_fee != null && (
+                <p className="mt-1 text-xs text-ink-500">
+                  Plus{" "}
+                  {formatUgx((order.final_total ?? order.estimated_total ?? 0) - order.delivery_fee)} reimbursed
+                  for items — {formatUgx(order.final_total ?? order.estimated_total)} total settled to your
+                  wallet.
+                </p>
+              )}
+            </div>
+            {walletBalance != null && (
+              <p className="text-sm text-ink-500">
+                Wallet balance: <span className="text-base font-bold text-ink">{formatUgx(walletBalance)}</span>
+              </p>
+            )}
+            <Link
+              href="/"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-gold px-6 text-sm font-bold text-ink-gold"
+            >
+              Back to Jobs
+            </Link>
+          </div>
         )}
       </section>
 
