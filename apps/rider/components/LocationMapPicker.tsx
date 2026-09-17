@@ -153,11 +153,11 @@ export function LocationMapPicker({
             value={query}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search a place in Uganda…"
-            className="w-full rounded-full border border-[var(--border-faint)] bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:border-gold"
+            className="w-full rounded-full border border-[var(--border-faint)] py-2.5 pl-9 pr-3 text-sm outline-none focus:border-gold"
           />
         </div>
         {(searching || results.length > 0) && (
-          <div className="absolute inset-x-3 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-xl border border-[var(--border-faint)] bg-white shadow-lg">
+          <div className="absolute inset-x-3 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] shadow-lg">
             {searching && <div className="p-3 text-xs text-ink-500">Searching…</div>}
             {results.map((r, i) => (
               <button
@@ -178,11 +178,13 @@ export function LocationMapPicker({
           <ClickToPlace onPick={place} />
           <RecenterOnChange center={center} />
           {marker && <Marker position={marker} icon={markerIcon} />}
+          {/* Dark-mode recolor layer — see .tuma-map-tint in globals.css */}
+          <div className="tuma-map-tint" aria-hidden />
         </MapContainer>
 
         <button
           onClick={useMyLocation}
-          className="absolute bottom-4 right-4 z-[1000] flex h-11 w-11 items-center justify-center rounded-full bg-white text-ink shadow-lg"
+          className="absolute bottom-4 right-4 z-[1000] flex h-11 w-11 items-center justify-center rounded-full bg-[rgb(var(--surface-card))] text-ink shadow-lg"
           aria-label="Use my current location"
         >
           <LocateFixed className="h-5 w-5 text-gold" strokeWidth={2.25} />
