@@ -86,6 +86,15 @@ export default function AccountPage() {
       .catch(() => {});
   }, []);
 
+  // Google sign-up already has a verified email on the account — carry it
+  // into this field instead of leaving it blank for the rider to retype.
+  // Only applies while the field is still untouched, so it never clobbers
+  // something they've since edited.
+  useEffect(() => {
+    if (user?.email && !email) setEmail(user.email);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.email]);
+
   useEffect(() => {
     if (!user || !rider?.profile_photo_key) {
       setPhotoUrl(null);
