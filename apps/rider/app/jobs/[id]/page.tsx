@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { CustomerAvatar } from "../../../components/CustomerAvatar";
+import { DeliveryNavigation } from "../../../components/DeliveryNavigation";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { VoiceReasonRecorder } from "../../../components/VoiceReasonRecorder";
 import { api, errorMessage } from "../../../lib/api";
@@ -429,16 +430,21 @@ export default function JobDetailPage() {
         {order.stage === "Deliver" && (
           <>
             <p className="text-sm text-ink-500">
-              On the way{order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Ask the customer to confirm
-              handover in their app once you arrive.
+              On the way{order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Navigate to the customer, then
+              confirm once you&apos;ve arrived.
             </p>
-            <button
-              disabled={busy}
-              onClick={() => run(() => api.arrivedOrder(orderId))}
-              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
-            >
-              I&apos;ve arrived
-            </button>
+            <DeliveryNavigation
+              orderId={orderId}
+              destinationLat={order.destination_lat}
+              destinationLng={order.destination_lng}
+              busy={busy}
+              onConfirmDelivery={() =>
+                run(async () => {
+                  await api.arrivedOrder(orderId);
+                  router.push("/active");
+                })
+              }
+            />
           </>
         )}
 
