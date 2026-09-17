@@ -1,9 +1,9 @@
 "use client";
 
-import { Navigation } from "lucide-react";
+import { Download, Navigation, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
-import { openMapsNavigation } from "../lib/navigation";
+import { mapsStoreUrl, openMapsNavigation } from "../lib/navigation";
 
 function storageKey(orderId: string) {
   return `tuma-nav-started-${orderId}`;
@@ -30,7 +30,9 @@ export function DeliveryNavigation({
 }) {
   const [navStarted, setNavStarted] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
   const hasDestination = destinationLat != null && destinationLng != null;
+  const storeUrl = mapsStoreUrl();
 
   useEffect(() => {
     try {
@@ -40,7 +42,9 @@ export function DeliveryNavigation({
 
   function startNavigation() {
     if (!hasDestination) return;
-    openMapsNavigation(destinationLat as number, destinationLng as number);
+    openMapsNavigation(destinationLat as number, destinationLng as number, () => {
+      if (storeUrl) setShowInstallPrompt(true);
+    });
     setNavStarted(true);
     try {
       localStorage.setItem(storageKey(orderId), "1");
@@ -81,6 +85,33 @@ export function DeliveryNavigation({
             Resume Navigation
           </button>
         </>
+      )}
+
+      {showInstallPrompt && storeUrl && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-muted))] p-3">
+          <Download className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <p className="text-xs text-ink-500">
+              Opened directions in your browser — install Google Maps for faster, turn-by-turn navigation next time.
+            </p>
+            <a
+              href={storeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-xs font-bold text-gold underline"
+            >
+              Get Google Maps
+            </a>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowInstallPrompt(false)}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-500/60"
+            aria-label="Dismiss"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          </button>
+        </div>
       )}
 
       {confirming && (
