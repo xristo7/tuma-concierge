@@ -226,6 +226,15 @@ export default function AccountPage() {
 
       <ChangePasswordPanel />
 
+      {complete && rider && !rider.verified && (
+        <div className="home-card flex items-center gap-3 !border-l-4 !border-l-gold">
+          <p className="text-sm text-ink-500">
+            Your profile is complete and waiting on an admin to verify it. You&apos;ll be able to see and claim
+            jobs as soon as you&apos;re approved — no need to do anything else here.
+          </p>
+        </div>
+      )}
+
       {!complete && (
         <div className="home-card flex items-center gap-3 !border-l-4 !border-l-gold">
           <p className="text-sm text-ink-500">
