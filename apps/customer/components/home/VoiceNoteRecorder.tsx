@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Mic, Play, RotateCcw, Square } from "lucide-react";
+import { Loader2, Mic, Pause, Play, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { useVoiceNoteMaxSeconds } from "../../lib/useVoiceNoteMaxSeconds";
@@ -16,21 +16,34 @@ export function VoiceNoteRecorder({
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<{ transcript: string; count: number } | null>(null);
+  const [playing, setPlaying] = useState(false);
   const maxSeconds = useVoiceNoteMaxSeconds();
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const blobRef = useRef<Blob | null>(null);
   const audioUrlRef = useRef<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioRef.current?.pause();
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  function resetPlayback() {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setPlaying(false);
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  }
 
   // Nobody's meant to record minutes of audio here — auto-stop (not just
   // warn) once the admin-set cap is hit.
@@ -52,6 +65,7 @@ export function VoiceNoteRecorder({
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       recorder.onstop = () => {
+        resetPlayback();
         blobRef.current = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
         stream.getTracks().forEach((t) => t.stop());
         setStatus("recorded");
@@ -72,14 +86,28 @@ export function VoiceNoteRecorder({
     mediaRecorderRef.current?.stop();
   }
 
-  function playBack() {
+  // Toggles play/pause on a single reused <audio> instead of firing a new
+  // one on every click — otherwise repeated taps stack up overlapping
+  // playback instead of pausing and resuming the same clip.
+  function togglePlayback() {
     if (!blobRef.current) return;
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    audioUrlRef.current = URL.createObjectURL(blobRef.current);
-    new Audio(audioUrlRef.current).play().catch(() => {});
+    if (playing) {
+      audioRef.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    if (!audioRef.current) {
+      audioUrlRef.current = URL.createObjectURL(blobRef.current);
+      const audio = new Audio(audioUrlRef.current);
+      audio.onended = () => setPlaying(false);
+      audioRef.current = audio;
+    }
+    audioRef.current.play().catch(() => {});
+    setPlaying(true);
   }
 
   function reset() {
+    resetPlayback();
     blobRef.current = null;
     setStatus("idle");
     setSeconds(0);
@@ -101,6 +129,7 @@ export function VoiceNoteRecorder({
       onItemsExtracted(res.items);
       setLastResult({ transcript: res.transcript, count: res.items.length });
       setStatus("idle");
+      resetPlayback();
       blobRef.current = null;
     } catch (err) {
       setError(errorMessage(err));
@@ -142,11 +171,15 @@ export function VoiceNoteRecorder({
         <div className="flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
-            onClick={playBack}
+            onClick={togglePlayback}
             className="flex items-center gap-1.5 rounded-full border border-[var(--border-faint)] px-3 py-1.5 text-xs font-bold text-ink"
           >
-            <Play className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            Play back
+            {playing ? (
+              <Pause className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            ) : (
+              <Play className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            )}
+            {playing ? "Pause" : "Play back"}
           </button>
           <button
             type="button"

@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, Play, RotateCcw, Square } from "lucide-react";
+import { Mic, Pause, Play, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useVoiceNoteMaxSeconds } from "../../lib/useVoiceNoteMaxSeconds";
 
@@ -20,20 +20,34 @@ export function OrderVoiceNoteRecorder({
   const [status, setStatus] = useState<Status>(blob ? "recorded" : "idle");
   const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
   const maxSeconds = useVoiceNoteMaxSeconds();
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioUrlRef = useRef<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioRef.current?.pause();
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // A fresh recording invalidates whatever was playing from the last one.
+  useEffect(() => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setPlaying(false);
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  }, [blob]);
 
   // Nobody's meant to record minutes of audio here — auto-stop (not just
   // warn) once the admin-set cap is hit.
@@ -75,11 +89,24 @@ export function OrderVoiceNoteRecorder({
     mediaRecorderRef.current?.stop();
   }
 
-  function playBack() {
+  // Toggles play/pause on a single reused <audio> instead of firing a new
+  // one on every click — otherwise repeated taps stack up overlapping
+  // playback instead of pausing and resuming the same clip.
+  function togglePlayback() {
     if (!blob) return;
-    if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
-    audioUrlRef.current = URL.createObjectURL(blob);
-    new Audio(audioUrlRef.current).play().catch(() => {});
+    if (playing) {
+      audioRef.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    if (!audioRef.current) {
+      audioUrlRef.current = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrlRef.current);
+      audio.onended = () => setPlaying(false);
+      audioRef.current = audio;
+    }
+    audioRef.current.play().catch(() => {});
+    setPlaying(true);
   }
 
   function reset() {
@@ -127,11 +154,15 @@ export function OrderVoiceNoteRecorder({
         <div className="flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
-            onClick={playBack}
+            onClick={togglePlayback}
             className="flex items-center gap-1.5 rounded-full border border-[var(--border-faint)] px-3 py-1.5 text-xs font-bold text-ink"
           >
-            <Play className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-            Play back
+            {playing ? (
+              <Pause className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            ) : (
+              <Play className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            )}
+            {playing ? "Pause" : "Play back"}
           </button>
           <button
             type="button"
