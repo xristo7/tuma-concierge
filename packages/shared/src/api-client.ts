@@ -306,6 +306,26 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         body: JSON.stringify(input),
       });
     },
+    /** Attaches a spoken reason to a fee proposal — deliberately not transcribed (a
+     * non-English recording would just come back as gibberish text), so it travels
+     * as raw audio instead, alongside whatever the rider typed. */
+    async uploadFeeProposalVoiceNote(orderId: string, proposalId: string, audio: Blob) {
+      const form = new FormData();
+      form.append("audio", audio, "voice-note.webm");
+      const res = await f(`${root}/v1/orders/${orderId}/fee-proposals/${proposalId}/voice-note`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ order: OrderRow }>(res);
+    },
+    async feeProposalVoiceNoteBlob(orderId: string, proposalId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/orders/${orderId}/fee-proposals/${proposalId}/voice-note`, {
+        headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load voice note`);
+      return res.blob();
+    },
     async decideFeeProposal(orderId: string, proposalId: string, approve: boolean) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/fee-proposals/${proposalId}/decision`, {
         method: "POST",

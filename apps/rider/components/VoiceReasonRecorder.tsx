@@ -1,39 +1,59 @@
 "use client";
 
-import { Loader2, Mic, Square } from "lucide-react";
+import { CheckCircle2, Mic, Pause, Play, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../lib/api";
 import { useVoiceNoteMaxSeconds } from "../lib/useVoiceNoteMaxSeconds";
 
-type Status = "idle" | "recording" | "transcribing" | "error";
+type Status = "idle" | "recording" | "recorded";
 
-/** Small mic button that records, transcribes (plain dictation, no item
- * extraction), and hands the text off — for short dictated notes like a
- * rider's reason for a fee change, not a shopping list. */
-export function VoiceReasonRecorder({ onTranscript }: { onTranscript: (text: string) => void }) {
-  const [status, setStatus] = useState<Status>("idle");
+/** Records a short voice note explaining a fee change and hands back the
+ * raw audio Blob — deliberately NOT transcribed. A rider explaining an
+ * out-of-range bump may not be comfortable typing (or speaking) in
+ * English, and transcribing a non-English recording just produces
+ * gibberish text, so this travels as audio instead, alongside whatever
+ * they typed. */
+export function VoiceReasonRecorder({
+  blob,
+  onChange,
+}: {
+  blob: Blob | null;
+  onChange: (blob: Blob | null) => void;
+}) {
+  const [status, setStatus] = useState<Status>(blob ? "recorded" : "idle");
   const [seconds, setSeconds] = useState(0);
+  const [playing, setPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const maxSeconds = useVoiceNoteMaxSeconds();
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioUrlRef = useRef<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (audioUrlRef.current) URL.revokeObjectURL(audioUrlRef.current);
+      audioRef.current?.pause();
       mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
-  // Nobody's meant to record minutes of audio here — auto-stop (not just
-  // warn) once the admin-set cap is hit.
   useEffect(() => {
-    if (status === "recording" && seconds >= maxSeconds) {
-      stop();
-    }
+    if (status === "recording" && seconds >= maxSeconds) stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seconds, status, maxSeconds]);
+
+  function resetPlayback() {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setPlaying(false);
+    if (audioUrlRef.current) {
+      URL.revokeObjectURL(audioUrlRef.current);
+      audioUrlRef.current = null;
+    }
+  }
 
   async function start() {
     setError(null);
@@ -44,24 +64,13 @@ export function VoiceReasonRecorder({ onTranscript }: { onTranscript: (text: str
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         if (timerRef.current) clearInterval(timerRef.current);
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        resetPlayback();
+        const recorded = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
         stream.getTracks().forEach((t) => t.stop());
-        setStatus("transcribing");
-        try {
-          const res = await api.transcribeVoiceNote(blob, { extractItems: false });
-          if (!res.transcript) {
-            setError("Couldn't make that out — try again.");
-            setStatus("error");
-            return;
-          }
-          onTranscript(res.transcript);
-          setStatus("idle");
-        } catch {
-          setError("Couldn't transcribe that. Try again.");
-          setStatus("error");
-        }
+        onChange(recorded);
+        setStatus("recorded");
       };
       recorder.start();
       mediaRecorderRef.current = recorder;
@@ -70,7 +79,6 @@ export function VoiceReasonRecorder({ onTranscript }: { onTranscript: (text: str
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
     } catch {
       setError("Couldn't access your microphone.");
-      setStatus("error");
     }
   }
 
@@ -79,18 +87,42 @@ export function VoiceReasonRecorder({ onTranscript }: { onTranscript: (text: str
     mediaRecorderRef.current?.stop();
   }
 
+  function togglePlayback() {
+    if (!blob) return;
+    if (playing) {
+      audioRef.current?.pause();
+      setPlaying(false);
+      return;
+    }
+    if (!audioRef.current) {
+      audioUrlRef.current = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrlRef.current);
+      audio.onended = () => setPlaying(false);
+      audioRef.current = audio;
+    }
+    audioRef.current.play().catch(() => {});
+    setPlaying(true);
+  }
+
+  function reRecord() {
+    resetPlayback();
+    onChange(null);
+    setStatus("idle");
+  }
+
   return (
     <div className="flex items-center gap-2">
-      {status === "idle" || status === "error" ? (
+      {status === "idle" && (
         <button
           type="button"
           onClick={start}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-faint)] text-ink-500 hover:text-ink"
-          aria-label="Dictate a reason"
+          aria-label="Record a voice reason"
         >
           <Mic className="h-4 w-4" strokeWidth={2} aria-hidden />
         </button>
-      ) : status === "recording" ? (
+      )}
+      {status === "recording" && (
         <>
           <button
             type="button"
@@ -104,10 +136,29 @@ export function VoiceReasonRecorder({ onTranscript }: { onTranscript: (text: str
             {seconds}s / {maxSeconds}s
           </span>
         </>
-      ) : (
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-faint)] text-ink-500">
-          <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} aria-hidden />
-        </span>
+      )}
+      {status === "recorded" && (
+        <>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-gold bg-gold/10 text-gold">
+            <CheckCircle2 className="h-4 w-4" strokeWidth={2} aria-hidden />
+          </span>
+          <button
+            type="button"
+            onClick={togglePlayback}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-faint)] text-ink-500"
+            aria-label={playing ? "Pause" : "Play back"}
+          >
+            {playing ? <Pause className="h-3.5 w-3.5" strokeWidth={2} /> : <Play className="h-3.5 w-3.5" strokeWidth={2} />}
+          </button>
+          <button
+            type="button"
+            onClick={reRecord}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-faint)] text-ink-500"
+            aria-label="Re-record"
+          >
+            <RotateCcw className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          </button>
+        </>
       )}
       {error && <p className="text-xs text-red-600">{error}</p>}
     </div>

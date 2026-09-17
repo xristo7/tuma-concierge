@@ -419,6 +419,7 @@ export type FeeProposal = {
   previous_total: number;
   proposed_total: number;
   reason: string | null;
+  reason_voice_key: string | null;
   status: "pending" | "approved" | "rejected";
   created_at: string;
   updated_at: string;

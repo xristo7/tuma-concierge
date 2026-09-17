@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { CustomerAvatar } from "../../../components/CustomerAvatar";
 import { DeliveryNavigation } from "../../../components/DeliveryNavigation";
+import { FeeProposalVoicePlayer } from "../../../components/FeeProposalVoicePlayer";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { VoiceReasonRecorder } from "../../../components/VoiceReasonRecorder";
 import { api, errorMessage } from "../../../lib/api";
@@ -30,6 +31,7 @@ export default function JobDetailPage() {
   const [showFeeForm, setShowFeeForm] = useState(false);
   const [feeDraft, setFeeDraft] = useState("");
   const [feeReason, setFeeReason] = useState("");
+  const [feeVoiceNote, setFeeVoiceNote] = useState<Blob | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
@@ -72,6 +74,7 @@ export default function JobDetailPage() {
   const canProposeFee = !["Create", "Settle"].includes(order.stage);
   const canCancel = ["Match", "Fund", "Shop", "Substitute", "Approve", "Deliver"].includes(order.stage);
   const latestFeeProposal = feeProposals[feeProposals.length - 1];
+  const currentItemsTotal = (order.final_total ?? order.estimated_total ?? 0) - (order.delivery_fee ?? 0);
   const pendingCount = Object.keys(pendingEdits).length;
   const pendingNetDelta = Object.values(pendingEdits).reduce((sum, e) => sum + e.priceDelta, 0);
 
@@ -122,13 +125,28 @@ export default function JobDetailPage() {
   }
 
   async function sendFeeProposal() {
+    if (!detail) return;
     setBusy(true);
     setError(null);
     try {
-      await api.proposeFee(orderId, { proposedTotal: Number(feeDraft) || 0, reason: feeReason.trim() || undefined });
+      // feeDraft is the new DELIVERY FEE only — not the grand total. The
+      // items cost is fixed by what's on the list; a rider proposing a fee
+      // change (typically for an out-of-range match) is adjusting their own
+      // delivery pay, not re-quoting groceries they haven't bought yet.
+      const currentTotal = detail.order.final_total ?? detail.order.estimated_total ?? 0;
+      const itemsTotal = currentTotal - (detail.order.delivery_fee ?? 0);
+      const proposedTotal = itemsTotal + (Number(feeDraft) || 0);
+      const res = await api.proposeFee(orderId, {
+        proposedTotal,
+        reason: feeReason.trim() || undefined,
+      });
+      if (feeVoiceNote) {
+        await api.uploadFeeProposalVoiceNote(orderId, res.proposalId, feeVoiceNote);
+      }
       setShowFeeForm(false);
       setFeeDraft("");
       setFeeReason("");
+      setFeeVoiceNote(null);
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -308,22 +326,27 @@ export default function JobDetailPage() {
         <section className="home-card space-y-2">
           <h2 className="text-sm font-semibold text-ink">Delivery fee</h2>
           {latestFeeProposal && (
-            <div className="flex items-center justify-between rounded-xl bg-[rgb(var(--surface-muted))] p-3 text-sm">
-              <span className="text-ink">
-                You suggested {formatUgx(latestFeeProposal.proposed_total)}
-                {latestFeeProposal.reason ? ` — ${latestFeeProposal.reason}` : ""}
-              </span>
-              <span
-                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
-                  latestFeeProposal.status === "approved"
-                    ? "bg-green/15 text-green"
-                    : latestFeeProposal.status === "rejected"
-                      ? "bg-red-100 text-red-700"
-                      : "bg-white text-ink-500"
-                }`}
-              >
-                {latestFeeProposal.status === "pending" ? "Waiting" : latestFeeProposal.status}
-              </span>
+            <div className="rounded-xl bg-[rgb(var(--surface-muted))] p-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-ink">
+                  You suggested a delivery fee of {formatUgx(latestFeeProposal.proposed_total - currentItemsTotal)}
+                  {latestFeeProposal.reason ? ` — ${latestFeeProposal.reason}` : ""}
+                </span>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${
+                    latestFeeProposal.status === "approved"
+                      ? "bg-green/15 text-green"
+                      : latestFeeProposal.status === "rejected"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-white text-ink-500"
+                  }`}
+                >
+                  {latestFeeProposal.status === "pending" ? "Waiting" : latestFeeProposal.status}
+                </span>
+              </div>
+              {latestFeeProposal.reason_voice_key && (
+                <FeeProposalVoicePlayer orderId={orderId} proposalId={latestFeeProposal.id} />
+              )}
             </div>
           )}
           {!showFeeForm ? (
@@ -332,39 +355,55 @@ export default function JobDetailPage() {
                 type="button"
                 onClick={() => {
                   setShowFeeForm(true);
-                  setFeeDraft(String(order.final_total ?? order.estimated_total ?? ""));
+                  setFeeDraft(String(order.delivery_fee ?? ""));
                 }}
                 className="text-sm font-bold text-gold"
               >
-                Suggest a different fee
+                Suggest a different delivery fee
               </button>
             )
           ) : (
-            <div className="space-y-1.5">
-              <input
-                value={feeDraft}
-                onChange={(e) => setFeeDraft(e.target.value.replace(/[^\d]/g, ""))}
-                inputMode="numeric"
-                placeholder="New total (UGX)"
-                className="w-full rounded-lg border border-[var(--border-faint)] px-2.5 py-2 text-sm outline-none focus:border-gold"
-              />
-              <div className="flex items-center gap-1.5">
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-ink-500" htmlFor="new-delivery-fee">
+                  New delivery fee (UGX) — items cost isn&apos;t affected
+                </label>
                 <input
+                  id="new-delivery-fee"
+                  value={feeDraft}
+                  onChange={(e) => setFeeDraft(e.target.value.replace(/[^\d]/g, ""))}
+                  inputMode="numeric"
+                  placeholder="e.g. 8000"
+                  className="w-full rounded-lg border-2 border-gold/40 px-2.5 py-2.5 text-base font-bold text-ink outline-none focus:border-gold"
+                />
+                <p className="text-xs text-ink-500">Currently {formatUgx(order.delivery_fee ?? 0)}.</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-ink-500" htmlFor="fee-reason">
+                  Reason (optional, typed)
+                </label>
+                <input
+                  id="fee-reason"
                   value={feeReason}
                   onChange={(e) => setFeeReason(e.target.value)}
-                  placeholder="Reason (optional) — type or dictate"
+                  placeholder="Type a reason in English…"
                   className="w-full rounded-lg border border-[var(--border-faint)] px-2.5 py-2 text-sm outline-none focus:border-gold"
                 />
-                <VoiceReasonRecorder
-                  onTranscript={(text) =>
-                    setFeeReason((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
-                  }
-                />
               </div>
+
+              <div className="space-y-1 rounded-lg border border-dashed border-[var(--border-faint)] p-2.5">
+                <p className="text-xs font-semibold text-ink-500">Or record a voice reason (any language)</p>
+                <VoiceReasonRecorder blob={feeVoiceNote} onChange={setFeeVoiceNote} />
+              </div>
+
               <div className="flex gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setShowFeeForm(false)}
+                  onClick={() => {
+                    setShowFeeForm(false);
+                    setFeeVoiceNote(null);
+                  }}
                   className="flex-1 rounded-lg border border-[var(--border-faint)] py-1.5 text-xs font-bold text-ink"
                 >
                   Cancel

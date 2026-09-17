@@ -1342,6 +1342,76 @@ orderRoutes.post("/orders/:id/fee-proposals/:proposalId/decision", async (c) => 
   return c.json({ order: await getOrder(id) });
 });
 
+// A rider explaining a fee bump may not be comfortable typing it in
+// English — this carries the reason as raw audio instead of transcribing
+// it, since transcription of a non-English recording just produces
+// gibberish text (see the order-level voice-note handling above, same
+// reasoning). Sent as its own request right after the proposal is
+// created, since the proposal itself is JSON and this is multipart.
+orderRoutes.post("/orders/:id/fee-proposals/:proposalId/voice-note", async (c) => {
+  const id = c.req.param("id");
+  const proposalId = c.req.param("proposalId");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertRider(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+
+  const propRes = await db.execute({
+    sql: "SELECT id FROM fee_proposals WHERE id = ? AND order_id = ?",
+    args: [proposalId, id],
+  });
+  if (!propRes.rows[0]) return c.json({ error: "not_found" }, 404);
+
+  const form = await c.req.formData().catch(() => null);
+  const file = form?.get("audio");
+  if (!(file instanceof File)) return c.json({ error: "missing_audio" }, 400);
+  if (!ALLOWED_VOICE_NOTE_MIME.has(baseMimeType(file.type))) return c.json({ error: "unsupported_file_type" }, 400);
+  if (file.size > MAX_VOICE_NOTE_BYTES) return c.json({ error: "file_too_large" }, 400);
+
+  const ext = extensionForMime(file.type, "webm");
+  const key = `orders/${id}/fee-proposals/${proposalId}/voice-note.${ext}`;
+  const bucket = getR2Bucket();
+  await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+
+  await db.execute({
+    sql: "UPDATE fee_proposals SET reason_voice_key = ?, updated_at = datetime('now') WHERE id = ?",
+    args: [key, proposalId],
+  });
+
+  return c.json({ order: await getOrder(id) });
+});
+
+orderRoutes.get("/orders/:id/fee-proposals/:proposalId/voice-note", async (c) => {
+  const id = c.req.param("id");
+  const proposalId = c.req.param("proposalId");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
+    return c.json({ error: "forbidden" }, 403);
+  }
+
+  const propRes = await db.execute({
+    sql: "SELECT reason_voice_key FROM fee_proposals WHERE id = ? AND order_id = ?",
+    args: [proposalId, id],
+  });
+  const key = (propRes.rows[0] as Row | undefined)?.reason_voice_key as string | null | undefined;
+  if (!key) return c.json({ error: "not_found" }, 404);
+
+  const bucket = getR2Bucket();
+  const object = await bucket.get(key);
+  if (!object) return c.json({ error: "not_found" }, 404);
+
+  return new Response(object.body, {
+    headers: uploadResponseHeaders(object.httpMetadata?.contentType, "audio/webm"),
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Deliver / Handover / Settle
 // ---------------------------------------------------------------------------

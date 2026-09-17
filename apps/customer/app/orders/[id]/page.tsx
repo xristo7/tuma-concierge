@@ -5,6 +5,7 @@ import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel } from "@tuma/shared"
 import { MapPin, MessageCircle, Star, ThumbsUp, TriangleAlert, User } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FeeProposalVoicePlayer } from "../../../components/FeeProposalVoicePlayer";
 import { OrderTimeline } from "../../../components/OrderTimeline";
 import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
@@ -266,6 +267,7 @@ export default function OrderDetailPage() {
 
   const { order, items, substitutions, feeProposals } = detail;
   const pendingFeeProposal = feeProposals.find((f) => f.status === "pending");
+  const currentItemsTotal = (order.final_total ?? order.estimated_total ?? 0) - (order.delivery_fee ?? 0);
   const pendingPayment = detail.payments.find((p) => p.status === "pending");
   const awaitingRiderOrPayment = ["Create", "Match", "Fund"].includes(order.stage);
   const pendingSubs = substitutions.filter((s) => s.status === "pending");
@@ -342,10 +344,15 @@ export default function OrderDetailPage() {
       {pendingFeeProposal && (
         <section className="home-card space-y-2 !border-l-4 !border-l-gold">
           <p className="text-sm text-ink">
-            Your rider suggests a new total: <strong>{formatUgx(pendingFeeProposal.proposed_total)}</strong>{" "}
-            <span className="text-ink-500">(was {formatUgx(pendingFeeProposal.previous_total)})</span>
+            Your rider suggests a new delivery fee:{" "}
+            <strong>{formatUgx(pendingFeeProposal.proposed_total - currentItemsTotal)}</strong>{" "}
+            <span className="text-ink-500">(was {formatUgx(order.delivery_fee ?? 0)})</span>
+            <span className="block text-ink-500">Items cost is unaffected.</span>
             {pendingFeeProposal.reason && <span className="block text-ink-500">{pendingFeeProposal.reason}</span>}
           </p>
+          {pendingFeeProposal.reason_voice_key && (
+            <FeeProposalVoicePlayer orderId={orderId} proposalId={pendingFeeProposal.id} />
+          )}
           <div className="flex gap-2">
             <button
               disabled={busy}
