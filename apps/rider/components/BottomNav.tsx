@@ -1,22 +1,42 @@
 "use client";
 
-import { Briefcase, Navigation, User, Wallet } from "lucide-react";
+import { Briefcase, MessageCircle, Navigation, User, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
+import { api } from "../lib/api";
+import { useTranslate, type TranslationKey } from "../lib/i18n";
+import { useLivePolling } from "../lib/use-live-polling";
 
-const tabs: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/", label: "Jobs", icon: Briefcase },
-  { href: "/active", label: "Active", icon: Navigation },
-  { href: "/wallet", label: "Wallet", icon: Wallet },
-  { href: "/account", label: "Account", icon: User },
+const tabs: { href: string; labelKey: TranslationKey; icon: LucideIcon }[] = [
+  { href: "/", labelKey: "nav_jobs", icon: Briefcase },
+  { href: "/active", labelKey: "nav_active", icon: Navigation },
+  { href: "/chat", labelKey: "nav_chat", icon: MessageCircle },
+  { href: "/wallet", labelKey: "nav_wallet", icon: Wallet },
+  { href: "/account", labelKey: "nav_account", icon: User },
 ];
+
+const UNREAD_POLL_MS = 15000;
 
 export function BottomNav() {
   const pathname = usePathname();
+  const [hasUnread, setHasUnread] = useState(false);
+  const t = useTranslate();
+
+  useLivePolling(
+    () => {
+      api
+        .getChatThreads()
+        .then((res) => setHasUnread(res.threads.some((t) => t.unread)))
+        .catch(() => {});
+    },
+    UNREAD_POLL_MS,
+    [],
+  );
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-faint)] bg-white pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--border-faint)] bg-[rgb(var(--surface-card))] pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto flex max-w-lg items-stretch justify-around">
         {tabs.map((tab) => {
           const active =
@@ -30,8 +50,13 @@ export function BottomNav() {
                   active ? "text-gold" : "text-ink-500"
                 }`}
               >
-                <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
-                <span>{tab.label}</span>
+                <span className="relative">
+                  <Icon className="h-5 w-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
+                  {tab.href === "/chat" && hasUnread && (
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-gold" aria-hidden />
+                  )}
+                </span>
+                <span>{t(tab.labelKey)}</span>
               </Link>
             </li>
           );

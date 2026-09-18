@@ -12,6 +12,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["--yes", "pnpm@9.15.0", "--filter", "rider", "dev"],
       "port": 3001
+    },
+    {
+      "name": "admin",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "pnpm@9.15.0", "--filter", "admin", "dev"],
+      "port": 3002
     }
   ]
 }

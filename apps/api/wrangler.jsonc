@@ -10,11 +10,42 @@
       "database_id": "26926e12-d2f4-4b40-8b1b-019f6c169e10"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "RIDER_DOCS",
+      "bucket_name": "tuma"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "migrations": [
+    // The in-app call feature (PR #6) was previously deployed to this
+    // Worker directly, ahead of this branch's own history, then dropped
+    // from this branch's committed code (see "drop duplicate
+    // call-signaling scope from this branch"). CallRoom holds no
+    // persistent data — it's a pure in-memory WebSocket relay — so
+    // formally retiring the orphaned Durable Object class is safe.
+    // Wrangler needs the original creating migration replayed (a no-op,
+    // since Cloudflare already has this tag on record) before it will
+    // accept the deletion that follows.
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CallRoom"]
+    },
+    {
+      "tag": "v2-drop-call-room",
+      "deleted_classes": ["CallRoom"]
+    }
+  ],
   "vars": {
     "ENVIRONMENT": "staging",
-    "CORS_ORIGINS": "https://tuma-customer.doxalight-inc.workers.dev,https://tuma-rider.doxalight-inc.workers.dev,http://localhost:3000,http://localhost:3001",
-    "MOMO_TARGET_ENV": "sandbox",
-    "MOMO_BASE_URL": "https://sandbox.momodeveloper.mtn.com",
-    "MOMO_CURRENCY": "UGX"
+    "CORS_ORIGINS": "https://tumaffe.online,https://rider.tumaffe.online,https://admin.tumaffe.online,https://tuma-customer.doxalight-inc.workers.dev,https://tuma-rider.doxalight-inc.workers.dev,https://tuma-admin.doxalight-inc.workers.dev,http://localhost:3000,http://localhost:3001,http://localhost:3002",
+    "PAYMENTS_PROVIDER": "yo_mock",
+    "GOOGLE_CLIENT_ID": "744058453576-1hofgakvhp2mt8ub63k8v9ddlocbb3u7.apps.googleusercontent.com",
+    // Public half of the VAPID keypair used to sign Web Push requests — safe
+    // to expose (it's also handed to the browser's PushManager.subscribe()).
+    // The private half lives only as the VAPID_PRIVATE_KEY Worker secret.
+    "VAPID_PUBLIC_KEY": "BFK_X2IByJPUXuP1iAcPv-dW6KEshX4rKyn1NSK4n1i_KGvgaAlqoSo2y6hW7pPlPbWT0n8bD51Yas9astzOBpI"
   }
 }

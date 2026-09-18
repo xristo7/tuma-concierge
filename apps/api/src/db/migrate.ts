@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { db } from "./client.js";
+import { splitSqlStatements } from "./split-sql.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(here, "migrations");
@@ -13,10 +14,7 @@ async function run() {
 
   for (const file of files) {
     const sql = readFileSync(join(migrationsDir, file), "utf8");
-    const statements = sql
-      .split(";")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const statements = splitSqlStatements(sql);
     console.log(`Applying ${file} (${statements.length} statements)...`);
     for (const statement of statements) {
       await db.execute(statement);

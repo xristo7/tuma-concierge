@@ -1,0 +1,160 @@
+import type { MatchingMode } from "@tuma/shared";
+import { db } from "../db/client.js";
+
+const DEFAULTS = {
+  delivery_rate_per_km: "1000",
+  service_range_km: "7",
+  /** Flat delivery fee (UGX) charged on top of a shopping order's item
+   * costs. Unlike a parcel ride there's no pickup point to measure a
+   * distance from at order-creation time (the "pickup" is wherever the
+   * rider ends up shopping, unknown until one claims the job) — so this
+   * is a flat admin-set amount rather than distance × rate. */
+  shopping_delivery_fee: "3000",
+  /** Ceiling on what a single order may charge into escrow (UGX). Guards
+   * against a fat-fingered or forged estimate turning into a payment
+   * request nobody meant to make. */
+  max_order_value: "5000000",
+  /** Which rider-matching modes are on offer platform-wide — see
+   * ../orders/matching.ts. JSON array of MatchingMode values. A customer's
+   * own preference only takes effect if it's in this set; the default
+   * keeps today's behavior (first rider to claim wins) until an admin
+   * turns anything else on. */
+  matching_modes_enabled: '["first_to_claim"]',
+  /** How long an order in "nearest_window" mode waits to collect applicants
+   * before the app auto-assigns whichever is nearest. */
+  nearest_window_seconds: "90",
+  /** Safety-net ceiling (for nearest_window and customer_selects) — if
+   * nobody's been assigned by this long after the order was created, the
+   * app auto-assigns rather than leaving the customer waiting indefinitely. */
+  max_assignment_minutes: "5",
+  /** Which payment aggregators are on offer, in priority order — the first
+   * entry is primary, a second entry is the fallback used once the primary
+   * has no working credentials. JSON array of "yo" | "flutterwave". See
+   * ../payments/service.ts resolveProvider(). */
+  payments_active_providers: '["yo"]',
+  /** Wallet balance ceilings (UGX), tiered by verification the same way
+   * mobile money itself limits unverified accounts — see
+   * ../wallet/routes.ts. */
+  wallet_unverified_cap: "200000",
+  wallet_verified_cap: "2000000",
+  /** Ceiling on a single top-up request, independent of the balance cap —
+   * stops one oversized top-up from being the only thing that matters. */
+  wallet_max_topup: "1000000",
+  /** How long any voice recording (a shopping list, an order note, a fee-
+   * proposal reason, a chat voice message) may run before it auto-stops.
+   * Nobody's meant to be recording minutes of audio here — this is a cap,
+   * not a target. */
+  voice_note_max_seconds: "60",
+} as const;
+
+export type SettingKey = keyof typeof DEFAULTS;
+
+export async function getSetting(key: SettingKey): Promise<string> {
+  const res = await db.execute({ sql: "SELECT value FROM settings WHERE key = ?", args: [key] });
+  return (res.rows[0]?.value as string | undefined) ?? DEFAULTS[key];
+}
+
+export async function setSetting(key: SettingKey, value: string): Promise<void> {
+  await db.execute({
+    sql: `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
+    args: [key, value],
+  });
+}
+
+export async function getDeliverySettings(): Promise<{
+  deliveryRatePerKm: number;
+  serviceRangeKm: number;
+  shoppingDeliveryFee: number;
+}> {
+  const [rate, range, shoppingFee] = await Promise.all([
+    getSetting("delivery_rate_per_km"),
+    getSetting("service_range_km"),
+    getSetting("shopping_delivery_fee"),
+  ]);
+  return {
+    deliveryRatePerKm: Number(rate) || Number(DEFAULTS.delivery_rate_per_km),
+    serviceRangeKm: Number(range) || Number(DEFAULTS.service_range_km),
+    shoppingDeliveryFee: Number(shoppingFee) || Number(DEFAULTS.shopping_delivery_fee),
+  };
+}
+
+export async function getMaxOrderValue(): Promise<number> {
+  return Number(await getSetting("max_order_value")) || Number(DEFAULTS.max_order_value);
+}
+
+const ALL_MATCHING_MODES: MatchingMode[] = ["first_to_claim", "nearest_window", "customer_selects"];
+
+function parseEnabledModes(raw: string): MatchingMode[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const modes = Array.isArray(parsed) ? parsed.filter((m): m is MatchingMode => ALL_MATCHING_MODES.includes(m as MatchingMode)) : [];
+    return modes.length > 0 ? modes : ["first_to_claim"];
+  } catch {
+    return ["first_to_claim"];
+  }
+}
+
+export async function getMatchingSettings(): Promise<{
+  enabledModes: MatchingMode[];
+  nearestWindowSeconds: number;
+  maxAssignmentMinutes: number;
+}> {
+  const [modesRaw, windowRaw, maxRaw] = await Promise.all([
+    getSetting("matching_modes_enabled"),
+    getSetting("nearest_window_seconds"),
+    getSetting("max_assignment_minutes"),
+  ]);
+  return {
+    enabledModes: parseEnabledModes(modesRaw),
+    nearestWindowSeconds: Number(windowRaw) || Number(DEFAULTS.nearest_window_seconds),
+    maxAssignmentMinutes: Number(maxRaw) || Number(DEFAULTS.max_assignment_minutes),
+  };
+}
+
+export async function setMatchingModesEnabled(modes: MatchingMode[]): Promise<void> {
+  const valid = modes.filter((m) => ALL_MATCHING_MODES.includes(m));
+  await setSetting("matching_modes_enabled", JSON.stringify(valid.length > 0 ? valid : ["first_to_claim"]));
+}
+
+export type PaymentProviderIdentity = "yo" | "flutterwave";
+const ALL_PROVIDER_IDENTITIES: PaymentProviderIdentity[] = ["yo", "flutterwave"];
+
+/** Priority-ordered list of admin-enabled providers — first is primary, a
+ * second is the fallback. Falls back to just "yo" (today's only provider)
+ * if the stored value is missing/corrupt/empty. */
+export async function getActiveProviders(): Promise<PaymentProviderIdentity[]> {
+  const raw = await getSetting("payments_active_providers");
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const providers = Array.isArray(parsed)
+      ? parsed.filter((p): p is PaymentProviderIdentity => ALL_PROVIDER_IDENTITIES.includes(p as PaymentProviderIdentity))
+      : [];
+    return providers.length > 0 ? providers : ["yo"];
+  } catch {
+    return ["yo"];
+  }
+}
+
+export async function setActiveProviders(providers: PaymentProviderIdentity[]): Promise<void> {
+  const valid = providers.filter((p) => ALL_PROVIDER_IDENTITIES.includes(p));
+  const deduped = [...new Set(valid)];
+  await setSetting("payments_active_providers", JSON.stringify(deduped.length > 0 ? deduped : ["yo"]));
+}
+
+export async function getWalletSettings(): Promise<{ unverifiedCap: number; verifiedCap: number; maxTopup: number }> {
+  const [unverified, verified, maxTopup] = await Promise.all([
+    getSetting("wallet_unverified_cap"),
+    getSetting("wallet_verified_cap"),
+    getSetting("wallet_max_topup"),
+  ]);
+  return {
+    unverifiedCap: Number(unverified) || Number(DEFAULTS.wallet_unverified_cap),
+    verifiedCap: Number(verified) || Number(DEFAULTS.wallet_verified_cap),
+    maxTopup: Number(maxTopup) || Number(DEFAULTS.wallet_max_topup),
+  };
+}
+
+export async function getVoiceNoteMaxSeconds(): Promise<number> {
+  return Number(await getSetting("voice_note_max_seconds")) || Number(DEFAULTS.voice_note_max_seconds);
+}

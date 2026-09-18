@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Tuma admin app icon - shield">
+  <defs>
+    <linearGradient id="adminBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1A1A1A"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#adminBg)"/>
+  <g transform="translate(512 512)">
+    <path
+      d="M0 -320 L248 -224 V64 C248 224 128 336 0 384 C-128 336 -248 224 -248 64 V-224 Z"
+      fill="none" stroke="#F7F3EE" stroke-width="30" stroke-linejoin="round"/>
+    <path d="M-108 8 L-24 92 L120 -84" fill="none" stroke="#C9A227" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

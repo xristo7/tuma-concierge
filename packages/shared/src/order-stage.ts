@@ -7,6 +7,7 @@ export const OrderStage = {
   Substitute: "Substitute",
   Approve: "Approve",
   Deliver: "Deliver",
+  Arrived: "Arrived",
   Handover: "Handover",
   Settle: "Settle",
 } as const;
@@ -21,6 +22,7 @@ export const ORDER_STAGES: readonly OrderStage[] = [
   OrderStage.Substitute,
   OrderStage.Approve,
   OrderStage.Deliver,
+  OrderStage.Arrived,
   OrderStage.Handover,
   OrderStage.Settle,
 ] as const;
