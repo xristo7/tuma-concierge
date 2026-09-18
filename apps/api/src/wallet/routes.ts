@@ -3,10 +3,11 @@ import { z } from "zod";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { newId } from "../lib/ids.js";
+import { consume, tooManyRequests } from "../lib/ratelimit.js";
 import { getWalletSettings } from "../lib/settings.js";
 import { checkPaymentStatus, initiateCollection, UnsupportedNetworkError } from "../payments/service.js";
 import { appBaseUrl } from "../verify/service.js";
-import { creditWallet, getWalletCap } from "./service.js";
+import { creditWallet, getWalletCap, resolveCustomerByIdentifier, transferWallet } from "./service.js";
 
 export const walletRoutes = new Hono();
 
@@ -19,8 +20,17 @@ walletRoutes.get("/wallet", requireAuth, requireRole("customer"), async (c) => {
   const [{ cap, verified }, balanceRes, ledgerRes] = await Promise.all([
     getWalletCap(user.sub),
     db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [user.sub] }),
+    // Joined so a transfer/shared-wallet entry can be labeled with an
+    // actual name ("Sent to Grace", "Order payment by Grace") instead of
+    // a bare user id — actor_id is who spent it when that's not the
+    // wallet owner, counterparty_id is the other side of a transfer.
     db.execute({
-      sql: "SELECT * FROM wallet_ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+      sql: `SELECT wl.*, actor.name as actor_name, cp.name as counterparty_name
+            FROM wallet_ledger wl
+            LEFT JOIN users actor ON actor.id = wl.actor_id
+            LEFT JOIN users cp ON cp.id = wl.counterparty_id
+            WHERE wl.user_id = ?
+            ORDER BY wl.created_at DESC LIMIT 50`,
       args: [user.sub],
     }),
   ]);
@@ -127,4 +137,161 @@ walletRoutes.get("/wallet/topups/:id/refresh", requireAuth, requireRole("custome
   }
 
   return c.json({ topup: { ...topup, status: "successful" } });
+});
+
+// ---------------------------------------------------------------------------
+// Peer-to-peer transfers — still closed-loop (funds move between two
+// customer wallets, never out to mobile money).
+// ---------------------------------------------------------------------------
+
+const transferSchema = z.object({
+  recipient: z.string().min(3).max(200),
+  amount: z.number().int().positive(),
+  note: z.string().max(140).optional(),
+});
+
+walletRoutes.post("/wallet/transfer", requireAuth, requireRole("customer"), async (c) => {
+  const user = c.get("user");
+  const parsed = transferSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+  const { recipient, amount, note } = parsed.data;
+
+  // A phone/email lookup that moves money is an enumeration target —
+  // rate-limited per sender same as everything else that guesses at
+  // another account's identity (auth/routes.ts's login/reset limits).
+  const quota = await consume(`wallet-transfer:${user.sub}`, 10, 60 * 60);
+  if (!quota.allowed) return tooManyRequests(c, quota, "Too many transfers just now. Please try again later.");
+
+  const target = await resolveCustomerByIdentifier(recipient);
+  if (!target) {
+    return c.json({ error: "recipient_not_found", message: "We couldn't find a Tuma customer with that phone number or email." }, 404);
+  }
+  if (target.id === user.sub) {
+    return c.json({ error: "self_transfer", message: "You can't send money to your own wallet." }, 400);
+  }
+
+  const [{ cap: recipientCap }, recipientBalanceRes] = await Promise.all([
+    getWalletCap(target.id),
+    db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [target.id] }),
+  ]);
+  const recipientBalance = Number((recipientBalanceRes.rows[0] as Row)?.wallet_balance ?? 0);
+  if (recipientBalance + amount > recipientCap) {
+    return c.json(
+      { error: "recipient_cap_exceeded", message: `That would put ${target.name}'s wallet over their balance limit.` },
+      400,
+    );
+  }
+
+  const result = await transferWallet({ fromUserId: user.sub, toUserId: target.id, amount, note });
+  if (!result) {
+    return c.json({ error: "insufficient_balance", message: "You don't have enough in your wallet for that." }, 409);
+  }
+
+  return c.json({ balance: result.fromBalance, recipientName: target.name }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Shared wallet access — ongoing, revocable "spend from my wallet on your
+// own orders" grants between two customers. The balance always stays the
+// owner's; an active grant just lets the grantee pay for their own orders
+// out of it (see orders/routes.ts POST /orders/:id/fund's walletOwnerId).
+// ---------------------------------------------------------------------------
+
+const shareInviteSchema = z.object({ recipient: z.string().min(3).max(200) });
+
+walletRoutes.post("/wallet/shares", requireAuth, requireRole("customer"), async (c) => {
+  const user = c.get("user");
+  const parsed = shareInviteSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  const quota = await consume(`wallet-share-invite:${user.sub}`, 10, 60 * 60);
+  if (!quota.allowed) return tooManyRequests(c, quota, "Too many invites just now. Please try again later.");
+
+  const target = await resolveCustomerByIdentifier(parsed.data.recipient);
+  if (!target) {
+    return c.json({ error: "recipient_not_found", message: "We couldn't find a Tuma customer with that phone number or email." }, 404);
+  }
+  if (target.id === user.sub) {
+    return c.json({ error: "self_share", message: "You can't share your wallet with yourself." }, 400);
+  }
+
+  const existing = await db.execute({
+    sql: "SELECT id FROM wallet_shares WHERE owner_id = ? AND grantee_id = ? AND status IN ('pending', 'active')",
+    args: [user.sub, target.id],
+  });
+  if (existing.rows.length > 0) {
+    return c.json({ error: "already_shared", message: `You've already shared your wallet with ${target.name}.` }, 409);
+  }
+
+  const id = newId("wsh");
+  await db.execute({
+    sql: "INSERT INTO wallet_shares (id, owner_id, grantee_id, status) VALUES (?, ?, ?, 'pending')",
+    args: [id, user.sub, target.id],
+  });
+  return c.json({ id, granteeName: target.name, status: "pending" }, 201);
+});
+
+/** Everything the wallet screen needs to render both directions: shares
+ * this customer has extended to others ("granted"), and shares extended
+ * to them ("received") — pending ones to accept/decline, active ones to
+ * spend from or walk away from. A pending owner's balance isn't included
+ * (they haven't accepted yet); it only appears once status is "active". */
+walletRoutes.get("/wallet/shares", requireAuth, requireRole("customer"), async (c) => {
+  const user = c.get("user");
+  const [grantedRes, receivedRes] = await Promise.all([
+    db.execute({
+      sql: `SELECT ws.id, ws.grantee_id, u.name as grantee_name, ws.status, ws.created_at, ws.responded_at
+            FROM wallet_shares ws JOIN users u ON u.id = ws.grantee_id
+            WHERE ws.owner_id = ? ORDER BY ws.created_at DESC`,
+      args: [user.sub],
+    }),
+    db.execute({
+      sql: `SELECT ws.id, ws.owner_id, u.name as owner_name, ws.status, ws.created_at, ws.responded_at,
+                   u.wallet_balance as owner_balance
+            FROM wallet_shares ws JOIN users u ON u.id = ws.owner_id
+            WHERE ws.grantee_id = ? ORDER BY ws.created_at DESC`,
+      args: [user.sub],
+    }),
+  ]);
+  const received = (receivedRes.rows as Row[]).map((r) => ({
+    ...r,
+    owner_balance: r.status === "active" ? r.owner_balance : null,
+  }));
+  return c.json({ granted: grantedRes.rows, received });
+});
+
+walletRoutes.post("/wallet/shares/:id/accept", requireAuth, requireRole("customer"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id") as string;
+  const res = await db.execute({
+    sql: "UPDATE wallet_shares SET status = 'active', responded_at = datetime('now') WHERE id = ? AND grantee_id = ? AND status = 'pending'",
+    args: [id, user.sub],
+  });
+  if ((res.rowsAffected ?? 0) === 0) return c.json({ error: "not_found" }, 404);
+  return c.json({ status: "active" });
+});
+
+walletRoutes.post("/wallet/shares/:id/decline", requireAuth, requireRole("customer"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id") as string;
+  const res = await db.execute({
+    sql: "UPDATE wallet_shares SET status = 'declined', responded_at = datetime('now') WHERE id = ? AND grantee_id = ? AND status = 'pending'",
+    args: [id, user.sub],
+  });
+  if ((res.rowsAffected ?? 0) === 0) return c.json({ error: "not_found" }, 404);
+  return c.json({ status: "declined" });
+});
+
+/** Either side can end an active (or still-pending) share — the owner
+ * revoking access, or the grantee giving it up themselves. */
+walletRoutes.post("/wallet/shares/:id/revoke", requireAuth, requireRole("customer"), async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id") as string;
+  const res = await db.execute({
+    sql: `UPDATE wallet_shares SET status = 'revoked', responded_at = datetime('now')
+          WHERE id = ? AND (owner_id = ? OR grantee_id = ?) AND status IN ('pending', 'active')`,
+    args: [id, user.sub, user.sub],
+  });
+  if ((res.rowsAffected ?? 0) === 0) return c.json({ error: "not_found" }, 404);
+  return c.json({ status: "revoked" });
 });

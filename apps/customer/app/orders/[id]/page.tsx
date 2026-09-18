@@ -1,6 +1,6 @@
 "use client";
 
-import type { MobileMoneyNetwork, OrderDetail, OrderRating, RiderApplicant } from "@tuma/shared";
+import type { MobileMoneyNetwork, OrderDetail, OrderRating, RiderApplicant, WalletShareReceived } from "@tuma/shared";
 import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel } from "@tuma/shared";
 import { MapPin, MessageCircle, Star, ThumbsUp, TriangleAlert, User } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
@@ -167,6 +167,7 @@ export default function OrderDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [msisdn, setMsisdn] = useState("");
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [sharedWallets, setSharedWallets] = useState<WalletShareReceived[]>([]);
   const online = useNetworkStatus();
   const detectedNetwork = useMemo(() => detectMobileMoneyNetwork(msisdn), [msisdn]);
   const matching = useRef(false);
@@ -175,6 +176,10 @@ export default function OrderDetailPage() {
     api
       .getWallet()
       .then((w) => setWalletBalance(w.balance))
+      .catch(() => {});
+    api
+      .getWalletShares()
+      .then((s) => setSharedWallets(s.received.filter((r) => r.status === "active")))
       .catch(() => {});
   }, []);
 
@@ -242,12 +247,16 @@ export default function OrderDetailPage() {
     }
   }
 
-  async function doFund(useWallet = false) {
+  async function doFund(useWallet = false, walletOwnerId?: string) {
     setBusy(true);
     setError(null);
     try {
       const input =
-        detail?.order.payment_rail === "escrow" ? (useWallet ? { useWallet: true } : { msisdn }) : {};
+        detail?.order.payment_rail === "escrow"
+          ? useWallet
+            ? { useWallet: true, walletOwnerId }
+            : { msisdn }
+          : {};
       const res = await api.fundOrder(orderId, input);
       if (res.redirectUrl) {
         window.location.href = res.redirectUrl;
@@ -457,6 +466,19 @@ export default function OrderDetailPage() {
                       Pay from wallet ({formatUgx(walletBalance)} available)
                     </button>
                   )}
+                  {sharedWallets
+                    .filter((w) => w.owner_balance != null && w.owner_balance >= (order.final_total ?? order.estimated_total ?? 0))
+                    .map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => doFund(true, w.owner_id)}
+                        disabled={busy || !online}
+                        className="min-h-12 w-full rounded-full border-2 border-gold px-4 text-base font-bold text-ink disabled:opacity-60"
+                      >
+                        Pay from {w.owner_name}&apos;s wallet ({formatUgx(w.owner_balance ?? 0)} available)
+                      </button>
+                    ))}
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();

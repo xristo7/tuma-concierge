@@ -455,15 +455,23 @@ export type Wallet = {
 };
 
 /** A customer's own top-up/spend history entry — the audit trail behind
- * their wallet_balance (see apps/api/src/wallet/service.ts). */
+ * their wallet_balance (see apps/api/src/wallet/service.ts).
+ * `actor_id`/`actor_name` are who actually triggered the entry when
+ * that's not the wallet owner (someone spending via a shared-wallet
+ * grant); `counterparty_id`/`counterparty_name` are the other side of a
+ * transfer_out/transfer_in pair. Both are null for every other type. */
 export type WalletLedgerEntry = {
   id: string;
   user_id: string;
-  type: "topup" | "order_payment" | "refund" | "adjustment";
+  type: "topup" | "order_payment" | "refund" | "adjustment" | "transfer_out" | "transfer_in";
   amount: number;
   balance_after: number;
   order_id: string | null;
   topup_id: string | null;
+  counterparty_id: string | null;
+  counterparty_name: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
   note: string | null;
   created_at: string;
 };
@@ -490,6 +498,38 @@ export type CustomerWallet = {
   cap: number;
   verified: boolean;
   ledger: WalletLedgerEntry[];
+};
+
+export type WalletShareStatus = "pending" | "active" | "revoked" | "declined";
+
+/** A wallet-sharing grant this customer extended to someone else — shown
+ * on the owner's side so they can see who they've invited/allowed and
+ * revoke it. */
+export type WalletShareGranted = {
+  id: string;
+  grantee_id: string;
+  grantee_name: string;
+  status: WalletShareStatus;
+  created_at: string;
+  responded_at: string | null;
+};
+
+/** A wallet-sharing grant extended to this customer by someone else —
+ * `owner_balance` is only populated once `status` is "active" (an owner's
+ * balance isn't shown to an invite that hasn't been accepted yet). */
+export type WalletShareReceived = {
+  id: string;
+  owner_id: string;
+  owner_name: string;
+  status: WalletShareStatus;
+  created_at: string;
+  responded_at: string | null;
+  owner_balance: number | null;
+};
+
+export type WalletShares = {
+  granted: WalletShareGranted[];
+  received: WalletShareReceived[];
 };
 
 /** Which payment aggregator identity — the underlying provider a payment

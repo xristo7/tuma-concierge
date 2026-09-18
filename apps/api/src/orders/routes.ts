@@ -969,7 +969,13 @@ orderRoutes.post("/orders/:id/cancel", async (c) => {
 // ---------------------------------------------------------------------------
 
 const fundSchema = z
-  .object({ msisdn: z.string().min(6).max(20).optional(), useWallet: z.boolean().optional() })
+  .object({
+    msisdn: z.string().min(6).max(20).optional(),
+    useWallet: z.boolean().optional(),
+    // Pay from someone else's wallet instead of your own — only valid
+    // when that owner has an active wallet_shares grant to this customer.
+    walletOwnerId: z.string().optional(),
+  })
   .refine((data) => !!data.msisdn || !!data.useWallet, { message: "Provide a mobile money number or pay from wallet" });
 
 orderRoutes.post("/orders/:id/fund", async (c) => {
@@ -1003,16 +1009,28 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
   if (parsed.data.useWallet) {
+    let walletOwnerId = user.sub;
+    if (parsed.data.walletOwnerId && parsed.data.walletOwnerId !== user.sub) {
+      const share = await db.execute({
+        sql: "SELECT 1 FROM wallet_shares WHERE owner_id = ? AND grantee_id = ? AND status = 'active'",
+        args: [parsed.data.walletOwnerId, user.sub],
+      });
+      if (share.rows.length === 0) return c.json({ error: "wallet_not_shared" }, 403);
+      walletOwnerId = parsed.data.walletOwnerId;
+    }
+    const sharedSpend = walletOwnerId !== user.sub;
+
     const paymentId = await payFromWallet({
-      userId: user.sub,
+      userId: walletOwnerId,
       amount,
       orderId: id,
       note: `Order ${id}`,
+      actorId: sharedSpend ? user.sub : undefined,
     });
     if (!paymentId) return c.json({ error: "insufficient_wallet_balance" }, 409);
 
     await touchOrder(id, { stage: "Shop" });
-    await logEvent(id, "Fund", "Paid from wallet — shopping started", user.sub);
+    await logEvent(id, "Fund", sharedSpend ? "Paid from a shared wallet — shopping started" : "Paid from wallet — shopping started", user.sub);
     return c.json({ order: await getOrder(id), payment: { id: paymentId, status: "successful", network: null } });
   }
 

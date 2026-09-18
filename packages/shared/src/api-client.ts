@@ -31,6 +31,7 @@ import type {
   StaffMember,
   UserStatus,
   Wallet,
+  WalletShares,
   WalletTopup,
 } from "./domain.js";
 
@@ -259,7 +260,7 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async cancelOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/cancel`, { method: "POST" });
     },
-    async fundOrder(orderId: string, input: { msisdn?: string; useWallet?: boolean } = {}) {
+    async fundOrder(orderId: string, input: { msisdn?: string; useWallet?: boolean; walletOwnerId?: string } = {}) {
       return request<{
         order: OrderRow;
         payment?: { id: string; status: string; network: string | null };
@@ -529,6 +530,33 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async refreshTopup(id: string) {
       return request<{ topup: WalletTopup }>(`/v1/wallet/topups/${id}/refresh`);
+    },
+    /** Sends money straight into another customer's wallet by phone/email. */
+    async transferWallet(input: { recipient: string; amount: number; note?: string }) {
+      return request<{ balance: number; recipientName: string }>("/v1/wallet/transfer", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    /** Invites another customer to spend from this wallet on their own orders. */
+    async shareWallet(input: { recipient: string }) {
+      return request<{ id: string; granteeName: string; status: "pending" }>("/v1/wallet/shares", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async getWalletShares() {
+      return request<WalletShares>("/v1/wallet/shares");
+    },
+    async acceptWalletShare(id: string) {
+      return request<{ status: "active" }>(`/v1/wallet/shares/${id}/accept`, { method: "POST" });
+    },
+    async declineWalletShare(id: string) {
+      return request<{ status: "declined" }>(`/v1/wallet/shares/${id}/decline`, { method: "POST" });
+    },
+    /** Owner revoking a grant, or a grantee giving up one extended to them. */
+    async revokeWalletShare(id: string) {
+      return request<{ status: "revoked" }>(`/v1/wallet/shares/${id}/revoke`, { method: "POST" });
     },
     /** Admin: refunds an order's collected payment back to the customer's wallet. */
     async adminRefundToWallet(orderId: string) {
