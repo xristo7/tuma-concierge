@@ -163,6 +163,9 @@ export type DeliverySettings = {
   nearestWindowSeconds: number;
   maxAssignmentMinutes: number;
   paymentsActiveProviders: PaymentProviderIdentity[];
+  /** Demo/sandbox mode — every payment runs through the mock adapters
+   * regardless of saved credentials. See PaymentProviderInfo/IntegrationsStatus. */
+  paymentsDemoMode: boolean;
   walletUnverifiedCap: number;
   walletVerifiedCap: number;
   walletMaxTopup: number;
@@ -372,6 +375,9 @@ export type AdminStats = {
 export type IntegrationsStatus = {
   mobileMoney: {
     activeProviders: PaymentProviderIdentity[];
+    /** Forces every payment through the mock adapters regardless of saved
+     * credentials — see apps/api/src/payments/service.ts resolveProvider(). */
+    demoMode: boolean;
     providers: PaymentProviderInfo[];
     collection: { provider: string; live: boolean };
     disbursement: { provider: string; live: boolean };
@@ -536,6 +542,18 @@ export type WalletShares = {
  * settled through, independent of live-vs-simulated. */
 export type PaymentProviderIdentity = "yo" | "flutterwave";
 
+/** One credential field's admin-facing status — never the value itself,
+ * just enough to render a form and show what's already set. */
+export type PaymentCredentialFieldStatus = {
+  key: string;
+  label: string;
+  secret: boolean;
+  required: boolean;
+  placeholder?: string;
+  helpText?: string;
+  set: boolean;
+};
+
 export type PaymentProviderInfo = {
   key: PaymentProviderIdentity;
   displayName: string;
@@ -544,6 +562,10 @@ export type PaymentProviderInfo = {
   active: boolean;
   /** Position in the admin's priority order, or -1 if not active. */
   priority: number;
+  /** This provider's real API credential fields (from the provider's own
+   * requirements — see apps/api/src/payments/credentials.ts) and whether
+   * each is currently set, DB-stored or env-var fallback alike. */
+  credentialFields: PaymentCredentialFieldStatus[];
 };
 
 export type CreateListBody = {

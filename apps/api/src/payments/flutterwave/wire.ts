@@ -9,24 +9,26 @@
  * the much heavier bar direct card charges would require.
  *
  * Only used when PAYMENTS provider selection (see ../service.ts) resolves
- * to "flutterwave" and FLUTTERWAVE_SECRET_KEY is set — otherwise
- * ./mock.ts stands in, with the same request/response contract.
+ * to "flutterwave" and a secret key resolves (admin-entered via
+ * ../credentials.ts, or the FLUTTERWAVE_SECRET_KEY env var as a fallback) —
+ * otherwise ./mock.ts stands in, with the same request/response contract.
  *
  * API reference: https://developer.flutterwave.com/docs (v3)
  */
 
+import { getCredential, isProviderConfigured } from "../credentials.js";
 import type { GatewayChargeInput, GatewayResult, PaymentGatewayAdapter } from "../gateway.js";
 
 const API_BASE = "https://api.flutterwave.com/v3";
 
-function secretKey(): string {
-  const key = process.env.FLUTTERWAVE_SECRET_KEY;
-  if (!key) throw new Error("FLUTTERWAVE_SECRET_KEY is not set");
+async function secretKey(): Promise<string> {
+  const key = await getCredential("flutterwave", "secretKey");
+  if (!key) throw new Error("Flutterwave secret key is not set");
   return key;
 }
 
-export function isFlutterwaveConfigured(): boolean {
-  return !!process.env.FLUTTERWAVE_SECRET_KEY;
+export function isFlutterwaveConfigured(): Promise<boolean> {
+  return isProviderConfigured("flutterwave");
 }
 
 /** A phone-first signup may have no email on file, but Standard Checkout
@@ -46,7 +48,7 @@ async function call<T>(path: string, init: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${secretKey()}`,
+      Authorization: `Bearer ${await secretKey()}`,
       "Content-Type": "application/json",
       ...init.headers,
     },
@@ -119,8 +121,8 @@ export async function checkStatus(transactionReference: string): Promise<Gateway
  * header (not an HMAC of the body) — this is their documented scheme, not
  * a shortcut taken here. Constant-time comparison, same pattern as the Yo!
  * callback's own token check in ../routes.ts. */
-export function verifyWebhookSignature(providedHeader: string | null | undefined): boolean {
-  const expected = process.env.FLUTTERWAVE_WEBHOOK_SECRET;
+export async function verifyWebhookSignature(providedHeader: string | null | undefined): Promise<boolean> {
+  const expected = await getCredential("flutterwave", "webhookSecret");
   if (!expected) return false;
   const provided = providedHeader ?? "";
   if (provided.length !== expected.length) return false;

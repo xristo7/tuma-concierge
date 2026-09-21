@@ -8,22 +8,26 @@ import {
   getActiveProviders,
   getDeliverySettings,
   getMatchingSettings,
+  getPaymentsDemoMode,
   getVoiceNoteMaxSeconds,
   getWalletSettings,
   setActiveProviders,
   setMatchingModesEnabled,
+  setPaymentsDemoMode,
   setSetting,
   type PaymentProviderIdentity,
 } from "../lib/settings.js";
+import { clearCredential, PROVIDER_CREDENTIAL_FIELDS, saveCredentials } from "../payments/credentials.js";
 import { paymentsIntegrationStatus } from "../payments/service.js";
 
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, wallet, voiceNoteMaxSeconds] = await Promise.all([
+  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds] = await Promise.all([
     getDeliverySettings(),
     getMatchingSettings(),
     getActiveProviders(),
+    getPaymentsDemoMode(),
     getWalletSettings(),
     getVoiceNoteMaxSeconds(),
   ]);
@@ -31,6 +35,7 @@ async function fullSettings() {
     ...delivery,
     ...matching,
     paymentsActiveProviders: activeProviders,
+    paymentsDemoMode: demoMode,
     walletUnverifiedCap: wallet.unverifiedCap,
     walletVerifiedCap: wallet.verifiedCap,
     walletMaxTopup: wallet.maxTopup,
@@ -55,13 +60,20 @@ const updateSchema = z.object({
   nearestWindowSeconds: z.number().int().positive().max(3600).optional(),
   maxAssignmentMinutes: z.number().int().positive().max(120).optional(),
   paymentsActiveProviders: z.array(z.enum(["yo", "flutterwave"])).min(1).max(2).optional(),
+  paymentsDemoMode: z.boolean().optional(),
   walletUnverifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletVerifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletMaxTopup: z.number().int().positive().max(100_000_000).optional(),
   voiceNoteMaxSeconds: z.number().int().positive().max(600).optional(),
 });
 
-const PAYMENTS_FIELDS = ["paymentsActiveProviders", "walletUnverifiedCap", "walletVerifiedCap", "walletMaxTopup"] as const;
+const PAYMENTS_FIELDS = [
+  "paymentsActiveProviders",
+  "paymentsDemoMode",
+  "walletUnverifiedCap",
+  "walletVerifiedCap",
+  "walletMaxTopup",
+] as const;
 
 settingsRoutes.put(
   "/admin/settings",
@@ -103,6 +115,9 @@ settingsRoutes.put(
     if (parsed.data.paymentsActiveProviders != null) {
       await setActiveProviders(parsed.data.paymentsActiveProviders as PaymentProviderIdentity[]);
     }
+    if (parsed.data.paymentsDemoMode != null) {
+      await setPaymentsDemoMode(parsed.data.paymentsDemoMode);
+    }
     if (parsed.data.walletUnverifiedCap != null) {
       await setSetting("wallet_unverified_cap", String(parsed.data.walletUnverifiedCap));
     }
@@ -130,5 +145,87 @@ settingsRoutes.put(
     });
 
     return c.json({ settings: after });
+  },
+);
+
+const providerParam = z.enum(["yo", "flutterwave"]);
+
+const saveCredentialsSchema = z.object({
+  fields: z.record(z.string(), z.string().max(2000)),
+});
+
+/**
+ * Saves API credentials for one payment aggregator. Same gate as the
+ * paymentsActiveProviders field above (settings.manage + payments.manage) —
+ * this is a strictly more sensitive version of the same action, so it
+ * doesn't need its own permission. Values are encrypted before they touch
+ * the DB (see ../payments/credentials.ts); the activity log only ever
+ * records which field *keys* changed, never their contents.
+ */
+settingsRoutes.put(
+  "/admin/payments/credentials/:provider",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  requirePermission("payments.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const providerParsed = providerParam.safeParse(c.req.param("provider"));
+    if (!providerParsed.success) return c.json({ error: "invalid_provider" }, 400);
+    const provider = providerParsed.data as PaymentProviderIdentity;
+
+    const bodyParsed = saveCredentialsSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!bodyParsed.success) return c.json({ error: "invalid_body", issues: bodyParsed.error.issues }, 400);
+
+    const validKeys = new Set(PROVIDER_CREDENTIAL_FIELDS[provider].map((f) => f.key));
+    const unknown = Object.keys(bodyParsed.data.fields).filter((k) => !validKeys.has(k));
+    if (unknown.length > 0) return c.json({ error: "unknown_field", fields: unknown }, 400);
+
+    const changed = await saveCredentials(provider, bodyParsed.data.fields);
+
+    if (changed.length > 0) {
+      await logActivity({
+        actor: user,
+        action: "payments.credentials.update",
+        entityType: "payment_credentials",
+        entityId: provider,
+        summary: `Updated ${provider} credentials: ${changed.join(", ")}`,
+        ip: clientIp(c),
+      });
+    }
+
+    return c.json({ changed });
+  },
+);
+
+/** Clears one saved credential field, reverting it to its env-var fallback
+ * (if any) — e.g. to roll back to sandbox after testing production keys. */
+settingsRoutes.delete(
+  "/admin/payments/credentials/:provider/:field",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  requirePermission("payments.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const providerParsed = providerParam.safeParse(c.req.param("provider"));
+    if (!providerParsed.success) return c.json({ error: "invalid_provider" }, 400);
+    const provider = providerParsed.data as PaymentProviderIdentity;
+
+    const field = c.req.param("field") ?? "";
+    const validKeys = new Set(PROVIDER_CREDENTIAL_FIELDS[provider].map((f) => f.key));
+    if (!validKeys.has(field)) return c.json({ error: "unknown_field" }, 400);
+
+    await clearCredential(provider, field);
+    await logActivity({
+      actor: user,
+      action: "payments.credentials.clear",
+      entityType: "payment_credentials",
+      entityId: provider,
+      summary: `Cleared ${provider} credential field: ${field}`,
+      ip: clientIp(c),
+    });
+
+    return c.json({ ok: true });
   },
 );

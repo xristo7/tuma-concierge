@@ -1,6 +1,14 @@
 "use client";
 
-import { hasPermission, MATCHING_MODE_DESCRIPTIONS, MATCHING_MODE_LABELS, type MatchingMode, type PaymentProviderIdentity, type PaymentProviderInfo } from "@tuma/shared";
+import {
+  hasPermission,
+  MATCHING_MODE_DESCRIPTIONS,
+  MATCHING_MODE_LABELS,
+  type MatchingMode,
+  type PaymentCredentialFieldStatus,
+  type PaymentProviderIdentity,
+  type PaymentProviderInfo,
+} from "@tuma/shared";
 import { CreditCard, Mic, Route, Settings as SettingsIcon, Wallet as WalletIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
@@ -19,6 +27,7 @@ export default function SettingsPage() {
   const [nearestWindowSeconds, setNearestWindowSeconds] = useState("");
   const [maxAssignmentMinutes, setMaxAssignmentMinutes] = useState("");
   const [activeProviders, setActiveProviders] = useState<PaymentProviderIdentity[]>(["yo"]);
+  const [paymentsDemoMode, setPaymentsDemoMode] = useState(false);
   const [providerInfo, setProviderInfo] = useState<PaymentProviderInfo[]>([]);
   const [walletUnverifiedCap, setWalletUnverifiedCap] = useState("");
   const [walletVerifiedCap, setWalletVerifiedCap] = useState("");
@@ -28,6 +37,10 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  function refreshIntegrations() {
+    return api.adminIntegrations().then((res) => setProviderInfo(res.integrations.mobileMoney.providers));
+  }
 
   useEffect(() => {
     Promise.all([api.getSettings(), api.adminIntegrations()])
@@ -39,6 +52,7 @@ export default function SettingsPage() {
         setNearestWindowSeconds(String(settingsRes.settings.nearestWindowSeconds));
         setMaxAssignmentMinutes(String(settingsRes.settings.maxAssignmentMinutes));
         setActiveProviders(settingsRes.settings.paymentsActiveProviders);
+        setPaymentsDemoMode(settingsRes.settings.paymentsDemoMode);
         setWalletUnverifiedCap(String(settingsRes.settings.walletUnverifiedCap));
         setWalletVerifiedCap(String(settingsRes.settings.walletVerifiedCap));
         setWalletMaxTopup(String(settingsRes.settings.walletMaxTopup));
@@ -84,6 +98,7 @@ export default function SettingsPage() {
         ...(canManagePayments
           ? {
               paymentsActiveProviders: activeProviders.length > 0 ? activeProviders : (["yo"] as PaymentProviderIdentity[]),
+              paymentsDemoMode,
               walletUnverifiedCap: Number(walletUnverifiedCap),
               walletVerifiedCap: Number(walletVerifiedCap),
               walletMaxTopup: Number(walletMaxTopup),
@@ -97,10 +112,12 @@ export default function SettingsPage() {
       setNearestWindowSeconds(String(res.settings.nearestWindowSeconds));
       setMaxAssignmentMinutes(String(res.settings.maxAssignmentMinutes));
       setActiveProviders(res.settings.paymentsActiveProviders);
+      setPaymentsDemoMode(res.settings.paymentsDemoMode);
       setWalletUnverifiedCap(String(res.settings.walletUnverifiedCap));
       setWalletVerifiedCap(String(res.settings.walletVerifiedCap));
       setWalletMaxTopup(String(res.settings.walletMaxTopup));
       setVoiceNoteMaxSeconds(String(res.settings.voiceNoteMaxSeconds));
+      if (canManagePayments) await refreshIntegrations();
       setSaved(true);
     } catch (err) {
       setError(errorMessage(err));
@@ -173,6 +190,38 @@ export default function SettingsPage() {
               Turn on one or both aggregators. With both on, the first is used until it has no working API
               keys, then the second takes over automatically — a switch never happens mid-payment.
             </p>
+
+            <label
+              className={`flex items-start gap-2.5 rounded-xl border p-3 ${
+                paymentsDemoMode ? "border-gold/40 bg-gold/5" : "border-[var(--border-faint)]"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={paymentsDemoMode}
+                onChange={(e) => setPaymentsDemoMode(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-gold"
+              />
+              <span>
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-sm font-semibold text-ink">Demo mode</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      paymentsDemoMode ? "bg-gold/15 text-gold" : "bg-[rgb(var(--surface-muted))] text-ink-500"
+                    }`}
+                  >
+                    {paymentsDemoMode ? "On — payments simulated" : "Off — live"}
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-xs text-ink-500">
+                  Every payment runs through the simulator instead of a real aggregator, even if API
+                  credentials are saved below and an aggregator is turned on. Use this to test the app, do a
+                  demo, or pull the whole platform back to sandbox instantly without touching or deleting any
+                  saved credentials.
+                </span>
+              </span>
+            </label>
+
             <div className="space-y-2">
               {ALL_PROVIDERS.map((provider) => {
                 const info = providerInfo.find((p) => p.key === provider);
@@ -219,6 +268,14 @@ export default function SettingsPage() {
                         )}
                       </span>
                     </label>
+                    {info && info.credentialFields.length > 0 && (
+                      <CredentialFieldsForm
+                        provider={provider}
+                        displayName={info.displayName}
+                        fields={info.credentialFields}
+                        onSaved={refreshIntegrations}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -398,6 +455,118 @@ export default function SettingsPage() {
             {busy ? "Saving…" : "Save settings"}
           </button>
         </form>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Per-provider API credential inputs, saved independently of the main
+ * "Save settings" button below — these hit their own endpoint immediately
+ * (see api.adminSavePaymentCredentials) rather than riding along with the
+ * rest of the form, since a wrong key here should fail loudly on its own,
+ * not get silently bundled into an otherwise-successful settings save.
+ */
+function CredentialFieldsForm({
+  provider,
+  displayName,
+  fields,
+  onSaved,
+}: {
+  provider: PaymentProviderIdentity;
+  displayName: string;
+  fields: PaymentCredentialFieldStatus[];
+  onSaved: () => Promise<void> | void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  async function onSave() {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const nonBlank = Object.fromEntries(Object.entries(values).filter(([, v]) => v.trim().length > 0));
+      await api.adminSavePaymentCredentials(provider, nonBlank);
+      setValues({});
+      setSaved(true);
+      await onSaved();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onClear(field: string) {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.adminClearPaymentCredential(provider, field);
+      await onSaved();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-2.5 border-t border-[var(--border-faint)] pt-2.5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs font-semibold text-gold"
+      >
+        {open ? "Hide" : "Set"} {displayName} API credentials
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2.5">
+          {fields.map((field) => (
+            <div key={field.key} className="space-y-1">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs font-semibold text-ink-500" htmlFor={`${provider}-${field.key}`}>
+                  {field.label}
+                  {field.required && <span className="text-gold"> *</span>}
+                </label>
+                {field.set && (
+                  <button
+                    type="button"
+                    onClick={() => onClear(field.key)}
+                    disabled={busy}
+                    className="text-[11px] font-semibold text-ink-500 underline disabled:opacity-60"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <input
+                id={`${provider}-${field.key}`}
+                type={field.secret ? "password" : "text"}
+                value={values[field.key] ?? ""}
+                onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                placeholder={field.set ? "•••••••• (already set — leave blank to keep)" : field.placeholder}
+                autoComplete="off"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+              {field.helpText && <p className="text-xs text-ink-500">{field.helpText}</p>}
+            </div>
+          ))}
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {saved && <p className="text-xs font-medium text-green">Saved.</p>}
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={busy || Object.values(values).every((v) => !v.trim())}
+            className="min-h-9 w-full rounded-full border border-gold px-4 text-xs font-bold text-gold disabled:opacity-60"
+          >
+            {busy ? "Saving…" : `Save ${displayName} credentials`}
+          </button>
+        </div>
       )}
     </div>
   );

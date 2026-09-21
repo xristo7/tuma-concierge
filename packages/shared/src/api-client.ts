@@ -598,6 +598,20 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         "/v1/admin/integrations",
       );
     },
+    /** Saves whichever credential fields are non-blank for one aggregator —
+     * a blank field is left untouched, not cleared. See
+     * apps/api/src/payments/credentials.ts for the field definitions. */
+    async adminSavePaymentCredentials(provider: PaymentProviderIdentity, fields: Record<string, string>) {
+      return request<{ changed: string[] }>(`/v1/admin/payments/credentials/${provider}`, {
+        method: "PUT",
+        body: JSON.stringify({ fields }),
+      });
+    },
+    /** Clears one previously-saved credential field, reverting that field to
+     * its env-var fallback (if any). */
+    async adminClearPaymentCredential(provider: PaymentProviderIdentity, field: string) {
+      return request<{ ok: true }>(`/v1/admin/payments/credentials/${provider}/${field}`, { method: "DELETE" });
+    },
     async adminListCustomers(q?: string) {
       const qs = q ? `?q=${encodeURIComponent(q)}` : "";
       return request<{ customers: AdminCustomer[] }>(`/v1/admin/customers${qs}`);

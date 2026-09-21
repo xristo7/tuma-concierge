@@ -57,7 +57,7 @@ function toGatewayInput(input: GatewayChargeInput): YoDepositWithdrawInput {
 export const mockYoAdapter: PaymentGatewayAdapter = {
   key: "yo_mock",
   displayName: "Yo! Payments (simulated)",
-  isConfigured: () => true,
+  isConfigured: async () => true,
   supportsDisbursement: true,
   // Matches the real adapter: still worth validating the phone number
   // looks like a real MTN/Airtel Uganda number even in simulation, rather

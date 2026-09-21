@@ -40,10 +40,11 @@ export type GatewayResult = {
 export interface PaymentGatewayAdapter {
   key: string;
   displayName: string;
-  /** True once this adapter's own API credentials are present — checked
-   * live, never cached, so an admin flipping a Cloudflare secret takes
-   * effect on the next request with no redeploy. */
-  isConfigured(): boolean;
+  /** True once this adapter's own API credentials are present (DB-stored,
+   * admin-entered — see ./credentials.ts — or an env var fallback), checked
+   * live every call, never cached, so an admin saving new keys takes effect
+   * on the next request with no redeploy. */
+  isConfigured(): Promise<boolean>;
   /** Whether this adapter can pay money OUT (rider payouts). Collection-only
    * providers (Flutterwave, for now) report false here rather than fail at
    * call time — see resolveProvider() in ./service.ts. */

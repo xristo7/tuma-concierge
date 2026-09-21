@@ -37,7 +37,7 @@ function mockStatus(transactionReference: string, createdAt: string): GatewaySta
 export const mockFlutterwaveAdapter: PaymentGatewayAdapter = {
   key: "flutterwave_mock",
   displayName: "Flutterwave (simulated)",
-  isConfigured: () => true,
+  isConfigured: async () => true,
   supportsDisbursement: false,
   requiresNetwork: false,
   async depositFunds(input: GatewayChargeInput): Promise<GatewayResult> {

@@ -10,7 +10,8 @@
  */
 
 import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel, type MobileMoneyNetwork } from "@tuma/shared";
-import { getActiveProviders, type PaymentProviderIdentity } from "../lib/settings.js";
+import { getActiveProviders, getPaymentsDemoMode, type PaymentProviderIdentity } from "../lib/settings.js";
+import { credentialFieldStatus } from "./credentials.js";
 import type { GatewayResult, PaymentGatewayAdapter } from "./gateway.js";
 import { flutterwaveAdapter } from "./flutterwave/wire.js";
 import { mockFlutterwaveAdapter } from "./flutterwave/mock.js";
@@ -40,38 +41,53 @@ function mockOf(identity: PaymentProviderIdentity): PaymentsProvider {
  * disbursement). Falls back to the first list entry's mock — never to an
  * unconfigured real adapter — so a misconfigured "flutterwave" selection
  * degrades to a working simulation instead of failing every payment.
+ *
+ * Demo mode (settings.payments_demo_mode) short-circuits all of that: every
+ * payment runs through the mock adapters regardless of what credentials are
+ * saved, so an admin can test/demo the app — or pull it back from a shaky
+ * live aggregator — without touching the credentials themselves.
  */
 export async function resolveProvider(capability: "collection" | "disbursement"): Promise<PaymentsProvider> {
   const active = await getActiveProviders();
-  for (const identity of active) {
-    const adapter = ADAPTERS[identity];
-    if (!adapter.isConfigured()) continue;
-    if (capability === "disbursement" && !adapter.supportsDisbursement) continue;
-    return identity;
+  const demoMode = await getPaymentsDemoMode();
+  if (!demoMode) {
+    for (const identity of active) {
+      const adapter = ADAPTERS[identity];
+      if (!(await adapter.isConfigured())) continue;
+      if (capability === "disbursement" && !adapter.supportsDisbursement) continue;
+      return identity;
+    }
   }
-  // Nothing configured (or configured-but-incapable) — mock the first
-  // choice that *would* support this capability, so disbursement still
-  // simulates through Yo!'s mock even if Flutterwave is primary.
+  // Nothing configured (or configured-but-incapable), or demo mode is on —
+  // mock the first choice that *would* support this capability, so
+  // disbursement still simulates through Yo!'s mock even if Flutterwave is
+  // primary.
   const fallbackIdentity = active.find((p) => capability !== "disbursement" || ADAPTERS[p].supportsDisbursement) ?? "yo";
   return mockOf(fallbackIdentity);
 }
 
 export async function paymentsIntegrationStatus() {
   const active = await getActiveProviders();
+  const demoMode = await getPaymentsDemoMode();
   const collectionProvider = await resolveProvider("collection");
   const disbursementProvider = await resolveProvider("disbursement");
-  return {
-    activeProviders: active,
-    providers: (["yo", "flutterwave"] as PaymentProviderIdentity[]).map((identity) => ({
+  const providers = await Promise.all(
+    (["yo", "flutterwave"] as PaymentProviderIdentity[]).map(async (identity) => ({
       key: identity,
       displayName: ADAPTERS[identity].displayName,
-      configured: ADAPTERS[identity].isConfigured(),
+      configured: await ADAPTERS[identity].isConfigured(),
       supportsDisbursement: ADAPTERS[identity].supportsDisbursement,
       active: active.includes(identity),
       priority: active.indexOf(identity),
+      credentialFields: await credentialFieldStatus(identity),
     })),
-    collection: { provider: collectionProvider, live: !collectionProvider.endsWith("_mock") },
-    disbursement: { provider: disbursementProvider, live: !disbursementProvider.endsWith("_mock") },
+  );
+  return {
+    activeProviders: active,
+    demoMode,
+    providers,
+    collection: { provider: collectionProvider, live: !demoMode && !collectionProvider.endsWith("_mock") },
+    disbursement: { provider: disbursementProvider, live: !demoMode && !disbursementProvider.endsWith("_mock") },
     networks: ["mtn_momo", "airtel_money"],
   };
 }

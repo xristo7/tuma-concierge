@@ -59,6 +59,7 @@ export type {
   WalletShares,
   PaymentProviderIdentity,
   PaymentProviderInfo,
+  PaymentCredentialFieldStatus,
   AvailableJob,
   MatchingMode,
   RiderApplicant,

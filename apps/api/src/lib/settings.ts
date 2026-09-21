@@ -32,6 +32,14 @@ const DEFAULTS = {
    * has no working credentials. JSON array of "yo" | "flutterwave". See
    * ../payments/service.ts resolveProvider(). */
   payments_active_providers: '["yo"]',
+  /** Force every payment through the mock/simulated adapters, even when a
+   * real provider has working credentials saved. Lets an admin test live
+   * credentials without switching them live, or pull the whole platform
+   * back to demo transactions instantly (no need to delete/blank the
+   * credentials themselves) if something looks wrong with a real
+   * aggregator. "1" = demo mode on, anything else = off. See
+   * ../payments/service.ts resolveProvider(). */
+  payments_demo_mode: "0",
   /** Wallet balance ceilings (UGX), tiered by verification the same way
    * mobile money itself limits unverified accounts — see
    * ../wallet/routes.ts. */
@@ -140,6 +148,14 @@ export async function setActiveProviders(providers: PaymentProviderIdentity[]): 
   const valid = providers.filter((p) => ALL_PROVIDER_IDENTITIES.includes(p));
   const deduped = [...new Set(valid)];
   await setSetting("payments_active_providers", JSON.stringify(deduped.length > 0 ? deduped : ["yo"]));
+}
+
+export async function getPaymentsDemoMode(): Promise<boolean> {
+  return (await getSetting("payments_demo_mode")) === "1";
+}
+
+export async function setPaymentsDemoMode(enabled: boolean): Promise<void> {
+  await setSetting("payments_demo_mode", enabled ? "1" : "0");
 }
 
 export async function getWalletSettings(): Promise<{ unverifiedCap: number; verifiedCap: number; maxTopup: number }> {

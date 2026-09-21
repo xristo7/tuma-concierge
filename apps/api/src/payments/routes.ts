@@ -165,7 +165,7 @@ paymentRoutes.post("/payments/yo/callback", async (c) => {
  * verify endpoint, never trusted from the webhook payload directly.
  */
 paymentRoutes.post("/payments/flutterwave/callback", async (c) => {
-  if (!verifyWebhookSignature(c.req.header("verif-hash"))) {
+  if (!(await verifyWebhookSignature(c.req.header("verif-hash")))) {
     console.warn("Rejected unauthenticated Flutterwave callback from", c.req.header("cf-connecting-ip") ?? "unknown");
     return c.json({ error: "unauthorized" }, 401);
   }

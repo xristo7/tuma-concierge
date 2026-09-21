@@ -1,15 +1,16 @@
 /**
  * Yo! Payments (Yo Uganda Ltd) API client — a single integration that
  * aggregates both MTN MoMo and Airtel Money in Uganda. Talks to the real
- * Yo! wire format (flat-field XML over HTTP POST). Only used when
- * PAYMENTS_PROVIDER=yo and YO_API_USERNAME/YO_API_PASSWORD are set —
- * otherwise ../service.ts routes to ./mock.ts instead. This code never
- * fabricates credentials and never runs outside the env it's given.
+ * Yo! wire format (flat-field XML over HTTP POST). Only used once its
+ * required credentials resolve (admin-entered via ../credentials.ts, or the
+ * YO_API_USERNAME/YO_API_PASSWORD env vars as a fallback) — otherwise
+ * ../service.ts routes to ./mock.ts instead.
  *
  * Wire format: https://payments.yo.co.ug/resources/API.pdf (v1.4.1)
  */
 
 import { mobileMoneyCurrencyCode, type MobileMoneyNetwork } from "@tuma/shared";
+import { getCredential, isProviderConfigured } from "../credentials.js";
 import type { GatewayChargeInput, GatewayResult, PaymentGatewayAdapter } from "../gateway.js";
 
 export type YoTransactionStatus = "PENDING" | "SUCCEEDED" | "FAILED" | "INDETERMINATE";
@@ -29,27 +30,24 @@ export type YoResult = {
   statusMessage?: string;
 };
 
-function baseUrl(): string {
-  if (process.env.YO_BASE_URL) return process.env.YO_BASE_URL;
-  return (process.env.YO_TARGET_ENV ?? "sandbox") === "production"
+async function baseUrl(): Promise<string> {
+  const explicit = process.env.YO_BASE_URL;
+  if (explicit) return explicit;
+  const targetEnv = (await getCredential("yo", "targetEnv")) ?? "sandbox";
+  return targetEnv === "production"
     ? "https://paymentsapi1.yo.co.ug/ybs/task.php"
     : "https://sandbox.yo.co.ug/services/yopaymentsdev/task.php";
 }
 
-function credentials(): { username: string; password: string } {
-  const username = process.env.YO_API_USERNAME;
-  const password = process.env.YO_API_PASSWORD;
-  if (!username || !password) throw new Error("YO_API_USERNAME/YO_API_PASSWORD are not set");
+async function credentials(): Promise<{ username: string; password: string }> {
+  const username = await getCredential("yo", "apiUsername");
+  const password = await getCredential("yo", "apiPassword");
+  if (!username || !password) throw new Error("Yo! Payments API username/password are not set");
   return { username, password };
 }
 
-export function isYoConfigured(): boolean {
-  try {
-    credentials();
-    return true;
-  } catch {
-    return false;
-  }
+export function isYoConfigured(): Promise<boolean> {
+  return isProviderConfigured("yo");
 }
 
 function escapeXml(v: string): string {
@@ -90,8 +88,8 @@ function parseResult(xml: string): YoResult {
 }
 
 async function call(fields: Record<string, string>): Promise<string> {
-  const { username, password } = credentials();
-  const res = await fetch(baseUrl(), {
+  const { username, password } = await credentials();
+  const res = await fetch(await baseUrl(), {
     method: "POST",
     headers: { "Content-Type": "text/xml", "Content-transfer-encoding": "text" },
     body: buildXml({ APIUsername: username, APIPassword: password, ...fields }),
