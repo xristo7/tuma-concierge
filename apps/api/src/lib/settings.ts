@@ -54,6 +54,47 @@ const DEFAULTS = {
    * Nobody's meant to be recording minutes of audio here — this is a cap,
    * not a target. */
   voice_note_max_seconds: "60",
+
+  // Monetization — every mechanism is independently toggleable, and each
+  // one an admin turns on defines its own amount/rate. See
+  // ../lib/monetization.ts for how these combine at Fund/Settle time, and
+  // apps/admin/app/settings/page.tsx's "Monetization" card for the UI.
+
+  /** % of the delivery fee (never the item cost) the platform keeps,
+   * withheld from the rider's payout at Settle — set per order type since
+   * a parcel ride's whole total IS its delivery fee, while a shopping
+   * order's items cost is untouched either way. */
+  monetization_delivery_commission_enabled: "0",
+  monetization_delivery_commission_parcel_percent: "0",
+  monetization_delivery_commission_shopping_percent: "0",
+
+  /** Flat or % surcharge added on top of what the customer pays at Fund
+   * time — 100% platform revenue, the rider's payout is never touched by
+   * this one. */
+  monetization_service_fee_enabled: "0",
+  monetization_service_fee_type: "flat",
+  monetization_service_fee_value: "0",
+
+  /** Models the real cost of moving money through a payment rail. Can be
+   * charged to the customer (surcharge at Fund), to the rider (withheld at
+   * Settle), or split between both — see processingFeeMode. Skipped
+   * entirely for wallet-funded and float-rail orders, since neither
+   * touches an external payment rail. */
+  monetization_processing_fee_enabled: "0",
+  monetization_processing_fee_percent: "0",
+  monetization_processing_fee_mode: "customer",
+  /** Only used when mode is "split" — the customer's share of the
+   * processing fee, 0-100; the rider bears the remainder. */
+  monetization_processing_fee_split_customer_percent: "50",
+
+  /** Rider subscription — a recurring charge, not a per-order one, so it
+   * doesn't plug into Fund/Settle math the way the others do. This is
+   * deliberately just the toggle + price + cadence for now; the actual
+   * recurring billing and any lapsed-subscription enforcement is a
+   * separate piece of work not built yet — see the admin UI's note. */
+  monetization_subscription_enabled: "0",
+  monetization_subscription_amount: "0",
+  monetization_subscription_cadence: "weekly",
 } as const;
 
 export type SettingKey = keyof typeof DEFAULTS;
@@ -174,4 +215,129 @@ export async function getWalletSettings(): Promise<{ unverifiedCap: number; veri
 
 export async function getVoiceNoteMaxSeconds(): Promise<number> {
   return Number(await getSetting("voice_note_max_seconds")) || Number(DEFAULTS.voice_note_max_seconds);
+}
+
+export type ServiceFeeType = "flat" | "percent";
+export type ProcessingFeeMode = "customer" | "rider" | "split";
+export type SubscriptionCadence = "daily" | "weekly" | "monthly";
+
+export type MonetizationSettings = {
+  deliveryCommissionEnabled: boolean;
+  deliveryCommissionParcelPercent: number;
+  deliveryCommissionShoppingPercent: number;
+  serviceFeeEnabled: boolean;
+  serviceFeeType: ServiceFeeType;
+  serviceFeeValue: number;
+  processingFeeEnabled: boolean;
+  processingFeePercent: number;
+  processingFeeMode: ProcessingFeeMode;
+  processingFeeSplitCustomerPercent: number;
+  subscriptionEnabled: boolean;
+  subscriptionAmount: number;
+  subscriptionCadence: SubscriptionCadence;
+};
+
+function asServiceFeeType(raw: string): ServiceFeeType {
+  return raw === "percent" ? "percent" : "flat";
+}
+
+function asProcessingFeeMode(raw: string): ProcessingFeeMode {
+  return raw === "rider" || raw === "split" ? raw : "customer";
+}
+
+function asSubscriptionCadence(raw: string): SubscriptionCadence {
+  return raw === "daily" || raw === "monthly" ? raw : "weekly";
+}
+
+export async function getMonetizationSettings(): Promise<MonetizationSettings> {
+  const [
+    deliveryCommissionEnabled,
+    deliveryCommissionParcelPercent,
+    deliveryCommissionShoppingPercent,
+    serviceFeeEnabled,
+    serviceFeeType,
+    serviceFeeValue,
+    processingFeeEnabled,
+    processingFeePercent,
+    processingFeeMode,
+    processingFeeSplitCustomerPercent,
+    subscriptionEnabled,
+    subscriptionAmount,
+    subscriptionCadence,
+  ] = await Promise.all([
+    getSetting("monetization_delivery_commission_enabled"),
+    getSetting("monetization_delivery_commission_parcel_percent"),
+    getSetting("monetization_delivery_commission_shopping_percent"),
+    getSetting("monetization_service_fee_enabled"),
+    getSetting("monetization_service_fee_type"),
+    getSetting("monetization_service_fee_value"),
+    getSetting("monetization_processing_fee_enabled"),
+    getSetting("monetization_processing_fee_percent"),
+    getSetting("monetization_processing_fee_mode"),
+    getSetting("monetization_processing_fee_split_customer_percent"),
+    getSetting("monetization_subscription_enabled"),
+    getSetting("monetization_subscription_amount"),
+    getSetting("monetization_subscription_cadence"),
+  ]);
+  return {
+    deliveryCommissionEnabled: deliveryCommissionEnabled === "1",
+    deliveryCommissionParcelPercent: Number(deliveryCommissionParcelPercent) || 0,
+    deliveryCommissionShoppingPercent: Number(deliveryCommissionShoppingPercent) || 0,
+    serviceFeeEnabled: serviceFeeEnabled === "1",
+    serviceFeeType: asServiceFeeType(serviceFeeType),
+    serviceFeeValue: Number(serviceFeeValue) || 0,
+    processingFeeEnabled: processingFeeEnabled === "1",
+    processingFeePercent: Number(processingFeePercent) || 0,
+    processingFeeMode: asProcessingFeeMode(processingFeeMode),
+    processingFeeSplitCustomerPercent: Number(processingFeeSplitCustomerPercent) || 0,
+    subscriptionEnabled: subscriptionEnabled === "1",
+    subscriptionAmount: Number(subscriptionAmount) || 0,
+    subscriptionCadence: asSubscriptionCadence(subscriptionCadence),
+  };
+}
+
+export async function setMonetizationSettings(input: Partial<MonetizationSettings>): Promise<void> {
+  const writes: Promise<void>[] = [];
+  if (input.deliveryCommissionEnabled != null) {
+    writes.push(setSetting("monetization_delivery_commission_enabled", input.deliveryCommissionEnabled ? "1" : "0"));
+  }
+  if (input.deliveryCommissionParcelPercent != null) {
+    writes.push(setSetting("monetization_delivery_commission_parcel_percent", String(input.deliveryCommissionParcelPercent)));
+  }
+  if (input.deliveryCommissionShoppingPercent != null) {
+    writes.push(setSetting("monetization_delivery_commission_shopping_percent", String(input.deliveryCommissionShoppingPercent)));
+  }
+  if (input.serviceFeeEnabled != null) {
+    writes.push(setSetting("monetization_service_fee_enabled", input.serviceFeeEnabled ? "1" : "0"));
+  }
+  if (input.serviceFeeType != null) {
+    writes.push(setSetting("monetization_service_fee_type", input.serviceFeeType));
+  }
+  if (input.serviceFeeValue != null) {
+    writes.push(setSetting("monetization_service_fee_value", String(input.serviceFeeValue)));
+  }
+  if (input.processingFeeEnabled != null) {
+    writes.push(setSetting("monetization_processing_fee_enabled", input.processingFeeEnabled ? "1" : "0"));
+  }
+  if (input.processingFeePercent != null) {
+    writes.push(setSetting("monetization_processing_fee_percent", String(input.processingFeePercent)));
+  }
+  if (input.processingFeeMode != null) {
+    writes.push(setSetting("monetization_processing_fee_mode", input.processingFeeMode));
+  }
+  if (input.processingFeeSplitCustomerPercent != null) {
+    writes.push(
+      setSetting("monetization_processing_fee_split_customer_percent", String(input.processingFeeSplitCustomerPercent)),
+    );
+  }
+  if (input.subscriptionEnabled != null) {
+    writes.push(setSetting("monetization_subscription_enabled", input.subscriptionEnabled ? "1" : "0"));
+  }
+  if (input.subscriptionAmount != null) {
+    writes.push(setSetting("monetization_subscription_amount", String(input.subscriptionAmount)));
+  }
+  if (input.subscriptionCadence != null) {
+    writes.push(setSetting("monetization_subscription_cadence", input.subscriptionCadence));
+  }
+  await Promise.all(writes);
 }

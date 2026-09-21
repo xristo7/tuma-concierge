@@ -7,7 +7,8 @@ import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
 import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { consume, tooManyRequests } from "../lib/ratelimit.js";
-import { getDeliverySettings, getMatchingSettings, getMaxOrderValue } from "../lib/settings.js";
+import { getDeliverySettings, getMatchingSettings, getMaxOrderValue, getMonetizationSettings } from "../lib/settings.js";
+import { computeCheckoutFees, riderPayout } from "../lib/monetization.js";
 import { notifyUser } from "../lib/webpush.js";
 import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
 import { redactOrder } from "./visibility.js";
@@ -996,10 +997,12 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
   // final_total is set the moment a fee proposal or item substitution is
   // approved — charge that when present so an accepted pre-funding fee
   // change is actually what gets collected, not the original estimate.
-  const amount = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
+  const baseAmount = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
 
   if (order.payment_rail === "float") {
-    // Float rail: rider fronts the cash, no escrow collection needed.
+    // Float rail: rider fronts the cash and is paid directly by the
+    // customer — no money ever passes through Tuma on this order, so none
+    // of the monetization mechanisms below have anything to apply to.
     await touchOrder(id, { stage: "Shop" });
     await logEvent(id, "Fund", "Float rail — rider fronting funds", user.sub);
     return c.json({ order: await getOrder(id), funded: true, rail: "float" });
@@ -1007,6 +1010,30 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
 
   const parsed = fundSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  // Fee breakdown is computed once, here, and persisted — Settle reads it
+  // back rather than recomputing against whatever the admin-configured
+  // rates happen to be by the time the order settles. See
+  // ../lib/monetization.ts.
+  const monetizationSettings = await getMonetizationSettings();
+  const fees = computeCheckoutFees(monetizationSettings, {
+    baseAmount,
+    deliveryFee: (order.delivery_fee as number | null) ?? 0,
+    orderType: order.type as "parcel" | "shopping",
+    payingWithWallet: !!parsed.data.useWallet,
+  });
+  const amount = baseAmount + fees.totalSurcharge;
+  const hasFees = fees.serviceFee > 0 || fees.processingFeeCustomer > 0 || fees.processingFeeRider > 0 || fees.deliveryCommission > 0;
+  if (hasFees) {
+    await db.execute({
+      sql: `INSERT INTO order_fees (order_id, service_fee, processing_fee_customer, processing_fee_rider, delivery_commission)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(order_id) DO UPDATE SET
+              service_fee = excluded.service_fee, processing_fee_customer = excluded.processing_fee_customer,
+              processing_fee_rider = excluded.processing_fee_rider, delivery_commission = excluded.delivery_commission`,
+      args: [id, fees.serviceFee, fees.processingFeeCustomer, fees.processingFeeRider, fees.deliveryCommission],
+    });
+  }
 
   if (parsed.data.useWallet) {
     let walletOwnerId = user.sub;
@@ -1554,6 +1581,7 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
   const total = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
 
   let released = 0;
+  let payout = 0;
   if (order.payment_rail === "escrow" && order.rider_id) {
     // Release only what escrow actually holds, never `final_total`. An
     // approved fee proposal or substitution raises `final_total` after the
@@ -1569,10 +1597,26 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
     });
     released = Number((collectedRes.rows[0] as Row)?.collected ?? 0);
 
-    if (released > 0) {
+    // Whatever monetization fees were locked in at Fund time (see
+    // ../lib/monetization.ts) come out of the rider's payout here — never
+    // recomputed against today's rates, so a mid-order rate change can't
+    // retroactively change what this order owes the rider.
+    const feesRes = await db.execute({ sql: "SELECT * FROM order_fees WHERE order_id = ?", args: [id] });
+    const feesRow = feesRes.rows[0] as Row | undefined;
+    payout = feesRow
+      ? riderPayout(released, {
+          serviceFee: Number(feesRow.service_fee) || 0,
+          processingFeeCustomer: Number(feesRow.processing_fee_customer) || 0,
+          processingFeeRider: Number(feesRow.processing_fee_rider) || 0,
+          deliveryCommission: Number(feesRow.delivery_commission) || 0,
+          totalSurcharge: (Number(feesRow.service_fee) || 0) + (Number(feesRow.processing_fee_customer) || 0),
+        })
+      : released;
+
+    if (payout > 0) {
       await db.execute({
         sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
-        args: [released, order.rider_id as string],
+        args: [payout, order.rider_id as string],
       });
     }
     if (released < total) {
@@ -1580,6 +1624,14 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
         id,
         "Settle",
         `Shortfall — ${formatAmount(total - released)} of the agreed total was never collected into escrow and was not paid out`,
+        user.sub,
+      );
+    }
+    if (feesRow && payout < released) {
+      await logEvent(
+        id,
+        "Settle",
+        `Platform fees withheld — ${formatAmount(released - payout)} of ${formatAmount(released)} collected (commission/processing/service fees)`,
         user.sub,
       );
     }
@@ -1593,7 +1645,7 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
   await logEvent(
     id,
     "Settle",
-    order.payment_rail === "escrow" ? `Order settled — ${formatAmount(released)} released to rider wallet` : "Order settled",
+    order.payment_rail === "escrow" ? `Order settled — ${formatAmount(payout)} released to rider wallet` : "Order settled",
     user.sub,
   );
 

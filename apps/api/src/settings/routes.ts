@@ -8,11 +8,13 @@ import {
   getActiveProviders,
   getDeliverySettings,
   getMatchingSettings,
+  getMonetizationSettings,
   getPaymentsDemoMode,
   getVoiceNoteMaxSeconds,
   getWalletSettings,
   setActiveProviders,
   setMatchingModesEnabled,
+  setMonetizationSettings,
   setPaymentsDemoMode,
   setSetting,
   type PaymentProviderIdentity,
@@ -23,13 +25,14 @@ import { paymentsIntegrationStatus } from "../payments/service.js";
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds] = await Promise.all([
+  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization] = await Promise.all([
     getDeliverySettings(),
     getMatchingSettings(),
     getActiveProviders(),
     getPaymentsDemoMode(),
     getWalletSettings(),
     getVoiceNoteMaxSeconds(),
+    getMonetizationSettings(),
   ]);
   return {
     ...delivery,
@@ -40,6 +43,7 @@ async function fullSettings() {
     walletVerifiedCap: wallet.verifiedCap,
     walletMaxTopup: wallet.maxTopup,
     voiceNoteMaxSeconds,
+    ...monetization,
   };
 }
 
@@ -65,6 +69,20 @@ const updateSchema = z.object({
   walletVerifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletMaxTopup: z.number().int().positive().max(100_000_000).optional(),
   voiceNoteMaxSeconds: z.number().int().positive().max(600).optional(),
+  // Monetization — see ../lib/monetization.ts for how these combine.
+  deliveryCommissionEnabled: z.boolean().optional(),
+  deliveryCommissionParcelPercent: z.number().min(0).max(100).optional(),
+  deliveryCommissionShoppingPercent: z.number().min(0).max(100).optional(),
+  serviceFeeEnabled: z.boolean().optional(),
+  serviceFeeType: z.enum(["flat", "percent"]).optional(),
+  serviceFeeValue: z.number().min(0).max(1_000_000).optional(),
+  processingFeeEnabled: z.boolean().optional(),
+  processingFeePercent: z.number().min(0).max(100).optional(),
+  processingFeeMode: z.enum(["customer", "rider", "split"]).optional(),
+  processingFeeSplitCustomerPercent: z.number().min(0).max(100).optional(),
+  subscriptionEnabled: z.boolean().optional(),
+  subscriptionAmount: z.number().min(0).max(1_000_000).optional(),
+  subscriptionCadence: z.enum(["daily", "weekly", "monthly"]).optional(),
 });
 
 const PAYMENTS_FIELDS = [
@@ -73,6 +91,19 @@ const PAYMENTS_FIELDS = [
   "walletUnverifiedCap",
   "walletVerifiedCap",
   "walletMaxTopup",
+  "deliveryCommissionEnabled",
+  "deliveryCommissionParcelPercent",
+  "deliveryCommissionShoppingPercent",
+  "serviceFeeEnabled",
+  "serviceFeeType",
+  "serviceFeeValue",
+  "processingFeeEnabled",
+  "processingFeePercent",
+  "processingFeeMode",
+  "processingFeeSplitCustomerPercent",
+  "subscriptionEnabled",
+  "subscriptionAmount",
+  "subscriptionCadence",
 ] as const;
 
 settingsRoutes.put(
@@ -130,6 +161,21 @@ settingsRoutes.put(
     if (parsed.data.voiceNoteMaxSeconds != null) {
       await setSetting("voice_note_max_seconds", String(parsed.data.voiceNoteMaxSeconds));
     }
+    await setMonetizationSettings({
+      deliveryCommissionEnabled: parsed.data.deliveryCommissionEnabled,
+      deliveryCommissionParcelPercent: parsed.data.deliveryCommissionParcelPercent,
+      deliveryCommissionShoppingPercent: parsed.data.deliveryCommissionShoppingPercent,
+      serviceFeeEnabled: parsed.data.serviceFeeEnabled,
+      serviceFeeType: parsed.data.serviceFeeType,
+      serviceFeeValue: parsed.data.serviceFeeValue,
+      processingFeeEnabled: parsed.data.processingFeeEnabled,
+      processingFeePercent: parsed.data.processingFeePercent,
+      processingFeeMode: parsed.data.processingFeeMode,
+      processingFeeSplitCustomerPercent: parsed.data.processingFeeSplitCustomerPercent,
+      subscriptionEnabled: parsed.data.subscriptionEnabled,
+      subscriptionAmount: parsed.data.subscriptionAmount,
+      subscriptionCadence: parsed.data.subscriptionCadence,
+    });
 
     const after = await fullSettings();
 

@@ -172,6 +172,41 @@ export type DeliverySettings = {
   /** How long any voice recording may run before it auto-stops — a shopping
    * list, an order note, a fee-proposal reason, or a chat voice message. */
   voiceNoteMaxSeconds: number;
+} & MonetizationSettings;
+
+export type ServiceFeeType = "flat" | "percent";
+export type ProcessingFeeMode = "customer" | "rider" | "split";
+export type SubscriptionCadence = "daily" | "weekly" | "monthly";
+
+/** Every monetization mechanism an admin can independently turn on and
+ * price, from Settings → Monetization. See
+ * apps/api/src/lib/monetization.ts for how these combine at Fund/Settle
+ * time. Subscriptions are the odd one out — recurring, not per-order — so
+ * this is just the toggle/price/cadence for now; billing and lapsed-
+ * subscription enforcement aren't built yet. */
+export type MonetizationSettings = {
+  /** % of the delivery fee (never item cost) withheld from the rider's
+   * payout, set per order type since a parcel's whole total is its
+   * delivery fee. */
+  deliveryCommissionEnabled: boolean;
+  deliveryCommissionParcelPercent: number;
+  deliveryCommissionShoppingPercent: number;
+  /** Flat or % surcharge added on top of the customer's total at Fund —
+   * 100% platform revenue. */
+  serviceFeeEnabled: boolean;
+  serviceFeeType: ServiceFeeType;
+  serviceFeeValue: number;
+  /** Models the real cost of moving money through a payment rail — charged
+   * to the customer, withheld from the rider, or split between both.
+   * Skipped for wallet-funded and float-rail orders. */
+  processingFeeEnabled: boolean;
+  processingFeePercent: number;
+  processingFeeMode: ProcessingFeeMode;
+  /** Only used when processingFeeMode is "split" — customer's share 0-100. */
+  processingFeeSplitCustomerPercent: number;
+  subscriptionEnabled: boolean;
+  subscriptionAmount: number;
+  subscriptionCadence: SubscriptionCadence;
 };
 
 export type OrderEvent = {
