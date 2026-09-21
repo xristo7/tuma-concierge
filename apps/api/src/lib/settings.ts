@@ -28,9 +28,10 @@ const DEFAULTS = {
    * app auto-assigns rather than leaving the customer waiting indefinitely. */
   max_assignment_minutes: "5",
   /** Which payment aggregators are on offer, in priority order — the first
-   * entry is primary, a second entry is the fallback used once the primary
-   * has no working credentials. JSON array of "yo" | "flutterwave". See
-   * ../payments/service.ts resolveProvider(). */
+   * entry is primary, each later entry is a fallback tried once everything
+   * ahead of it has no working credentials. JSON array of "yo" |
+   * "flutterwave" | "mtn" | "airtel". See ../payments/service.ts
+   * resolveProvider(). */
   payments_active_providers: '["yo"]',
   /** Force every payment through the mock/simulated adapters, even when a
    * real provider has working credentials saved. Lets an admin test live
@@ -125,8 +126,8 @@ export async function setMatchingModesEnabled(modes: MatchingMode[]): Promise<vo
   await setSetting("matching_modes_enabled", JSON.stringify(valid.length > 0 ? valid : ["first_to_claim"]));
 }
 
-export type PaymentProviderIdentity = "yo" | "flutterwave";
-const ALL_PROVIDER_IDENTITIES: PaymentProviderIdentity[] = ["yo", "flutterwave"];
+export type PaymentProviderIdentity = "yo" | "flutterwave" | "mtn" | "airtel";
+const ALL_PROVIDER_IDENTITIES: PaymentProviderIdentity[] = ["yo", "flutterwave", "mtn", "airtel"];
 
 /** Priority-ordered list of admin-enabled providers — first is primary, a
  * second is the fallback. Falls back to just "yo" (today's only provider)

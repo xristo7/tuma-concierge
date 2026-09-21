@@ -539,8 +539,11 @@ export type WalletShares = {
 };
 
 /** Which payment aggregator identity — the underlying provider a payment
- * settled through, independent of live-vs-simulated. */
-export type PaymentProviderIdentity = "yo" | "flutterwave";
+ * settled through, independent of live-vs-simulated. "yo" and
+ * "flutterwave" go through those aggregators; "mtn" and "airtel" talk
+ * directly to each telco's own API instead (see
+ * apps/api/src/payments/{mtn,airtel}/wire.ts). */
+export type PaymentProviderIdentity = "yo" | "flutterwave" | "mtn" | "airtel";
 
 /** One credential field's admin-facing status — never the value itself,
  * just enough to render a form and show what's already set. */

@@ -59,7 +59,7 @@ const updateSchema = z.object({
   enabledModes: z.array(z.enum(["first_to_claim", "nearest_window", "customer_selects"])).optional(),
   nearestWindowSeconds: z.number().int().positive().max(3600).optional(),
   maxAssignmentMinutes: z.number().int().positive().max(120).optional(),
-  paymentsActiveProviders: z.array(z.enum(["yo", "flutterwave"])).min(1).max(2).optional(),
+  paymentsActiveProviders: z.array(z.enum(["yo", "flutterwave", "mtn", "airtel"])).min(1).max(4).optional(),
   paymentsDemoMode: z.boolean().optional(),
   walletUnverifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletVerifiedCap: z.number().int().positive().max(100_000_000).optional(),
@@ -148,7 +148,7 @@ settingsRoutes.put(
   },
 );
 
-const providerParam = z.enum(["yo", "flutterwave"]);
+const providerParam = z.enum(["yo", "flutterwave", "mtn", "airtel"]);
 
 const saveCredentialsSchema = z.object({
   fields: z.record(z.string(), z.string().max(2000)),

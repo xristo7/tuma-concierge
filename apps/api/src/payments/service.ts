@@ -17,21 +17,37 @@ import { flutterwaveAdapter } from "./flutterwave/wire.js";
 import { mockFlutterwaveAdapter } from "./flutterwave/mock.js";
 import { yoAdapter } from "./yo/wire.js";
 import { mockYoAdapter } from "./yo/mock.js";
+import { mtnAdapter } from "./mtn/wire.js";
+import { mockMtnAdapter } from "./mtn/mock.js";
+import { airtelAdapter } from "./airtel/wire.js";
+import { mockAirtelAdapter } from "./airtel/mock.js";
 
 /** Every provider identity this app knows how to talk to, real and mock.
  * The DB only ever stores one of these strings in payments.provider /
  * wallet_topups.provider / wallet_withdrawals.provider. */
-export type PaymentsProvider = "yo" | "yo_mock" | "flutterwave" | "flutterwave_mock";
+export type PaymentsProvider =
+  | "yo"
+  | "yo_mock"
+  | "flutterwave"
+  | "flutterwave_mock"
+  | "mtn"
+  | "mtn_mock"
+  | "airtel"
+  | "airtel_mock";
 
 const ADAPTERS: Record<PaymentsProvider, PaymentGatewayAdapter> = {
   yo: yoAdapter,
   yo_mock: mockYoAdapter,
   flutterwave: flutterwaveAdapter,
   flutterwave_mock: mockFlutterwaveAdapter,
+  mtn: mtnAdapter,
+  mtn_mock: mockMtnAdapter,
+  airtel: airtelAdapter,
+  airtel_mock: mockAirtelAdapter,
 };
 
 function mockOf(identity: PaymentProviderIdentity): PaymentsProvider {
-  return identity === "yo" ? "yo_mock" : "flutterwave_mock";
+  return `${identity}_mock`;
 }
 
 /**
@@ -72,7 +88,7 @@ export async function paymentsIntegrationStatus() {
   const collectionProvider = await resolveProvider("collection");
   const disbursementProvider = await resolveProvider("disbursement");
   const providers = await Promise.all(
-    (["yo", "flutterwave"] as PaymentProviderIdentity[]).map(async (identity) => ({
+    (["yo", "flutterwave", "mtn", "airtel"] as PaymentProviderIdentity[]).map(async (identity) => ({
       key: identity,
       displayName: ADAPTERS[identity].displayName,
       configured: await ADAPTERS[identity].isConfigured(),

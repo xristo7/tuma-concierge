@@ -15,7 +15,7 @@ import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
 const ALL_MODES: MatchingMode[] = ["first_to_claim", "nearest_window", "customer_selects"];
-const ALL_PROVIDERS: PaymentProviderIdentity[] = ["yo", "flutterwave"];
+const ALL_PROVIDERS: PaymentProviderIdentity[] = ["yo", "flutterwave", "mtn", "airtel"];
 
 export default function SettingsPage() {
   const { user } = useAuth();
