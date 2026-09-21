@@ -833,7 +833,7 @@ function PlatformEnvironmentToggle({
       </div>
       <p className="text-xs text-ink-500">
         Switches what every customer, rider, and this dashboard sees — orders, lists, and wallet balances are
-        fully separate between the two. Nothing is deleted when you switch; you're just changing which dataset
+        fully separate between the two. Nothing is deleted when you switch; you&apos;re just changing which dataset
         is active. Sandbox activity can never send or receive real money, even if live payment credentials are
         configured.
       </p>
