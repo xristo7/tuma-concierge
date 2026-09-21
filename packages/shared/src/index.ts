@@ -64,6 +64,7 @@ export type {
   ServiceFeeType,
   ProcessingFeeMode,
   SubscriptionCadence,
+  PlatformEnvironment,
   AvailableJob,
   MatchingMode,
   RiderApplicant,

@@ -62,10 +62,20 @@ function mockOf(identity: PaymentProviderIdentity): PaymentsProvider {
  * payment runs through the mock adapters regardless of what credentials are
  * saved, so an admin can test/demo the app — or pull it back from a shaky
  * live aggregator — without touching the credentials themselves.
+ *
+ * `forceMock` does the same short-circuit for a single call, independent of
+ * the demo-mode setting — this is what a sandbox-environment order/top-up
+ * passes (see ../lib/settings.ts's platform_environment and every call site
+ * that threads an order's/topup's own environment through here) so sandbox
+ * activity can *never* reach a real payment rail, even if an admin flips
+ * demo mode off and live credentials are sitting there configured.
  */
-export async function resolveProvider(capability: "collection" | "disbursement"): Promise<PaymentsProvider> {
+export async function resolveProvider(
+  capability: "collection" | "disbursement",
+  options?: { forceMock?: boolean },
+): Promise<PaymentsProvider> {
   const active = await getActiveProviders();
-  const demoMode = await getPaymentsDemoMode();
+  const demoMode = (await getPaymentsDemoMode()) || !!options?.forceMock;
   if (!demoMode) {
     for (const identity of active) {
       const adapter = ADAPTERS[identity];
@@ -129,6 +139,10 @@ type InitiateInput = {
   /** Where a hosted-checkout provider should return the customer once
    * they've paid — required if Flutterwave might end up handling this. */
   returnUrl?: string;
+  /** Set true for anything happening under the sandbox platform
+   * environment — forces resolveProvider() to mock regardless of demo
+   * mode or configured credentials. See resolveProvider's doc comment. */
+  forceMock?: boolean;
 };
 
 type InitiateResult = {
@@ -146,7 +160,7 @@ async function initiate(
   input: InitiateInput,
   defaultNarrative: string,
 ): Promise<InitiateResult> {
-  const provider = await resolveProvider(capability);
+  const provider = await resolveProvider(capability, { forceMock: input.forceMock });
   const adapter = ADAPTERS[provider];
 
   let network: MobileMoneyNetwork | null = null;

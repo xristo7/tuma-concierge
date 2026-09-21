@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { InArgs } from "@libsql/client";
 import { db } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
+import { getPlatformEnvironment, type PlatformEnvironment } from "../lib/settings.js";
 import { paymentsIntegrationStatus } from "../payments/service.js";
 import { getR2Bucket } from "../storage/r2.js";
 import { logActivity, revertActivity } from "./activity.js";
@@ -34,7 +35,17 @@ type Row = Record<string, unknown>;
 // Platform overview
 // ---------------------------------------------------------------------------
 
+/** Every order/payment figure here is scoped to one environment — defaults
+ * to whichever is currently active platform-wide, overridable with
+ * ?environment=live|sandbox so an admin can check sandbox test activity
+ * without flipping the live toggle just to look. */
+function resolveViewEnvironment(c: { req: { query(name: string): string | undefined } }, active: PlatformEnvironment): PlatformEnvironment {
+  const requested = c.req.query("environment");
+  return requested === "live" || requested === "sandbox" ? requested : active;
+}
+
 adminRoutes.get("/admin/stats", requirePermission("stats.view"), async (c) => {
+  const environment = resolveViewEnvironment(c, await getPlatformEnvironment());
   const [users, riders, ordersByStage, paymentsByStatus, settled] = await Promise.all([
     db.execute(
       `SELECT role, COUNT(*) as n FROM users WHERE role IN ('customer', 'rider') GROUP BY role`,
@@ -45,9 +56,15 @@ adminRoutes.get("/admin/stats", requirePermission("stats.view"), async (c) => {
          SUM(CASE WHEN is_online = 1 THEN 1 ELSE 0 END) as online
        FROM riders`,
     ),
-    db.execute(`SELECT stage, COUNT(*) as n FROM orders GROUP BY stage`),
-    db.execute(`SELECT status, COUNT(*) as n FROM payments GROUP BY status`),
-    db.execute(`SELECT COALESCE(SUM(final_total), 0) as total FROM orders WHERE stage = 'Settle'`),
+    db.execute({ sql: `SELECT stage, COUNT(*) as n FROM orders WHERE environment = ? GROUP BY stage`, args: [environment] }),
+    db.execute({
+      sql: `SELECT p.status, COUNT(*) as n FROM payments p JOIN orders o ON o.id = p.order_id WHERE o.environment = ? GROUP BY p.status`,
+      args: [environment],
+    }),
+    db.execute({
+      sql: `SELECT COALESCE(SUM(final_total), 0) as total FROM orders WHERE stage = 'Settle' AND environment = ?`,
+      args: [environment],
+    }),
   ]);
 
   const usersByRole: Record<string, number> = { customer: 0, rider: 0 };
@@ -85,10 +102,13 @@ adminRoutes.get("/admin/integrations", requirePermission("integrations.view"), a
     storageConfigured = false;
   }
 
-  const failed = await db.execute(
-    `SELECT id, order_id, type, amount, currency, msisdn, created_at
-     FROM payments WHERE status = 'failed' ORDER BY created_at DESC LIMIT 10`,
-  );
+  const failed = await db.execute({
+    sql: `SELECT p.id, p.order_id, p.type, p.amount, p.currency, p.msisdn, p.created_at
+          FROM payments p JOIN orders o ON o.id = p.order_id
+          WHERE p.status = 'failed' AND o.environment = ?
+          ORDER BY p.created_at DESC LIMIT 10`,
+    args: [await getPlatformEnvironment()],
+  });
 
   return c.json({
     integrations: {
@@ -105,24 +125,29 @@ adminRoutes.get("/admin/integrations", requirePermission("integrations.view"), a
 
 adminRoutes.get("/admin/customers", requirePermission("customers.view"), async (c) => {
   const q = c.req.query("q")?.trim();
+  const environment = resolveViewEnvironment(c, await getPlatformEnvironment());
   const res = await db.execute(
     q
       ? {
           sql: `SELECT u.id, u.name, u.phone, u.email, u.status, u.created_at,
-                  (SELECT COUNT(*) FROM orders WHERE customer_id = u.id) as order_count
+                  (SELECT COUNT(*) FROM orders WHERE customer_id = u.id AND environment = ?) as order_count
                 FROM users u WHERE u.role = 'customer' AND (u.name LIKE ? OR u.phone LIKE ?)
                 ORDER BY u.created_at DESC LIMIT 100`,
-          args: [`%${q}%`, `%${q}%`],
+          args: [environment, `%${q}%`, `%${q}%`],
         }
-      : `SELECT u.id, u.name, u.phone, u.email, u.status, u.created_at,
-           (SELECT COUNT(*) FROM orders WHERE customer_id = u.id) as order_count
-         FROM users u WHERE u.role = 'customer' ORDER BY u.created_at DESC LIMIT 100`,
+      : {
+          sql: `SELECT u.id, u.name, u.phone, u.email, u.status, u.created_at,
+             (SELECT COUNT(*) FROM orders WHERE customer_id = u.id AND environment = ?) as order_count
+           FROM users u WHERE u.role = 'customer' ORDER BY u.created_at DESC LIMIT 100`,
+          args: [environment],
+        },
   );
   return c.json({ customers: res.rows });
 });
 
 adminRoutes.get("/admin/customers/:id", requirePermission("customers.view"), async (c) => {
   const id = c.req.param("id") as string;
+  const environment = resolveViewEnvironment(c, await getPlatformEnvironment());
   const userRes = await db.execute({
     sql: `SELECT id, name, phone, email, status, created_at FROM users WHERE id = ? AND role = 'customer'`,
     args: [id],
@@ -133,8 +158,8 @@ adminRoutes.get("/admin/customers/:id", requirePermission("customers.view"), asy
   const ordersRes = await db.execute({
     sql: `SELECT o.*, u.name as rider_name FROM orders o
           LEFT JOIN users u ON u.id = o.rider_id
-          WHERE o.customer_id = ? ORDER BY o.updated_at DESC`,
-    args: [id],
+          WHERE o.customer_id = ? AND o.environment = ? ORDER BY o.updated_at DESC`,
+    args: [id, environment],
   });
 
   return c.json({ customer, orders: ordersRes.rows });
@@ -150,7 +175,7 @@ adminRoutes.post("/admin/orders/:id/refund-to-wallet", requirePermission("paymen
   const id = c.req.param("id") as string;
   const admin = c.get("user");
 
-  const orderRes = await db.execute({ sql: "SELECT customer_id FROM orders WHERE id = ?", args: [id] });
+  const orderRes = await db.execute({ sql: "SELECT customer_id, environment FROM orders WHERE id = ?", args: [id] });
   const order = orderRes.rows[0] as Record<string, unknown> | undefined;
   if (!order) return c.json({ error: "not_found" }, 404);
 
@@ -158,6 +183,7 @@ adminRoutes.post("/admin/orders/:id/refund-to-wallet", requirePermission("paymen
     orderId: id,
     customerId: order.customer_id as string,
     actorId: admin.sub,
+    environment: order.environment === "sandbox" ? "sandbox" : "live",
     note: `Refunded by ${admin.name || "an admin"}`,
   });
   if ("error" in result) {
@@ -185,9 +211,10 @@ adminRoutes.get("/admin/orders", requirePermission("orders.view"), async (c) => 
   const stage = c.req.query("stage")?.trim();
   const type = c.req.query("type")?.trim();
   const limit = Math.max(1, Math.min(Number(c.req.query("limit") ?? "30") || 30, 100));
+  const environment = resolveViewEnvironment(c, await getPlatformEnvironment());
 
-  const conditions: string[] = [];
-  const args: (string | number)[] = [];
+  const conditions: string[] = ["o.environment = ?"];
+  const args: (string | number)[] = [environment];
   if (stage) {
     conditions.push("o.stage = ?");
     args.push(stage);
@@ -196,7 +223,7 @@ adminRoutes.get("/admin/orders", requirePermission("orders.view"), async (c) => 
     conditions.push("o.type = ?");
     args.push(type);
   }
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = `WHERE ${conditions.join(" AND ")}`;
   args.push(limit);
 
   const res = await db.execute({

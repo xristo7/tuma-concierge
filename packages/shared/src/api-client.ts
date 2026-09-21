@@ -25,6 +25,7 @@ import type {
   OrderType,
   Payment,
   PaymentProviderIdentity,
+  PlatformEnvironment,
   Rider,
   RiderApplicant,
   SavedLocation,
@@ -571,6 +572,15 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       return request<{ settings: DeliverySettings }>("/v1/admin/settings", {
         method: "PUT",
         body: JSON.stringify(input),
+      });
+    },
+    /** The whole-platform live/sandbox switch — its own endpoint, its own
+     * activity log entry, separate from the general settings save. See
+     * apps/api/src/settings/routes.ts. */
+    async adminSetPlatformEnvironment(environment: PlatformEnvironment) {
+      return request<{ platformEnvironment: PlatformEnvironment }>("/v1/admin/platform-environment", {
+        method: "PUT",
+        body: JSON.stringify({ environment }),
       });
     },
 

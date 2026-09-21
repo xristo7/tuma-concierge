@@ -2,6 +2,16 @@ import type { MatchingMode } from "@tuma/shared";
 import { db } from "../db/client.js";
 
 const DEFAULTS = {
+  /** Which dataset the whole platform — every customer, rider, and the
+   * admin dashboard's default view — currently reads and writes against.
+   * "live" is real orders/money; "sandbox" is demo/test data, fully
+   * isolated (separate orders, lists, wallet balances, ledger entries —
+   * see migrations/0030_sandbox_live_state.sql) and never able to reach a
+   * real payment rail regardless of what credentials are configured (see
+   * ../payments/service.ts resolveProvider's forceMock). Toggling this
+   * doesn't delete or move anything — it just changes which environment's
+   * rows every read/write path in the app targets. */
+  platform_environment: "live",
   delivery_rate_per_km: "1000",
   /** Floor on a parcel ride's distance-priced delivery fee (UGX) — a rider
    * still has to go collect and deliver the item even when pickup and
@@ -115,6 +125,16 @@ export async function setSetting(key: SettingKey, value: string): Promise<void> 
           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`,
     args: [key, value],
   });
+}
+
+export type PlatformEnvironment = "live" | "sandbox";
+
+export async function getPlatformEnvironment(): Promise<PlatformEnvironment> {
+  return (await getSetting("platform_environment")) === "sandbox" ? "sandbox" : "live";
+}
+
+export async function setPlatformEnvironment(env: PlatformEnvironment): Promise<void> {
+  await setSetting("platform_environment", env);
 }
 
 export async function getDeliverySettings(): Promise<{

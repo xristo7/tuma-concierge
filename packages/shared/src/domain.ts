@@ -151,8 +151,17 @@ export const MATCHING_MODE_DESCRIPTIONS: Record<MatchingMode, string> = {
   customer_selects: "See who's offered to take your order — their ratings, reviews, and recommendations — and pick one yourself.",
 };
 
+/** Which dataset the whole platform currently reads/writes — see
+ * PATCH .../admin/platform-environment and
+ * apps/api/src/lib/settings.ts's platform_environment. */
+export type PlatformEnvironment = "live" | "sandbox";
+
 /** Admin-tunable delivery pricing/matching numbers (packages/shared/src/api-client.ts: getSettings/adminUpdateSettings). */
 export type DeliverySettings = {
+  /** Which environment's orders/wallets/lists everyone currently sees —
+   * read-only here (GET /settings); change it with
+   * adminSetPlatformEnvironment. */
+  platformEnvironment: PlatformEnvironment;
   deliveryRatePerKm: number;
   /** Floor on a parcel ride's distance-priced fee (UGX) — never lets a very
    * short ride round down toward a near-free delivery. */

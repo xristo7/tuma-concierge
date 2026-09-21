@@ -10,12 +10,14 @@ import {
   getMatchingSettings,
   getMonetizationSettings,
   getPaymentsDemoMode,
+  getPlatformEnvironment,
   getVoiceNoteMaxSeconds,
   getWalletSettings,
   setActiveProviders,
   setMatchingModesEnabled,
   setMonetizationSettings,
   setPaymentsDemoMode,
+  setPlatformEnvironment,
   setSetting,
   type PaymentProviderIdentity,
 } from "../lib/settings.js";
@@ -25,15 +27,17 @@ import { paymentsIntegrationStatus } from "../payments/service.js";
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization] = await Promise.all([
-    getDeliverySettings(),
-    getMatchingSettings(),
-    getActiveProviders(),
-    getPaymentsDemoMode(),
-    getWalletSettings(),
-    getVoiceNoteMaxSeconds(),
-    getMonetizationSettings(),
-  ]);
+  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment] =
+    await Promise.all([
+      getDeliverySettings(),
+      getMatchingSettings(),
+      getActiveProviders(),
+      getPaymentsDemoMode(),
+      getWalletSettings(),
+      getVoiceNoteMaxSeconds(),
+      getMonetizationSettings(),
+      getPlatformEnvironment(),
+    ]);
   return {
     ...delivery,
     ...matching,
@@ -43,6 +47,7 @@ async function fullSettings() {
     walletVerifiedCap: wallet.verifiedCap,
     walletMaxTopup: wallet.maxTopup,
     voiceNoteMaxSeconds,
+    platformEnvironment,
     ...monetization,
   };
 }
@@ -195,6 +200,49 @@ settingsRoutes.put(
     });
 
     return c.json({ settings: after });
+  },
+);
+
+const environmentSchema = z.object({ environment: z.enum(["live", "sandbox"]) });
+
+/**
+ * The whole-platform live/sandbox switch — kept as its own endpoint rather
+ * than folded into PUT /admin/settings above, deliberately: this is the
+ * single most consequential toggle in the app (every customer and rider
+ * sees a different dataset the instant it flips), so it gets its own
+ * explicit action and its own activity log entry rather than riding along
+ * with an unrelated settings save. Same permission gate as the payments
+ * fields above — it's exactly as financially significant.
+ */
+settingsRoutes.put(
+  "/admin/platform-environment",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  requirePermission("payments.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const parsed = environmentSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+    const before = await getPlatformEnvironment();
+    if (before === parsed.data.environment) {
+      return c.json({ platformEnvironment: before });
+    }
+
+    await setPlatformEnvironment(parsed.data.environment);
+
+    await logActivity({
+      actor: user,
+      action: "settings.platform_environment",
+      entityType: "settings",
+      summary: `Switched the platform from ${before} to ${parsed.data.environment}`,
+      before: { platformEnvironment: before },
+      after: { platformEnvironment: parsed.data.environment },
+      ip: clientIp(c),
+    });
+
+    return c.json({ platformEnvironment: parsed.data.environment });
   },
 );
 

@@ -9,7 +9,7 @@ import { haversineKm } from "../lib/geo.js";
 import { newId } from "../lib/ids.js";
 import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { clientIp } from "../lib/ratelimit.js";
-import { getDeliverySettings } from "../lib/settings.js";
+import { getDeliverySettings, getPlatformEnvironment } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { redactOrders, toOpenJob } from "../orders/visibility.js";
 import { checkPaymentStatus, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
@@ -251,8 +251,8 @@ riderRoutes.get("/riders/me/orders", requireAuth, requireRole("rider"), async (c
   const res = await db.execute({
     sql: `SELECT o.*, u.name as customer_name FROM orders o
           LEFT JOIN users u ON u.id = o.customer_id
-          WHERE o.rider_id = ? ORDER BY o.updated_at DESC`,
-    args: [user.sub],
+          WHERE o.rider_id = ? AND o.environment = ? ORDER BY o.updated_at DESC`,
+    args: [user.sub, await getPlatformEnvironment()],
   });
   return c.json({ orders: redactOrders(res.rows as Row[], user) });
 });
@@ -283,10 +283,10 @@ riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), asy
     db.execute({
       sql: `SELECT o.*, u.name as customer_name FROM orders o
             LEFT JOIN users u ON u.id = o.customer_id
-            WHERE o.rider_id IS NULL AND o.stage IN ('Create', 'Match')
+            WHERE o.rider_id IS NULL AND o.stage IN ('Create', 'Match') AND o.environment = ?
             AND o.id NOT IN (SELECT order_id FROM order_rider_exclusions WHERE rider_id = ?)
             ORDER BY o.created_at ASC`,
-      args: [user.sub],
+      args: [await getPlatformEnvironment(), user.sub],
     }),
     db.execute({
       sql: "SELECT order_id FROM order_applications WHERE rider_id = ? AND status = 'pending'",
@@ -381,20 +381,34 @@ riderRoutes.get("/riders/jobs/:id/preview", requireAuth, requireRole("rider"), a
 
 riderRoutes.get("/riders/me/wallet", requireAuth, requireRole("rider"), async (c) => {
   const user = c.get("user");
-  const riderRes = await db.execute({ sql: "SELECT wallet_balance FROM riders WHERE user_id = ?", args: [user.sub] });
+  const environment = await getPlatformEnvironment();
+  const balanceColumn = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
+  const riderRes = await db.execute({
+    sql: `SELECT ${balanceColumn} as wallet_balance FROM riders WHERE user_id = ?`,
+    args: [user.sub],
+  });
   const balance = (riderRes.rows[0]?.wallet_balance as number | undefined) ?? 0;
   const withdrawalsRes = await db.execute({
-    sql: "SELECT * FROM wallet_withdrawals WHERE rider_id = ? ORDER BY created_at DESC LIMIT 20",
-    args: [user.sub],
+    sql: "SELECT * FROM wallet_withdrawals WHERE rider_id = ? AND environment = ? ORDER BY created_at DESC LIMIT 20",
+    args: [user.sub, environment],
   });
   return c.json({ balance, withdrawals: withdrawalsRes.rows });
 });
 
-/** Withdraws the entire current balance to the rider's mobile money number on file. */
+/**
+ * Withdraws the entire current balance to the rider's mobile money number on
+ * file. Always operates on whichever balance (live or sandbox) matches the
+ * currently active platform environment — a sandbox withdrawal debits the
+ * sandbox balance and its disbursement is forced through the mock adapter
+ * (see ../payments/service.ts), so no sandbox activity can ever move real
+ * money out to a real phone number, even with live credentials configured.
+ */
 riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider"), async (c) => {
   const user = c.get("user");
+  const environment = await getPlatformEnvironment();
+  const balanceColumn = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
   const riderRes = await db.execute({
-    sql: "SELECT wallet_balance, momo_msisdn FROM riders WHERE user_id = ?",
+    sql: `SELECT ${balanceColumn} as wallet_balance, momo_msisdn FROM riders WHERE user_id = ?`,
     args: [user.sub],
   });
   const rider = riderRes.rows[0] as Row | undefined;
@@ -413,7 +427,7 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
   // Doing it the other way round (disburse, then zero) lets both requests
   // pay out against the same balance, since Workers serves them concurrently.
   const debit = await db.execute({
-    sql: "UPDATE riders SET wallet_balance = 0, updated_at = datetime('now') WHERE user_id = ? AND wallet_balance = ?",
+    sql: `UPDATE riders SET ${balanceColumn} = 0, updated_at = datetime('now') WHERE user_id = ? AND ${balanceColumn} = ?`,
     args: [user.sub, balance],
   });
   if (debit.rowsAffected === 0) {
@@ -425,14 +439,19 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
   let network: MobileMoneyNetwork | null;
   let provider: string;
   try {
-    const initiated = await initiateDisbursement({ referenceId: withdrawalId, msisdn, amount: balance });
+    const initiated = await initiateDisbursement({
+      referenceId: withdrawalId,
+      msisdn,
+      amount: balance,
+      forceMock: environment === "sandbox",
+    });
     providerRef = initiated.providerRef;
     network = initiated.network;
     provider = initiated.provider;
   } catch (err) {
     // The debit already went through, so hand the money back before failing.
     await db.execute({
-      sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
+      sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} + ?, updated_at = datetime('now') WHERE user_id = ?`,
       args: [balance, user.sub],
     });
     if (err instanceof UnsupportedNetworkError) {
@@ -443,9 +462,9 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
   }
 
   await db.execute({
-    sql: `INSERT INTO wallet_withdrawals (id, rider_id, amount, provider, provider_ref, msisdn, network, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
-    args: [withdrawalId, user.sub, balance, provider, providerRef, msisdn, network],
+    sql: `INSERT INTO wallet_withdrawals (id, rider_id, amount, provider, provider_ref, msisdn, network, status, environment)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+    args: [withdrawalId, user.sub, balance, provider, providerRef, msisdn, network, environment],
   });
 
   return c.json({ withdrawalId, amount: balance, status: "pending" }, 201);
@@ -479,8 +498,12 @@ riderRoutes.get("/riders/me/wallet/withdrawals/:id/refresh", requireAuth, requir
         sql: "UPDATE wallet_withdrawals SET status = 'failed', updated_at = datetime('now') WHERE id = ?",
         args: [id],
       });
+      // Refund into whichever balance this specific withdrawal was debited
+      // from (its own stored environment), not whatever's currently
+      // active — the toggle could have flipped since it was requested.
+      const balanceColumn = withdrawal.environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
       await db.execute({
-        sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
+        sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} + ?, updated_at = datetime('now') WHERE user_id = ?`,
         args: [withdrawal.amount as number, user.sub],
       });
     }

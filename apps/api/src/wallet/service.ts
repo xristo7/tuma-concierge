@@ -8,11 +8,21 @@
 
 import { db } from "../db/client.js";
 import { newId } from "../lib/ids.js";
-import { getWalletSettings } from "../lib/settings.js";
+import { getWalletSettings, type PlatformEnvironment } from "../lib/settings.js";
 
 type Row = Record<string, unknown>;
 
 export type LedgerType = "topup" | "order_payment" | "refund" | "adjustment" | "transfer_out" | "transfer_in";
+
+/** `users.wallet_balance` is the live column (unrenamed, so every
+ * pre-sandbox caller keeps working); `wallet_balance_sandbox` is its
+ * counterpart — see migrations/0030_sandbox_live_state.sql. Every
+ * credit/debit in this file requires an explicit environment rather than
+ * defaulting to one, so a caller can't accidentally move real money on a
+ * sandbox action or vice versa. */
+function balanceColumn(environment: PlatformEnvironment): "wallet_balance" | "wallet_balance_sandbox" {
+  return environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
+}
 
 export async function getWalletCap(userId: string): Promise<{ cap: number; verified: boolean }> {
   const res = await db.execute({
@@ -30,6 +40,7 @@ async function recordLedgerEntry(input: {
   type: LedgerType;
   amount: number;
   balanceAfter: number;
+  environment: PlatformEnvironment;
   orderId?: string;
   topupId?: string;
   counterpartyId?: string;
@@ -37,8 +48,8 @@ async function recordLedgerEntry(input: {
   actorId?: string;
 }): Promise<void> {
   await db.execute({
-    sql: `INSERT INTO wallet_ledger (id, user_id, type, amount, balance_after, order_id, topup_id, counterparty_id, note, actor_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO wallet_ledger (id, user_id, type, amount, balance_after, order_id, topup_id, counterparty_id, note, actor_id, environment)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       newId("wl"),
       input.userId,
@@ -50,6 +61,7 @@ async function recordLedgerEntry(input: {
       input.counterpartyId ?? null,
       input.note ?? null,
       input.actorId ?? null,
+      input.environment,
     ],
   });
 }
@@ -59,14 +71,23 @@ async function recordLedgerEntry(input: {
 export async function creditWallet(
   userId: string,
   amount: number,
-  info: { type: LedgerType; orderId?: string; topupId?: string; counterpartyId?: string; note?: string; actorId?: string },
+  info: {
+    type: LedgerType;
+    environment: PlatformEnvironment;
+    orderId?: string;
+    topupId?: string;
+    counterpartyId?: string;
+    note?: string;
+    actorId?: string;
+  },
 ): Promise<number> {
+  const column = balanceColumn(info.environment);
   await db.execute({
-    sql: "UPDATE users SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE id = ?",
+    sql: `UPDATE users SET ${column} = ${column} + ?, updated_at = datetime('now') WHERE id = ?`,
     args: [amount, userId],
   });
-  const res = await db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [userId] });
-  const balance = Number((res.rows[0] as Row)?.wallet_balance ?? 0);
+  const res = await db.execute({ sql: `SELECT ${column} as balance FROM users WHERE id = ?`, args: [userId] });
+  const balance = Number((res.rows[0] as Row)?.balance ?? 0);
   await recordLedgerEntry({ userId, amount, balanceAfter: balance, ...info });
   return balance;
 }
@@ -80,15 +101,23 @@ export async function creditWallet(
 export async function debitWallet(
   userId: string,
   amount: number,
-  info: { type: LedgerType; orderId?: string; counterpartyId?: string; note?: string; actorId?: string },
+  info: {
+    type: LedgerType;
+    environment: PlatformEnvironment;
+    orderId?: string;
+    counterpartyId?: string;
+    note?: string;
+    actorId?: string;
+  },
 ): Promise<number | null> {
+  const column = balanceColumn(info.environment);
   const res = await db.execute({
-    sql: "UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = datetime('now') WHERE id = ? AND wallet_balance >= ?",
+    sql: `UPDATE users SET ${column} = ${column} - ?, updated_at = datetime('now') WHERE id = ? AND ${column} >= ?`,
     args: [amount, userId, amount],
   });
   if ((res.rowsAffected ?? 0) === 0) return null;
-  const balanceRes = await db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [userId] });
-  const balance = Number((balanceRes.rows[0] as Row)?.wallet_balance ?? 0);
+  const balanceRes = await db.execute({ sql: `SELECT ${column} as balance FROM users WHERE id = ?`, args: [userId] });
+  const balance = Number((balanceRes.rows[0] as Row)?.balance ?? 0);
   await recordLedgerEntry({ userId, amount: -amount, balanceAfter: balance, ...info });
   return balance;
 }
@@ -115,11 +144,13 @@ export async function payFromWallet(input: {
   userId: string;
   amount: number;
   orderId: string;
+  environment: PlatformEnvironment;
   note?: string;
   actorId?: string;
 }): Promise<string | null> {
   const balance = await debitWallet(input.userId, input.amount, {
     type: "order_payment",
+    environment: input.environment,
     orderId: input.orderId,
     note: input.note,
     actorId: input.actorId,
@@ -147,6 +178,10 @@ export async function refundOrderToWallet(input: {
   orderId: string;
   customerId: string;
   actorId: string;
+  /** The order's own environment — the refund always lands in the same
+   * balance the original collection would have paid out of, regardless of
+   * whatever's currently active. */
+  environment: PlatformEnvironment;
   note?: string;
 }): Promise<{ refunded: number } | { error: "nothing_to_refund" | "already_refunded" }> {
   const [collectedRes, refundedRes] = await Promise.all([
@@ -172,6 +207,7 @@ export async function refundOrderToWallet(input: {
   });
   await creditWallet(input.customerId, refundable, {
     type: "refund",
+    environment: input.environment,
     orderId: input.orderId,
     note: input.note ?? "Order refund",
     actorId: input.actorId,
@@ -212,10 +248,12 @@ export async function transferWallet(input: {
   fromUserId: string;
   toUserId: string;
   amount: number;
+  environment: PlatformEnvironment;
   note?: string;
 }): Promise<{ fromBalance: number; toBalance: number } | null> {
   const fromBalance = await debitWallet(input.fromUserId, input.amount, {
     type: "transfer_out",
+    environment: input.environment,
     counterpartyId: input.toUserId,
     note: input.note,
   });
@@ -223,6 +261,7 @@ export async function transferWallet(input: {
 
   const toBalance = await creditWallet(input.toUserId, input.amount, {
     type: "transfer_in",
+    environment: input.environment,
     counterpartyId: input.fromUserId,
     note: input.note,
   });

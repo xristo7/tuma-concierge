@@ -4,7 +4,7 @@ import { requireAuth, requireRole } from "../auth/middleware.js";
 import { db } from "../db/client.js";
 import { newId } from "../lib/ids.js";
 import { consume, tooManyRequests } from "../lib/ratelimit.js";
-import { getWalletSettings } from "../lib/settings.js";
+import { getPlatformEnvironment, getWalletSettings } from "../lib/settings.js";
 import { checkPaymentStatus, initiateCollection, UnsupportedNetworkError } from "../payments/service.js";
 import { appBaseUrl } from "../verify/service.js";
 import { creditWallet, getWalletCap, resolveCustomerByIdentifier, transferWallet } from "./service.js";
@@ -17,9 +17,11 @@ type Row = Record<string, unknown>;
  * wallet screen needs in one call. */
 walletRoutes.get("/wallet", requireAuth, requireRole("customer"), async (c) => {
   const user = c.get("user");
+  const environment = await getPlatformEnvironment();
+  const column = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
   const [{ cap, verified }, balanceRes, ledgerRes] = await Promise.all([
     getWalletCap(user.sub),
-    db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [user.sub] }),
+    db.execute({ sql: `SELECT ${column} as wallet_balance FROM users WHERE id = ?`, args: [user.sub] }),
     // Joined so a transfer/shared-wallet entry can be labeled with an
     // actual name ("Sent to Grace", "Order payment by Grace") instead of
     // a bare user id — actor_id is who spent it when that's not the
@@ -29,9 +31,9 @@ walletRoutes.get("/wallet", requireAuth, requireRole("customer"), async (c) => {
             FROM wallet_ledger wl
             LEFT JOIN users actor ON actor.id = wl.actor_id
             LEFT JOIN users cp ON cp.id = wl.counterparty_id
-            WHERE wl.user_id = ?
+            WHERE wl.user_id = ? AND wl.environment = ?
             ORDER BY wl.created_at DESC LIMIT 50`,
-      args: [user.sub],
+      args: [user.sub, environment],
     }),
   ]);
   const balance = Number((balanceRes.rows[0] as Row)?.wallet_balance ?? 0);
@@ -49,10 +51,12 @@ walletRoutes.post("/wallet/topup", requireAuth, requireRole("customer"), async (
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
   const { amount, msisdn } = parsed.data;
 
+  const environment = await getPlatformEnvironment();
+  const column = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
   const [{ cap }, settings, balanceRes] = await Promise.all([
     getWalletCap(user.sub),
     getWalletSettings(),
-    db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [user.sub] }),
+    db.execute({ sql: `SELECT ${column} as wallet_balance FROM users WHERE id = ?`, args: [user.sub] }),
   ]);
   if (amount > settings.maxTopup) {
     return c.json({ error: "topup_too_large", message: `A single top-up can't exceed UGX ${settings.maxTopup.toLocaleString()}` }, 400);
@@ -73,11 +77,12 @@ walletRoutes.post("/wallet/topup", requireAuth, requireRole("customer"), async (
       amount,
       name: user.name,
       returnUrl: `${appBaseUrl("customer")}/wallet?topup_return=${topupId}`,
+      forceMock: environment === "sandbox",
     });
 
     await db.execute({
-      sql: `INSERT INTO wallet_topups (id, user_id, amount, provider, provider_ref, method, msisdn, network, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      sql: `INSERT INTO wallet_topups (id, user_id, amount, provider, provider_ref, method, msisdn, network, status, environment)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
       args: [
         topupId,
         user.sub,
@@ -87,6 +92,7 @@ walletRoutes.post("/wallet/topup", requireAuth, requireRole("customer"), async (
         initiated.network ? "mobile_money" : "card",
         msisdn ?? null,
         initiated.network,
+        environment,
       ],
     });
 
@@ -133,7 +139,12 @@ walletRoutes.get("/wallet/topups/:id/refresh", requireAuth, requireRole("custome
     args: [id],
   });
   if ((updated.rowsAffected ?? 0) > 0) {
-    await creditWallet(user.sub, topup.amount as number, { type: "topup", topupId: id, note: "Wallet top-up" });
+    await creditWallet(user.sub, topup.amount as number, {
+      type: "topup",
+      environment: topup.environment === "sandbox" ? "sandbox" : "live",
+      topupId: id,
+      note: "Wallet top-up",
+    });
   }
 
   return c.json({ topup: { ...topup, status: "successful" } });
@@ -170,9 +181,11 @@ walletRoutes.post("/wallet/transfer", requireAuth, requireRole("customer"), asyn
     return c.json({ error: "self_transfer", message: "You can't send money to your own wallet." }, 400);
   }
 
+  const environment = await getPlatformEnvironment();
+  const column = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
   const [{ cap: recipientCap }, recipientBalanceRes] = await Promise.all([
     getWalletCap(target.id),
-    db.execute({ sql: "SELECT wallet_balance FROM users WHERE id = ?", args: [target.id] }),
+    db.execute({ sql: `SELECT ${column} as wallet_balance FROM users WHERE id = ?`, args: [target.id] }),
   ]);
   const recipientBalance = Number((recipientBalanceRes.rows[0] as Row)?.wallet_balance ?? 0);
   if (recipientBalance + amount > recipientCap) {
@@ -182,7 +195,7 @@ walletRoutes.post("/wallet/transfer", requireAuth, requireRole("customer"), asyn
     );
   }
 
-  const result = await transferWallet({ fromUserId: user.sub, toUserId: target.id, amount, note });
+  const result = await transferWallet({ fromUserId: user.sub, toUserId: target.id, amount, environment, note });
   if (!result) {
     return c.json({ error: "insufficient_balance", message: "You don't have enough in your wallet for that." }, 409);
   }
@@ -238,6 +251,7 @@ walletRoutes.post("/wallet/shares", requireAuth, requireRole("customer"), async 
  * (they haven't accepted yet); it only appears once status is "active". */
 walletRoutes.get("/wallet/shares", requireAuth, requireRole("customer"), async (c) => {
   const user = c.get("user");
+  const balanceColumn = (await getPlatformEnvironment()) === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
   const [grantedRes, receivedRes] = await Promise.all([
     db.execute({
       sql: `SELECT ws.id, ws.grantee_id, u.name as grantee_name, ws.status, ws.created_at, ws.responded_at
@@ -247,7 +261,7 @@ walletRoutes.get("/wallet/shares", requireAuth, requireRole("customer"), async (
     }),
     db.execute({
       sql: `SELECT ws.id, ws.owner_id, u.name as owner_name, ws.status, ws.created_at, ws.responded_at,
-                   u.wallet_balance as owner_balance
+                   u.${balanceColumn} as owner_balance
             FROM wallet_shares ws JOIN users u ON u.id = ws.owner_id
             WHERE ws.grantee_id = ? ORDER BY ws.created_at DESC`,
       args: [user.sub],

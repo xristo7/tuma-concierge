@@ -7,7 +7,13 @@ import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
 import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { consume, tooManyRequests } from "../lib/ratelimit.js";
-import { getDeliverySettings, getMatchingSettings, getMaxOrderValue, getMonetizationSettings } from "../lib/settings.js";
+import {
+  getDeliverySettings,
+  getMatchingSettings,
+  getMaxOrderValue,
+  getMonetizationSettings,
+  getPlatformEnvironment,
+} from "../lib/settings.js";
 import { computeCheckoutFees, riderPayout } from "../lib/monetization.js";
 import { notifyUser } from "../lib/webpush.js";
 import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
@@ -158,8 +164,8 @@ orderRoutes.post("/lists", async (c) => {
   const listId = newId("list");
   const title = parsed.data.title?.trim() || "New shopping list";
   await db.execute({
-    sql: "INSERT INTO lists (id, customer_id, title, status) VALUES (?, ?, ?, 'draft')",
-    args: [listId, user.sub, title],
+    sql: "INSERT INTO lists (id, customer_id, title, status, environment) VALUES (?, ?, ?, 'draft', ?)",
+    args: [listId, user.sub, title, await getPlatformEnvironment()],
   });
   for (const item of parsed.data.items) {
     await db.execute({
@@ -194,8 +200,8 @@ orderRoutes.get("/lists/recent", async (c) => {
           LEFT JOIN orders o ON o.id = (SELECT id FROM orders WHERE list_id = l.id ORDER BY updated_at DESC LIMIT 1)
           LEFT JOIN riders r ON r.user_id = o.rider_id
           LEFT JOIN users u ON u.id = o.rider_id
-          WHERE l.customer_id = ? ORDER BY l.updated_at DESC LIMIT ?`,
-    args: [user.sub, limit],
+          WHERE l.customer_id = ? AND l.environment = ? ORDER BY l.updated_at DESC LIMIT ?`,
+    args: [user.sub, await getPlatformEnvironment(), limit],
   });
   return c.json({
     lists: res.rows.map((r) => {
@@ -337,14 +343,18 @@ orderRoutes.post("/orders", async (c) => {
         : null;
 
   const orderId = newId("ord");
+  // Inherits the list's own environment rather than re-reading whatever's
+  // currently active — keeps a list+order pair consistent even if an admin
+  // flips platform_environment in the gap between the two requests.
+  const orderEnvironment = (listRow.environment as string | undefined) === "sandbox" ? "sandbox" : "live";
   await db.execute({
     sql: `INSERT INTO orders (
             id, list_id, customer_id, stage, type, payment_rail, estimated_total, delivery_fee,
             pickup_area, pickup_address, pickup_lat, pickup_lng,
             destination_area, destination_address, destination_lat, destination_lng, distance_km,
-            matching_mode, matching_deadline_at
+            matching_mode, matching_deadline_at, environment
           )
-          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       orderId,
       d.listId,
@@ -364,6 +374,7 @@ orderRoutes.post("/orders", async (c) => {
       distanceKm,
       matchingMode,
       matchingDeadlineAt,
+      orderEnvironment,
     ],
   });
   await db.execute({
@@ -381,8 +392,9 @@ orderRoutes.get("/orders/active", async (c) => {
   const res = await db.execute({
     sql: `SELECT o.*, u.name as customer_name FROM orders o
           LEFT JOIN users u ON u.id = o.customer_id
-          WHERE o.customer_id = ? AND o.stage != 'Settle' ORDER BY o.updated_at DESC LIMIT 1`,
-    args: [user.sub],
+          WHERE o.customer_id = ? AND o.stage != 'Settle' AND o.environment = ?
+          ORDER BY o.updated_at DESC LIMIT 1`,
+    args: [user.sub, await getPlatformEnvironment()],
   });
   return c.json({ activeOrder: res.rows[0] ?? null });
 });
@@ -567,9 +579,11 @@ async function findAutoMatchCandidate(
   const eligible = await db.execute({
     sql: `SELECT u.id, u.name, r.stage_lat, r.stage_lng, r.area FROM riders r JOIN users u ON u.id = r.user_id
           WHERE r.verified = 1 AND r.is_online = 1
-          AND u.id NOT IN (SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle')
+          AND u.id NOT IN (
+            SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle' AND environment = ?
+          )
           AND u.id NOT IN (SELECT rider_id FROM order_rider_exclusions WHERE order_id = ?)`,
-    args: [id],
+    args: [order.environment as string, id],
   });
 
   let nearestKnown: { row: Row; distanceKm: number } | null = null;
@@ -1056,6 +1070,7 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
       orderId: id,
       note: `Order ${id}`,
       actorId: sharedSpend ? user.sub : undefined,
+      environment: order.environment as "live" | "sandbox",
     });
     if (!paymentId) return c.json({ error: "insufficient_wallet_balance" }, 409);
 
@@ -1076,6 +1091,7 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
       amount,
       name: user.name,
       returnUrl: paymentReturnUrl(id),
+      forceMock: order.environment === "sandbox",
     });
     providerRef = initiated.providerRef;
     network = initiated.network;
@@ -1617,8 +1633,12 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
       : released;
 
     if (payout > 0) {
+      // Credits the balance column matching this specific order's own
+      // environment — never "whatever's currently active" — so a sandbox
+      // order can never inflate a rider's real, withdrawable balance.
+      const balanceColumn = order.environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
       await db.execute({
-        sql: "UPDATE riders SET wallet_balance = wallet_balance + ?, updated_at = datetime('now') WHERE user_id = ?",
+        sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} + ?, updated_at = datetime('now') WHERE user_id = ?`,
         args: [payout, order.rider_id as string],
       });
     }
