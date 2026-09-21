@@ -154,6 +154,9 @@ export const MATCHING_MODE_DESCRIPTIONS: Record<MatchingMode, string> = {
 /** Admin-tunable delivery pricing/matching numbers (packages/shared/src/api-client.ts: getSettings/adminUpdateSettings). */
 export type DeliverySettings = {
   deliveryRatePerKm: number;
+  /** Floor on a parcel ride's distance-priced fee (UGX) — never lets a very
+   * short ride round down toward a near-free delivery. */
+  minimumDeliveryFee: number;
   serviceRangeKm: number;
   /** Flat delivery fee (UGX) added on top of a shopping order's item costs
    * — see apps/api/src/lib/settings.ts for why shopping can't be priced by

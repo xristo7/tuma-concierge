@@ -24,6 +24,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const canManagePayments = hasPermission(user?.adminRole ?? null, "payments.manage");
   const [deliveryRatePerKm, setDeliveryRatePerKm] = useState("");
+  const [minimumDeliveryFee, setMinimumDeliveryFee] = useState("");
   const [serviceRangeKm, setServiceRangeKm] = useState("");
   const [shoppingDeliveryFee, setShoppingDeliveryFee] = useState("");
   const [enabledModes, setEnabledModes] = useState<MatchingMode[]>(["first_to_claim"]);
@@ -62,6 +63,7 @@ export default function SettingsPage() {
     Promise.all([api.getSettings(), api.adminIntegrations()])
       .then(([settingsRes, integrationsRes]) => {
         setDeliveryRatePerKm(String(settingsRes.settings.deliveryRatePerKm));
+        setMinimumDeliveryFee(String(settingsRes.settings.minimumDeliveryFee));
         setServiceRangeKm(String(settingsRes.settings.serviceRangeKm));
         setShoppingDeliveryFee(String(settingsRes.settings.shoppingDeliveryFee));
         setEnabledModes(settingsRes.settings.enabledModes);
@@ -114,6 +116,7 @@ export default function SettingsPage() {
     try {
       const res = await api.adminUpdateSettings({
         deliveryRatePerKm: Number(deliveryRatePerKm),
+        minimumDeliveryFee: Number(minimumDeliveryFee),
         serviceRangeKm: Number(serviceRangeKm),
         shoppingDeliveryFee: Number(shoppingDeliveryFee),
         enabledModes: enabledModes.length > 0 ? enabledModes : ["first_to_claim"],
@@ -148,6 +151,7 @@ export default function SettingsPage() {
           : {}),
       });
       setDeliveryRatePerKm(String(res.settings.deliveryRatePerKm));
+      setMinimumDeliveryFee(String(res.settings.minimumDeliveryFee));
       setServiceRangeKm(String(res.settings.serviceRangeKm));
       setShoppingDeliveryFee(String(res.settings.shoppingDeliveryFee));
       setEnabledModes(res.settings.enabledModes);
@@ -211,6 +215,23 @@ export default function SettingsPage() {
               <p className="text-xs text-ink-500">
                 A parcel&apos;s cost is distance (pickup → drop-off) × this rate, calculated automatically when
                 both points are pinned on the map.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-ink-500" htmlFor="minimum-delivery-fee">
+                Minimum delivery fee (UGX)
+              </label>
+              <input
+                id="minimum-delivery-fee"
+                inputMode="numeric"
+                value={minimumDeliveryFee}
+                onChange={(e) => setMinimumDeliveryFee(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="2000"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+              <p className="text-xs text-ink-500">
+                A floor on the distance-priced fee above — a rider still has to go collect and deliver the item
+                even on a very short ride, so this is never allowed to round down toward free.
               </p>
             </div>
             <div className="space-y-1">

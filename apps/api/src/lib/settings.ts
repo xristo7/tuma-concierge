@@ -3,6 +3,11 @@ import { db } from "../db/client.js";
 
 const DEFAULTS = {
   delivery_rate_per_km: "1000",
+  /** Floor on a parcel ride's distance-priced delivery fee (UGX) — a rider
+   * still has to go collect and deliver the item even when pickup and
+   * destination are barely apart, so distance × rate is never allowed to
+   * round down toward zero for a very short (or same-building) ride. */
+  minimum_delivery_fee: "2000",
   service_range_km: "7",
   /** Flat delivery fee (UGX) charged on top of a shopping order's item
    * costs. Unlike a parcel ride there's no pickup point to measure a
@@ -114,16 +119,19 @@ export async function setSetting(key: SettingKey, value: string): Promise<void> 
 
 export async function getDeliverySettings(): Promise<{
   deliveryRatePerKm: number;
+  minimumDeliveryFee: number;
   serviceRangeKm: number;
   shoppingDeliveryFee: number;
 }> {
-  const [rate, range, shoppingFee] = await Promise.all([
+  const [rate, minimumFee, range, shoppingFee] = await Promise.all([
     getSetting("delivery_rate_per_km"),
+    getSetting("minimum_delivery_fee"),
     getSetting("service_range_km"),
     getSetting("shopping_delivery_fee"),
   ]);
   return {
     deliveryRatePerKm: Number(rate) || Number(DEFAULTS.delivery_rate_per_km),
+    minimumDeliveryFee: Number(minimumFee) || Number(DEFAULTS.minimum_delivery_fee),
     serviceRangeKm: Number(range) || Number(DEFAULTS.service_range_km),
     shoppingDeliveryFee: Number(shoppingFee) || Number(DEFAULTS.shopping_delivery_fee),
   };

@@ -279,8 +279,11 @@ orderRoutes.post("/orders", async (c) => {
   let deliveryFee: number | null = null;
   if (d.type === "parcel" && d.pickupLat != null && d.pickupLng != null && d.destinationLat != null && d.destinationLng != null) {
     distanceKm = haversineKm(d.pickupLat, d.pickupLng, d.destinationLat, d.destinationLng);
-    const { deliveryRatePerKm } = await getDeliverySettings();
-    estimatedTotal = Math.round(distanceKm * deliveryRatePerKm);
+    const { deliveryRatePerKm, minimumDeliveryFee } = await getDeliverySettings();
+    // The rider still has to go collect and deliver the item even when
+    // pickup and destination are barely apart — distance × rate is never
+    // allowed to round down toward a near-free ride.
+    estimatedTotal = Math.max(Math.round(distanceKm * deliveryRatePerKm), minimumDeliveryFee);
     // A parcel ride has no items — its whole total IS the delivery fee.
     deliveryFee = estimatedTotal;
   } else if (d.type === "shopping") {
