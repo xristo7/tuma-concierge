@@ -76,6 +76,10 @@ export function toOpenJob(
     // categorize it as "Food" rather than plain "Shopping".
     restaurant_id: order.restaurant_id ?? null,
     restaurant_name: order.restaurant_name ?? null,
+    // A passenger ride is `type: 'parcel'` with this flag set (see
+    // 0039_ride_orders.sql) — surfaced here so the rider app can
+    // categorize it as "Ride" rather than plain "Parcel".
+    is_ride: order.is_ride ?? 0,
     ...extras,
   };
 }

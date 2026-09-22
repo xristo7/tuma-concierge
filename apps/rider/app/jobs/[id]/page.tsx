@@ -174,7 +174,7 @@ export default function JobDetailPage() {
           {order.customer_id && <CustomerAvatar customerId={order.customer_id} />}
           <h1 className="text-xl font-bold text-ink">{jobTitle(order)}</h1>
         </div>
-        <p className="text-sm font-semibold text-green">{stageLabel(order.stage, order.type)}</p>
+        <p className="text-sm font-semibold text-green">{stageLabel(order.stage, order.type, !!order.is_ride)}</p>
         {order.type === "parcel" && order.pickup_area && (
           <p className="flex items-center gap-1.5 text-sm text-ink-500">
             <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
@@ -484,28 +484,69 @@ export default function JobDetailPage() {
         {order.stage === "Deliver" && (
           <>
             <p className="text-sm text-ink-500">
-              On the way{order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Navigate to the customer, then
-              confirm once you&apos;ve arrived.
+              {order.is_ride
+                ? `Heading to pick up your passenger${order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Navigate there, then confirm once you've arrived.`
+                : `On the way${order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Navigate to the customer, then confirm once you've arrived.`}
+            </p>
+            <DeliveryNavigation
+              orderId={orderId}
+              destinationLat={order.is_ride ? order.pickup_lat : order.destination_lat}
+              destinationLng={order.is_ride ? order.pickup_lng : order.destination_lng}
+              busy={busy}
+              onConfirmDelivery={() =>
+                run(async () => {
+                  await api.arrivedOrder(orderId);
+                  if (!order.is_ride) router.push("/active");
+                })
+              }
+              confirmButtonLabel={order.is_ride ? "Confirm Pickup" : "Confirm Delivery"}
+              confirmModalDescription={
+                order.is_ride
+                  ? "Confirms you've reached your passenger. They'll be notified you're here."
+                  : "Confirms you've reached the customer and marks this job as arrived. They'll be notified to confirm handover on their end."
+              }
+            />
+          </>
+        )}
+
+        {order.stage === "Arrived" && order.is_ride && (
+          <>
+            <p className="text-sm text-ink-500">Your passenger&apos;s been notified you&apos;re here.</p>
+            <button
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await api.pickedUpOrder(orderId);
+                })
+              }
+              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
+            >
+              Confirm passenger picked up
+            </button>
+          </>
+        )}
+
+        {order.stage === "Arrived" && !order.is_ride && (
+          <p className="text-sm text-ink-500">
+            The customer&apos;s been notified you&apos;re here. Ask them to confirm handover in their app.
+          </p>
+        )}
+
+        {order.stage === "PickedUp" && (
+          <>
+            <p className="text-sm text-ink-500">
+              Heading to the destination. The trip completes once your passenger confirms in their app.
             </p>
             <DeliveryNavigation
               orderId={orderId}
               destinationLat={order.destination_lat}
               destinationLng={order.destination_lng}
               busy={busy}
-              onConfirmDelivery={() =>
-                run(async () => {
-                  await api.arrivedOrder(orderId);
-                  router.push("/active");
-                })
-              }
+              onConfirmDelivery={() => router.push("/active")}
+              confirmButtonLabel="Trip Complete"
+              confirmModalDescription="Marks the trip as finished on your end. The passenger still needs to confirm in their own app to release payment."
             />
           </>
-        )}
-
-        {order.stage === "Arrived" && (
-          <p className="text-sm text-ink-500">
-            The customer&apos;s been notified you&apos;re here. Ask them to confirm handover in their app.
-          </p>
         )}
 
         {order.stage === "Handover" && (

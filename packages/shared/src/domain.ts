@@ -82,6 +82,10 @@ export type OrderRow = {
   /** Set only for restaurant food orders — type stays 'shopping' (see
    * apps/api/src/db/migrations/0034_order_restaurant.sql). */
   restaurant_id: string | null;
+  /** A passenger ride rather than a goods parcel — type stays 'parcel' (see
+   * apps/api/src/db/migrations/0039_ride_orders.sql). Pickup = where the
+   * rider collects the passenger, destination = where they're going. */
+  is_ride: number;
   created_at: string;
   updated_at: string;
 };
@@ -117,6 +121,7 @@ export type AvailableJob = Pick<
   | "created_at"
   | "updated_at"
   | "restaurant_id"
+  | "is_ride"
 > & {
   /**
    * Deliberately narrower than a full OrderRow. This feed goes to every
@@ -177,6 +182,12 @@ export type DeliverySettings = {
    * — see apps/api/src/lib/settings.ts for why shopping can't be priced by
    * distance the way a parcel ride is. */
   shoppingDeliveryFee: number;
+  /** A passenger ride's own per-km rate and floor — priced the same way as
+   * a parcel (distance × rate, never below the floor) but tracked
+   * separately since carrying a person is a different real-world fare
+   * than carrying a package. */
+  rideRatePerKm: number;
+  rideMinimumFare: number;
   enabledModes: MatchingMode[];
   nearestWindowSeconds: number;
   maxAssignmentMinutes: number;

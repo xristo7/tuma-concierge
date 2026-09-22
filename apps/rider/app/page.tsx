@@ -113,7 +113,7 @@ export default function JobsHomePage() {
   }
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<JobCategory, number> = { parcel: 0, shopping: 0, food: 0 };
+    const counts: Record<JobCategory, number> = { parcel: 0, ride: 0, shopping: 0, food: 0 };
     for (const job of availableJobs) counts[jobCategory(job)] += 1;
     return counts;
   }, [availableJobs]);
@@ -169,7 +169,7 @@ export default function JobsHomePage() {
         {rider?.is_online && availableJobs.length > 0 && (
           <div className="space-y-2">
             <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-              {(["all", "parcel", "shopping", "food"] as const).map((cat) => (
+              {(["all", "ride", "parcel", "shopping", "food"] as const).map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setCategoryFilter(cat)}

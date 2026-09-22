@@ -25,6 +25,12 @@ const DEFAULTS = {
    * rider ends up shopping, unknown until one claims the job) — so this
    * is a flat admin-set amount rather than distance × rate. */
   shopping_delivery_fee: "3000",
+  /** A passenger ride's own per-km rate and floor (UGX) — priced the same
+   * way as a parcel (distance × rate, never below the floor) but tracked
+   * separately since carrying a person is a different real-world fare
+   * than carrying a package. */
+  ride_rate_per_km: "1500",
+  ride_minimum_fare: "2500",
   /** Ceiling on what a single order may charge into escrow (UGX). Guards
    * against a fat-fingered or forged estimate turning into a payment
    * request nobody meant to make. */
@@ -48,6 +54,11 @@ const DEFAULTS = {
    * "flutterwave" | "mtn" | "airtel". See ../payments/service.ts
    * resolveProvider(). */
   payments_active_providers: '["yo"]',
+  /** Which voice-calling backend live "call" buttons actually use — see
+   * ../calls/service.ts. "mock" (the default) runs the full ring/accept/
+   * decline flow with no real audio, safe with zero setup; switching to a
+   * real provider needs that provider's credentials saved first. */
+  calls_active_provider: "mock",
   /** Force every payment through the mock/simulated adapters, even when a
    * real provider has working credentials saved. Lets an admin test live
    * credentials without switching them live, or pull the whole platform
@@ -151,18 +162,24 @@ export async function getDeliverySettings(): Promise<{
   minimumDeliveryFee: number;
   serviceRangeKm: number;
   shoppingDeliveryFee: number;
+  rideRatePerKm: number;
+  rideMinimumFare: number;
 }> {
-  const [rate, minimumFee, range, shoppingFee] = await Promise.all([
+  const [rate, minimumFee, range, shoppingFee, rideRate, rideMinimum] = await Promise.all([
     getSetting("delivery_rate_per_km"),
     getSetting("minimum_delivery_fee"),
     getSetting("service_range_km"),
     getSetting("shopping_delivery_fee"),
+    getSetting("ride_rate_per_km"),
+    getSetting("ride_minimum_fare"),
   ]);
   return {
     deliveryRatePerKm: Number(rate) || Number(DEFAULTS.delivery_rate_per_km),
     minimumDeliveryFee: Number(minimumFee) || Number(DEFAULTS.minimum_delivery_fee),
     serviceRangeKm: Number(range) || Number(DEFAULTS.service_range_km),
     shoppingDeliveryFee: Number(shoppingFee) || Number(DEFAULTS.shopping_delivery_fee),
+    rideRatePerKm: Number(rideRate) || Number(DEFAULTS.ride_rate_per_km),
+    rideMinimumFare: Number(rideMinimum) || Number(DEFAULTS.ride_minimum_fare),
   };
 }
 
@@ -227,6 +244,18 @@ export async function setActiveProviders(providers: PaymentProviderIdentity[]): 
   const valid = providers.filter((p) => ALL_PROVIDER_IDENTITIES.includes(p));
   const deduped = [...new Set(valid)];
   await setSetting("payments_active_providers", JSON.stringify(deduped.length > 0 ? deduped : ["yo"]));
+}
+
+export type CallProviderIdentity = "mock" | "cloudflare" | "twilio" | "agora";
+const ALL_CALL_PROVIDER_IDENTITIES: CallProviderIdentity[] = ["mock", "cloudflare", "twilio", "agora"];
+
+export async function getActiveCallProvider(): Promise<CallProviderIdentity> {
+  const raw = await getSetting("calls_active_provider");
+  return ALL_CALL_PROVIDER_IDENTITIES.includes(raw as CallProviderIdentity) ? (raw as CallProviderIdentity) : "mock";
+}
+
+export async function setActiveCallProvider(provider: CallProviderIdentity): Promise<void> {
+  await setSetting("calls_active_provider", ALL_CALL_PROVIDER_IDENTITIES.includes(provider) ? provider : "mock");
 }
 
 export async function getPaymentsDemoMode(): Promise<boolean> {

@@ -9,6 +9,7 @@ export const STAGE_LABELS: Record<OrderStageValue, string> = {
   Approve: "Approved",
   Deliver: "Delivering",
   Arrived: "Arrived",
+  PickedUp: "Trip in progress",
   Handover: "Handover",
   Settle: "Completed",
 };

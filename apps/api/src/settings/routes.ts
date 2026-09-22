@@ -71,6 +71,8 @@ const updateSchema = z.object({
   minimumDeliveryFee: z.number().int().nonnegative().max(1_000_000).optional(),
   serviceRangeKm: z.number().positive().max(1000).optional(),
   shoppingDeliveryFee: z.number().int().nonnegative().max(1_000_000).optional(),
+  rideRatePerKm: z.number().positive().max(1_000_000).optional(),
+  rideMinimumFare: z.number().int().nonnegative().max(1_000_000).optional(),
   enabledModes: z.array(z.enum(["first_to_claim", "nearest_window", "customer_selects"])).optional(),
   nearestWindowSeconds: z.number().int().positive().max(3600).optional(),
   maxAssignmentMinutes: z.number().int().positive().max(120).optional(),
@@ -147,6 +149,12 @@ settingsRoutes.put(
     }
     if (parsed.data.minimumDeliveryFee != null) {
       await setSetting("minimum_delivery_fee", String(parsed.data.minimumDeliveryFee));
+    }
+    if (parsed.data.rideRatePerKm != null) {
+      await setSetting("ride_rate_per_km", String(parsed.data.rideRatePerKm));
+    }
+    if (parsed.data.rideMinimumFare != null) {
+      await setSetting("ride_minimum_fare", String(parsed.data.rideMinimumFare));
     }
     if (parsed.data.serviceRangeKm != null) {
       await setSetting("service_range_km", String(parsed.data.serviceRangeKm));

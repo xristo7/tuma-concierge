@@ -263,6 +263,8 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async createOrder(input: {
       listId: string;
       type?: OrderType;
+      /** A passenger ride rather than a goods parcel — only meaningful with type: "parcel". */
+      isRide?: boolean;
       pickupArea?: string;
       pickupAddress?: string;
       pickupLat?: number;
@@ -433,6 +435,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     /** Rider's own "I've arrived" tap — notifies the customer. */
     async arrivedOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/arrived`, { method: "POST" });
+    },
+    /** Ride only: rider confirms the passenger is aboard and they're now heading to the destination. */
+    async pickedUpOrder(orderId: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/picked-up`, { method: "POST" });
     },
     async handoverOrder(orderId: string, pin: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/handover`, {

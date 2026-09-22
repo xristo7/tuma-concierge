@@ -242,6 +242,10 @@ orderRoutes.get("/lists/:id", async (c) => {
 const createOrderSchema = z.object({
   listId: z.string(),
   type: z.enum(["shopping", "parcel"]).default("shopping"),
+  /** A passenger ride ("call a rider to pick you up and take you
+   * somewhere") rather than a goods parcel — only meaningful when
+   * type is "parcel". See migrations/0039_ride_orders.sql. */
+  isRide: z.boolean().optional(),
   pickupArea: z.string().max(120).optional(),
   pickupAddress: z.string().max(240).optional(),
   pickupLat: z.number().optional(),
@@ -284,14 +288,17 @@ orderRoutes.post("/orders", async (c) => {
   // substitutions/fee proposals only ever adjust the items portion — see
   // migrations/0025_order_delivery_fee.sql.
   let deliveryFee: number | null = null;
+  const isRide = d.type === "parcel" && d.isRide === true;
   if (d.type === "parcel" && d.pickupLat != null && d.pickupLng != null && d.destinationLat != null && d.destinationLng != null) {
     distanceKm = haversineKm(d.pickupLat, d.pickupLng, d.destinationLat, d.destinationLng);
-    const { deliveryRatePerKm, minimumDeliveryFee } = await getDeliverySettings();
-    // The rider still has to go collect and deliver the item even when
-    // pickup and destination are barely apart — distance × rate is never
-    // allowed to round down toward a near-free ride.
-    estimatedTotal = Math.max(Math.round(distanceKm * deliveryRatePerKm), minimumDeliveryFee);
-    // A parcel ride has no items — its whole total IS the delivery fee.
+    const { deliveryRatePerKm, minimumDeliveryFee, rideRatePerKm, rideMinimumFare } = await getDeliverySettings();
+    const rate = isRide ? rideRatePerKm : deliveryRatePerKm;
+    const minimum = isRide ? rideMinimumFare : minimumDeliveryFee;
+    // The rider still has to go collect and deliver the item (or carry the
+    // passenger) even when pickup and destination are barely apart —
+    // distance × rate is never allowed to round down toward a near-free ride.
+    estimatedTotal = Math.max(Math.round(distanceKm * rate), minimum);
+    // A parcel ride (goods or passenger) has no items — its whole total IS the delivery fee.
     deliveryFee = estimatedTotal;
   } else if (d.type === "shopping") {
     const priced = await db.execute({
@@ -353,9 +360,9 @@ orderRoutes.post("/orders", async (c) => {
             id, list_id, customer_id, stage, type, payment_rail, estimated_total, delivery_fee,
             pickup_area, pickup_address, pickup_lat, pickup_lng,
             destination_area, destination_address, destination_lat, destination_lng, distance_km,
-            matching_mode, matching_deadline_at, environment
+            matching_mode, matching_deadline_at, environment, is_ride
           )
-          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES (?, ?, ?, 'Create', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       orderId,
       d.listId,
@@ -376,6 +383,7 @@ orderRoutes.post("/orders", async (c) => {
       matchingMode,
       matchingDeadlineAt,
       orderEnvironment,
+      isRide ? 1 : 0,
     ],
   });
   await db.execute({
@@ -1549,8 +1557,50 @@ orderRoutes.post("/orders/:id/arrived", async (c) => {
     background(
       c,
       notifyUser(order.customer_id as string, {
-        title: "Your rider has arrived",
-        body: `${user.name || "Your rider"} is here with your ${order.type === "parcel" ? "parcel" : "order"}.`,
+        title: order.is_ride ? "Your rider is here" : "Your rider has arrived",
+        body: order.is_ride
+          ? `${user.name || "Your rider"} is here to pick you up.`
+          : `${user.name || "Your rider"} is here with your ${order.type === "parcel" ? "parcel" : "order"}.`,
+        url: `/orders/${id}`,
+        tag: `order-${id}`,
+      }),
+    );
+  }
+
+  return c.json({ order: await getOrder(id) });
+});
+
+/** A ride's second leg: the rider confirms the passenger is aboard and
+ * they're now heading to the destination. Goods parcels and shopping
+ * orders skip straight from Arrived to Handover — only a ride has someone
+ * physically waiting to be collected before the trip itself begins. */
+orderRoutes.post("/orders/:id/picked-up", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertRider(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  if (!order.is_ride) {
+    return c.json({ error: "not_a_ride", message: "Only ride orders have a pickup confirmation step" }, 409);
+  }
+  if (order.stage !== "Arrived") {
+    return c.json({ error: "invalid_stage", message: `Cannot confirm pickup from stage ${order.stage}` }, 409);
+  }
+
+  await touchOrder(id, { stage: "PickedUp" });
+  await logEvent(id, "PickedUp", "Passenger picked up, heading to destination", user.sub);
+
+  if (order.customer_id) {
+    background(
+      c,
+      notifyUser(order.customer_id as string, {
+        title: "You're on your way",
+        body: `${user.name || "Your rider"} has picked you up and is heading to your destination.`,
         url: `/orders/${id}`,
         tag: `order-${id}`,
       }),
@@ -1573,7 +1623,7 @@ orderRoutes.post("/orders/:id/handover", async (c) => {
     if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
     throw e;
   }
-  if (order.stage !== "Deliver" && order.stage !== "Arrived") {
+  if (!["Deliver", "Arrived", "PickedUp"].includes(order.stage as string)) {
     return c.json({ error: "invalid_stage", message: `Cannot hand over from stage ${order.stage}` }, 409);
   }
 

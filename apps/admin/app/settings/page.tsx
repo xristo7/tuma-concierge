@@ -29,6 +29,8 @@ export default function SettingsPage() {
   const [minimumDeliveryFee, setMinimumDeliveryFee] = useState("");
   const [serviceRangeKm, setServiceRangeKm] = useState("");
   const [shoppingDeliveryFee, setShoppingDeliveryFee] = useState("");
+  const [rideRatePerKm, setRideRatePerKm] = useState("");
+  const [rideMinimumFare, setRideMinimumFare] = useState("");
   const [enabledModes, setEnabledModes] = useState<MatchingMode[]>(["first_to_claim"]);
   const [nearestWindowSeconds, setNearestWindowSeconds] = useState("");
   const [maxAssignmentMinutes, setMaxAssignmentMinutes] = useState("");
@@ -73,6 +75,8 @@ export default function SettingsPage() {
         setMinimumDeliveryFee(String(settingsRes.settings.minimumDeliveryFee));
         setServiceRangeKm(String(settingsRes.settings.serviceRangeKm));
         setShoppingDeliveryFee(String(settingsRes.settings.shoppingDeliveryFee));
+        setRideRatePerKm(String(settingsRes.settings.rideRatePerKm));
+        setRideMinimumFare(String(settingsRes.settings.rideMinimumFare));
         setEnabledModes(settingsRes.settings.enabledModes);
         setNearestWindowSeconds(String(settingsRes.settings.nearestWindowSeconds));
         setMaxAssignmentMinutes(String(settingsRes.settings.maxAssignmentMinutes));
@@ -129,6 +133,8 @@ export default function SettingsPage() {
         minimumDeliveryFee: Number(minimumDeliveryFee),
         serviceRangeKm: Number(serviceRangeKm),
         shoppingDeliveryFee: Number(shoppingDeliveryFee),
+        rideRatePerKm: Number(rideRatePerKm),
+        rideMinimumFare: Number(rideMinimumFare),
         enabledModes: enabledModes.length > 0 ? enabledModes : ["first_to_claim"],
         nearestWindowSeconds: Number(nearestWindowSeconds),
         maxAssignmentMinutes: Number(maxAssignmentMinutes),
@@ -167,6 +173,8 @@ export default function SettingsPage() {
       setMinimumDeliveryFee(String(res.settings.minimumDeliveryFee));
       setServiceRangeKm(String(res.settings.serviceRangeKm));
       setShoppingDeliveryFee(String(res.settings.shoppingDeliveryFee));
+      setRideRatePerKm(String(res.settings.rideRatePerKm));
+      setRideMinimumFare(String(res.settings.rideMinimumFare));
       setEnabledModes(res.settings.enabledModes);
       setNearestWindowSeconds(String(res.settings.nearestWindowSeconds));
       setMaxAssignmentMinutes(String(res.settings.maxAssignmentMinutes));
@@ -270,6 +278,36 @@ export default function SettingsPage() {
                 A shopping order has no pickup point to price by distance the way a parcel does — this flat fee
                 is added to the items cost instead.
               </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-ink-500" htmlFor="ride-rate">
+                Ride rate per km (UGX)
+              </label>
+              <input
+                id="ride-rate"
+                inputMode="numeric"
+                value={rideRatePerKm}
+                onChange={(e) => setRideRatePerKm(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="1500"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+              <p className="text-xs text-ink-500">
+                A passenger ride ("call a rider to pick you up and take you somewhere") is priced the same way
+                as a parcel — distance × rate — but carrying a person is its own fare, tracked separately.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-ink-500" htmlFor="ride-minimum-fare">
+                Minimum ride fare (UGX)
+              </label>
+              <input
+                id="ride-minimum-fare"
+                inputMode="numeric"
+                value={rideMinimumFare}
+                onChange={(e) => setRideMinimumFare(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="2500"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
             </div>
           </section>
 

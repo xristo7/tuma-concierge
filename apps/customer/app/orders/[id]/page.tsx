@@ -309,18 +309,19 @@ export default function OrderDetailPage() {
     <div className="space-y-6 px-4 pb-24 pt-4">
       <header className="space-y-1">
         <h1 className="text-xl font-bold text-ink">{orderTitle(order)}</h1>
-        <p className="text-sm font-semibold text-green">{stageLabel(order.stage, order.type)}</p>
+        <p className="text-sm font-semibold text-green">{stageLabel(order.stage, order.type, !!order.is_ride)}</p>
         {order.type === "parcel" && order.pickup_area && (
           <p className="flex items-center gap-1.5 text-sm text-ink-500">
             <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
-            Pickup: {order.pickup_area}
+            {order.is_ride ? "Pickup point: " : "Pickup: "}
+            {order.pickup_area}
             {order.pickup_address ? ` · ${order.pickup_address}` : ""}
           </p>
         )}
         {order.destination_area && (
           <p className="flex items-center gap-1.5 text-sm text-ink-500">
             <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
-            {order.type === "parcel" ? "Deliver to: " : ""}
+            {order.type === "parcel" ? (order.is_ride ? "Destination: " : "Deliver to: ") : ""}
             {order.destination_area}
             {order.destination_address ? ` · ${order.destination_address}` : ""}
           </p>
@@ -420,7 +421,7 @@ export default function OrderDetailPage() {
 
       {order.type === "parcel" && (
         <section className="home-card flex justify-between text-sm font-semibold">
-          <span>Delivery fee</span>
+          <span>{order.is_ride ? "Fare" : "Delivery fee"}</span>
           <span>{formatUgx(order.delivery_fee ?? order.final_total ?? order.estimated_total)}</span>
         </section>
       )}
@@ -449,7 +450,9 @@ export default function OrderDetailPage() {
 
           {order.rider_id && !pendingPayment && (
             <>
-              <p className="text-sm text-ink-500">A rider is ready. Pay to send your {order.type === "parcel" ? "parcel" : "list"}.</p>
+              <p className="text-sm text-ink-500">
+                A rider is ready. {order.is_ride ? "Pay to confirm your ride." : `Pay to send your ${order.type === "parcel" ? "parcel" : "list"}.`}
+              </p>
               {!online && (
                 <p className="rounded-lg bg-gold/10 px-3 py-2 text-xs font-semibold text-ink-500">
                   You&apos;re offline — paying needs a connection. Reconnect to continue.
@@ -516,7 +519,11 @@ export default function OrderDetailPage() {
         {(order.stage === "Shop" || order.stage === "Substitute") && (
           <>
             <p className="text-sm text-ink-500">
-              {order.type === "parcel" ? "Your rider is picking up the parcel." : "Your rider is shopping."}
+              {order.is_ride
+                ? "Your rider is getting ready to head your way."
+                : order.type === "parcel"
+                  ? "Your rider is picking up the parcel."
+                  : "Your rider is shopping."}
             </p>
             {pendingGroups.length > 0 && (
               <ul className="space-y-2">
@@ -573,16 +580,32 @@ export default function OrderDetailPage() {
 
         {order.stage === "Approve" && <p className="text-sm text-ink-500">Waiting for your rider to start delivery.</p>}
 
-        {(order.stage === "Deliver" || order.stage === "Arrived") && (
+        {order.is_ride && order.stage === "Deliver" && (
+          <p className="text-sm text-ink-500">
+            Your rider is heading to pick you up{order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}.
+          </p>
+        )}
+
+        {order.is_ride && order.stage === "Arrived" && (
+          <p className="text-sm text-ink-500">Your rider is here! Head out to meet them.</p>
+        )}
+
+        {(!order.is_ride
+          ? order.stage === "Deliver" || order.stage === "Arrived"
+          : order.stage === "PickedUp") && (
           <>
             <p className="text-sm text-ink-500">
-              {order.stage === "Arrived"
-                ? "Your rider has arrived!"
-                : `Your rider is on the way${order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}.`}
+              {order.is_ride
+                ? "You're on your way to your destination."
+                : order.stage === "Arrived"
+                  ? "Your rider has arrived!"
+                  : `Your rider is on the way${order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}.`}
             </p>
             {order.pin_code && (
               <div className="rounded-xl bg-gold/10 p-3 text-center">
-                <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Handover PIN</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                  {order.is_ride ? "Trip PIN" : "Handover PIN"}
+                </p>
                 <p className="text-2xl font-bold tracking-[0.3em] text-ink">{order.pin_code}</p>
               </div>
             )}
@@ -591,14 +614,16 @@ export default function OrderDetailPage() {
               onClick={() => run(() => api.handoverOrder(orderId, order.pin_code as string))}
               className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
             >
-              Confirm I received my {order.type === "parcel" ? "parcel" : "order"}
+              {order.is_ride ? "Confirm trip complete" : `Confirm I received my ${order.type === "parcel" ? "parcel" : "order"}`}
             </button>
           </>
         )}
 
         {order.stage === "Handover" && (
           <p className="text-sm text-ink-500">
-            Handover confirmed — thanks! Your rider will close out the order to complete payment.
+            {order.is_ride
+              ? "Trip confirmed — thanks for riding! Your rider will close out the trip to complete payment."
+              : "Handover confirmed — thanks! Your rider will close out the order to complete payment."}
           </p>
         )}
 
