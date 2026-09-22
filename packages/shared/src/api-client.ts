@@ -744,9 +744,11 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         body: JSON.stringify({ body, menuItemId: menuItem?.id, menuItemName: menuItem?.name }),
       });
     },
-    async sendRestaurantChatImage(restaurantId: string, image: Blob) {
+    /** Mirrors sendChatMedia's own "type" + "file" multipart shape, so both composers behave identically. */
+    async sendRestaurantChatMedia(restaurantId: string, type: "image" | "voice", file: Blob) {
       const form = new FormData();
-      form.append("image", image, "photo.jpg");
+      form.append("type", type);
+      form.append("file", file, type === "image" ? "photo.jpg" : "voice.webm");
       const res = await f(`${root}/v1/restaurants/${restaurantId}/chat`, {
         method: "POST",
         headers: authHeaders(),
@@ -772,9 +774,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         body: JSON.stringify({ body }),
       });
     },
-    async replyRestaurantChatImage(customerId: string, image: Blob) {
+    async replyRestaurantChatMedia(customerId: string, type: "image" | "voice", file: Blob) {
       const form = new FormData();
-      form.append("image", image, "photo.jpg");
+      form.append("type", type);
+      form.append("file", file, type === "image" ? "photo.jpg" : "voice.webm");
       const res = await f(`${root}/v1/restaurants/me/chat/${customerId}`, {
         method: "POST",
         headers: authHeaders(),

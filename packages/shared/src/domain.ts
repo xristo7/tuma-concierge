@@ -502,7 +502,7 @@ export type RestaurantChatMessage = {
   customer_id: string;
   sender_role: "customer" | "restaurant";
   body: string | null;
-  type: "text" | "image";
+  type: "text" | "image" | "voice";
   media_key: string | null;
   menu_item_id: string | null;
   menu_item_name: string | null;

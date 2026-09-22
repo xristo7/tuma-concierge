@@ -9,10 +9,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname === "/login" || pathname === "/forgot-password" || pathname.startsWith("/verify");
   // "/chat" itself is a normal list screen (conversations) with the usual
-  // header + nav; a specific thread ("/chat/<counterpartId>") takes over
-  // the header only — the bottom nav stays so people can jump straight
-  // back to the rest of the app without leaving chat first.
-  const isChatThread = pathname.startsWith("/chat/");
+  // header + nav; a specific thread ("/chat/<counterpartId>" for order
+  // chat, or "/restaurants/<id>/chat" for restaurant chat) takes over the
+  // header only — the bottom nav stays so people can jump straight back to
+  // the rest of the app without leaving chat first.
+  const isChatThread = pathname.startsWith("/chat/") || /^\/restaurants\/[^/]+\/chat$/.test(pathname);
   const showHeader = !isAuthPage && !isChatThread;
   const showNav = !isAuthPage;
 

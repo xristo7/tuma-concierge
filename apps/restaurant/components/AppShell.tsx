@@ -8,7 +8,11 @@ import { BrandHeader } from "./BrandHeader";
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthPage = pathname === "/login" || pathname === "/forgot-password" || pathname.startsWith("/verify");
-  const showHeader = !isAuthPage;
+  // A specific chat thread ("/chat/<customerId>") is a full-screen takeover
+  // with its own header — the bottom nav stays so the owner can jump
+  // straight back to the rest of the app without leaving chat first.
+  const isChatThread = pathname.startsWith("/chat/");
+  const showHeader = !isAuthPage && !isChatThread;
   const showNav = !isAuthPage;
 
   return (

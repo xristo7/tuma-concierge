@@ -3,10 +3,15 @@
  * (chat_messages, hard-wired to customer/rider order pairs) — a restaurant
  * owner isn't a first-class role, and this thread isn't order-scoped: a
  * customer can ask a restaurant about a dish before ever ordering, and the
- * thread stays continuous across orders. See migrations/0037_restaurant_chat.sql.
+ * thread stays continuous across orders. See migrations/0037_restaurant_chat.sql
+ * and 0038_restaurant_chat_voice.sql.
+ *
+ * Mirrors the order chat's own multipart convention (form fields "type"
+ * ("image" | "voice") + "file") rather than inventing a different one, so
+ * both composers behave identically.
  */
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { db } from "../db/client.js";
@@ -19,11 +24,14 @@ export const restaurantChatRoutes = new Hono();
 
 type Row = Record<string, unknown>;
 
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
-const ALLOWED_PHOTO_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const ALLOWED_IMAGE_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_VOICE_BYTES = 5 * 1024 * 1024;
+const ALLOWED_VOICE_MIME = new Set(["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav"]);
 
 function preview(type: string, body: string | null): string {
   if (type === "image") return "📷 Photo";
+  if (type === "voice") return "🎤 Voice message";
   return body && body.length > 60 ? `${body.slice(0, 60)}…` : body || "";
 }
 
@@ -35,6 +43,29 @@ async function restaurantByOwner(ownerId: string): Promise<Row | undefined> {
 async function restaurantById(id: string): Promise<Row | undefined> {
   const res = await db.execute({ sql: "SELECT * FROM restaurants WHERE id = ?", args: [id] });
   return res.rows[0] as Row | undefined;
+}
+
+async function storeMedia(
+  c: Context,
+  keyPrefix: string,
+): Promise<{ type: "image" | "voice"; key: string } | { error: string; status: 400 }> {
+  const form = await c.req.formData().catch(() => null);
+  const file = form?.get("file");
+  const type = form?.get("type");
+  if (!(file instanceof File) || (type !== "image" && type !== "voice")) {
+    return { error: "invalid_body", status: 400 };
+  }
+  const allowed = type === "image" ? ALLOWED_IMAGE_MIME : ALLOWED_VOICE_MIME;
+  const maxBytes = type === "image" ? MAX_IMAGE_BYTES : MAX_VOICE_BYTES;
+  if (!allowed.has(baseMimeType(file.type))) return { error: "unsupported_file_type", status: 400 };
+  if (file.size > maxBytes) return { error: "file_too_large", status: 400 };
+
+  const messageId = newId("rmsg");
+  const ext = extensionForMime(file.type, type === "image" ? "jpg" : "webm");
+  const key = `${keyPrefix}/${messageId}.${ext}`;
+  const bucket = getR2Bucket();
+  await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
+  return { type, key };
 }
 
 // ---------------------------------------------------------------------------
@@ -69,29 +100,19 @@ restaurantChatRoutes.post("/restaurants/:id/chat", requireAuth, requireRole("cus
   const restaurant = await restaurantById(restaurantId);
   if (!restaurant) return c.json({ error: "not_found" }, 404);
 
-  const contentType = c.req.header("content-type") || "";
-
-  if (contentType.includes("multipart/form-data")) {
-    const form = await c.req.formData().catch(() => null);
-    const file = form?.get("image");
-    if (!(file instanceof File)) return c.json({ error: "missing_image" }, 400);
-    if (!ALLOWED_PHOTO_MIME.has(baseMimeType(file.type))) return c.json({ error: "unsupported_file_type" }, 400);
-    if (file.size > MAX_PHOTO_BYTES) return c.json({ error: "file_too_large" }, 400);
+  if ((c.req.header("content-type") ?? "").includes("multipart/form-data")) {
+    const stored = await storeMedia(c, `restaurants/${restaurantId}/chat/${user.sub}`);
+    if ("error" in stored) return c.json({ error: stored.error }, stored.status);
 
     const messageId = newId("rmsg");
-    const ext = extensionForMime(file.type, "jpg");
-    const key = `restaurants/${restaurantId}/chat/${user.sub}/${messageId}.${ext}`;
-    const bucket = getR2Bucket();
-    await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
-
     await db.execute({
       sql: `INSERT INTO restaurant_chat_messages (id, restaurant_id, customer_id, sender_role, type, media_key)
-            VALUES (?, ?, ?, 'customer', 'image', ?)`,
-      args: [messageId, restaurantId, user.sub, key],
+            VALUES (?, ?, ?, 'customer', ?, ?)`,
+      args: [messageId, restaurantId, user.sub, stored.type, stored.key],
     });
     notifyUser(restaurant.owner_id as string, {
       title: user.name || "New message",
-      body: preview("image", null),
+      body: preview(stored.type, null),
       url: `/chat/${user.sub}`,
       tag: `restaurant-chat-${restaurantId}-${user.sub}`,
     }).catch(() => {});
@@ -173,29 +194,19 @@ restaurantChatRoutes.post("/restaurants/me/chat/:customerId", requireAuth, requi
   const restaurant = await restaurantByOwner(user.sub);
   if (!restaurant) return c.json({ error: "not_found" }, 404);
 
-  const contentType = c.req.header("content-type") || "";
-
-  if (contentType.includes("multipart/form-data")) {
-    const form = await c.req.formData().catch(() => null);
-    const file = form?.get("image");
-    if (!(file instanceof File)) return c.json({ error: "missing_image" }, 400);
-    if (!ALLOWED_PHOTO_MIME.has(baseMimeType(file.type))) return c.json({ error: "unsupported_file_type" }, 400);
-    if (file.size > MAX_PHOTO_BYTES) return c.json({ error: "file_too_large" }, 400);
+  if ((c.req.header("content-type") ?? "").includes("multipart/form-data")) {
+    const stored = await storeMedia(c, `restaurants/${restaurant.id}/chat/${customerId}`);
+    if ("error" in stored) return c.json({ error: stored.error }, stored.status);
 
     const messageId = newId("rmsg");
-    const ext = extensionForMime(file.type, "jpg");
-    const key = `restaurants/${restaurant.id}/chat/${customerId}/${messageId}.${ext}`;
-    const bucket = getR2Bucket();
-    await bucket.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
-
     await db.execute({
       sql: `INSERT INTO restaurant_chat_messages (id, restaurant_id, customer_id, sender_role, type, media_key)
-            VALUES (?, ?, ?, 'restaurant', 'image', ?)`,
-      args: [messageId, restaurant.id as string, customerId, key],
+            VALUES (?, ?, ?, 'restaurant', ?, ?)`,
+      args: [messageId, restaurant.id as string, customerId, stored.type, stored.key],
     });
     notifyUser(customerId, {
       title: (restaurant.name as string) || "New message",
-      body: preview("image", null),
+      body: preview(stored.type, null),
       url: `/chat/${restaurant.id}`,
       tag: `restaurant-chat-${restaurant.id}-${customerId}`,
     }).catch(() => {});
@@ -260,6 +271,6 @@ restaurantChatRoutes.get("/restaurant-chat/media/:messageId", requireAuth, async
   if (!object) return c.json({ error: "not_found" }, 404);
 
   return new Response(object.body, {
-    headers: uploadResponseHeaders(object.httpMetadata?.contentType, "image/jpeg"),
+    headers: uploadResponseHeaders(object.httpMetadata?.contentType, "application/octet-stream"),
   });
 });
