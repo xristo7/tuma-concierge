@@ -146,6 +146,11 @@ export default function RestaurantPage() {
   const [delivery, setDelivery] = useState<PointState>(emptyPoint);
   const [paymentRail, setPaymentRail] = useState<"escrow" | "float">("escrow");
   const [busy, setBusy] = useState(false);
+  const [deliverySettings, setDeliverySettings] = useState<{
+    deliveryRatePerKm: number;
+    minimumDeliveryFee: number;
+    shoppingDeliveryFee: number;
+  } | null>(null);
 
   useEffect(() => {
     Promise.all([api.getRestaurant(id), api.getRestaurantMenu(id)])
@@ -155,6 +160,16 @@ export default function RestaurantPage() {
       })
       .catch((err) => setError(errorMessage(err)));
     api.getLocations().then((res) => setLocations(res.locations)).catch(() => {});
+    api
+      .getSettings()
+      .then((res) =>
+        setDeliverySettings({
+          deliveryRatePerKm: res.settings.deliveryRatePerKm,
+          minimumDeliveryFee: res.settings.minimumDeliveryFee,
+          shoppingDeliveryFee: res.settings.shoppingDeliveryFee,
+        }),
+      )
+      .catch(() => {});
   }, [id]);
 
   function addToCart(item: MenuItem, line: { unitPrice: number; choiceIds: string[]; choiceNames: string[]; quantity: number }) {
@@ -177,12 +192,19 @@ export default function RestaurantPage() {
   const itemsTotal = cart.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
   const cartCount = cart.reduce((sum, l) => sum + l.quantity, 0);
 
+  // Mirrors the server's own formula (apps/api/src/restaurants/customer.ts)
+  // so this is a real estimate, not just a placeholder — distance-priced
+  // when both the restaurant and the destination have coordinates, else the
+  // same flat fee the server falls back to. Only null before settings load.
   const estimatedDeliveryFee = useMemo(() => {
-    if (!restaurant?.lat || !restaurant?.lng) return null;
+    if (!deliverySettings) return null;
     const resolved = resolvePoint(delivery, locations);
-    if (resolved.lat == null || resolved.lng == null) return null;
-    return haversineKm(restaurant.lat, restaurant.lng, resolved.lat, resolved.lng);
-  }, [restaurant, delivery, locations]);
+    if (restaurant?.lat != null && restaurant?.lng != null && resolved.lat != null && resolved.lng != null) {
+      const km = haversineKm(restaurant.lat, restaurant.lng, resolved.lat, resolved.lng);
+      return Math.max(Math.round(km * deliverySettings.deliveryRatePerKm), deliverySettings.minimumDeliveryFee);
+    }
+    return deliverySettings.shoppingDeliveryFee;
+  }, [restaurant, delivery, locations, deliverySettings]);
 
   async function checkout() {
     const d = resolvePoint(delivery, locations);
@@ -249,7 +271,11 @@ export default function RestaurantPage() {
           </div>
           <div className="flex items-center justify-between text-sm text-ink-500">
             <span>Delivery fee</span>
-            <span>{estimatedDeliveryFee != null ? "Calculated at checkout" : "Set your location"}</span>
+            <span>{estimatedDeliveryFee != null ? `~${formatUgx(estimatedDeliveryFee)}` : "Loading…"}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-[var(--border-faint)] pt-1.5 text-sm font-bold text-ink">
+            <span>Estimated total</span>
+            <span>{formatUgx(itemsTotal + (estimatedDeliveryFee ?? 0))}</span>
           </div>
         </div>
 
