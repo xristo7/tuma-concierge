@@ -7,6 +7,9 @@ import type {
   AdminStats,
   AuthUser,
   AvailableJob,
+  Call,
+  CallProviderIdentity,
+  CallsAdminSettings,
   ChatMessage,
   ChatThread,
   ChatThreadDetail,
@@ -16,12 +19,14 @@ import type {
   DeliverySettings,
   FailedPayment,
   IntegrationsStatus,
+  IncomingCall,
   ListDetail,
   ListItem,
   ListSummary,
   MatchingMode,
   OrderDetail,
   OrderRow,
+  SdpDescription,
   OrderType,
   Payment,
   PaymentProviderIdentity,
@@ -740,7 +745,7 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     // order chat (customer/rider). One continuous thread per (restaurant,
     // customer) pair; a message can optionally reference a menu item.
     async getRestaurantChat(restaurantId: string) {
-      return request<{ restaurantName: string; messages: RestaurantChatMessage[] }>(
+      return request<{ restaurantName: string; restaurantOwnerId: string; messages: RestaurantChatMessage[] }>(
         `/v1/restaurants/${restaurantId}/chat`,
       );
     },
@@ -849,6 +854,60 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async deleteMobileNumber(id: string) {
       return request<{ ok: true }>(`/v1/mobile-numbers/${id}`, { method: "DELETE" });
+    },
+
+    // Voice calls — see apps/api/src/calls/routes.ts. Provider-agnostic at
+    // this layer; the client picks Cloudflare-specific negotiation calls
+    // only once it sees call.provider === "cloudflare".
+    async startCall(input: { calleeId: string; orderId?: string; restaurantId?: string }) {
+      return request<{ call: Call }>("/v1/calls", { method: "POST", body: JSON.stringify(input) });
+    },
+    async getIncomingCall() {
+      return request<{ call: IncomingCall | null }>("/v1/calls/incoming");
+    },
+    async getCall(id: string) {
+      return request<{ call: Call }>(`/v1/calls/${id}`);
+    },
+    async acceptCall(id: string) {
+      return request<{ call: Call }>(`/v1/calls/${id}/accept`, { method: "POST" });
+    },
+    async endCall(id: string, reason: "declined" | "missed" | "ended") {
+      return request<{ call: Call }>(`/v1/calls/${id}/end`, { method: "POST", body: JSON.stringify({ reason }) });
+    },
+    async publishCallSession(id: string, offer: SdpDescription) {
+      return request<{ sessionId: string; answer: SdpDescription }>(`/v1/calls/${id}/publish`, {
+        method: "POST",
+        body: JSON.stringify({ sdp: offer.sdp }),
+      });
+    },
+    async pullRemoteCallTrack(id: string) {
+      return request<{ requiresRenegotiation: boolean; offer?: SdpDescription }>(`/v1/calls/${id}/pull-remote`, {
+        method: "POST",
+      });
+    },
+    async renegotiateCall(id: string, answer: SdpDescription) {
+      return request<{ ok: true }>(`/v1/calls/${id}/renegotiate`, { method: "POST", body: JSON.stringify({ sdp: answer.sdp }) });
+    },
+
+    // Admin — calls provider toggle + credentials (mirrors the payments
+    // provider/credentials endpoints just above).
+    async adminGetCallsSettings() {
+      return request<CallsAdminSettings>("/v1/admin/calls-settings");
+    },
+    async adminSetCallsProvider(provider: CallProviderIdentity) {
+      return request<{ activeProvider: CallProviderIdentity }>("/v1/admin/calls-settings", {
+        method: "PUT",
+        body: JSON.stringify({ provider }),
+      });
+    },
+    async adminSaveCallCredentials(provider: Exclude<CallProviderIdentity, "mock">, fields: Record<string, string>) {
+      return request<{ changed: string[] }>(`/v1/admin/calls/credentials/${provider}`, {
+        method: "PUT",
+        body: JSON.stringify({ fields }),
+      });
+    },
+    async adminClearCallCredential(provider: Exclude<CallProviderIdentity, "mock">, field: string) {
+      return request<{ ok: true }>(`/v1/admin/calls/credentials/${provider}/${field}`, { method: "DELETE" });
     },
 
     // Customer wallet — closed-loop store credit (top up, spend, no cash-out).

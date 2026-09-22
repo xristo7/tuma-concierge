@@ -84,6 +84,7 @@ restaurantChatRoutes.get("/restaurants/:id/chat", requireAuth, async (c) => {
   });
   return c.json({
     restaurantName: restaurant.name,
+    restaurantOwnerId: restaurant.owner_id,
     messages: res.rows,
   });
 });

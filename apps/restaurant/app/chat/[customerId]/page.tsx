@@ -1,13 +1,14 @@
 "use client";
 
 import type { RestaurantChatMessage } from "@tuma/shared";
-import { ArrowLeft, Camera, Mic, Pause, Play, Send, Square, Trash2, User } from "lucide-react";
+import { ArrowLeft, Camera, Mic, Pause, Phone, Play, Send, Square, Trash2, User } from "lucide-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../../lib/api";
+import { useCalls } from "../../../lib/calls-context";
 import { compressImage } from "../../../lib/image-compress";
 import { useLivePolling } from "../../../lib/use-live-polling";
 import { useViewportHeight } from "../../../lib/use-viewport-height";
@@ -120,6 +121,7 @@ export default function RestaurantChatThreadPage() {
   const { customerId } = useParams<{ customerId: string }>();
   const viewportHeight = useViewportHeight();
   const maxRecordSeconds = useVoiceNoteMaxSeconds();
+  const { startCall } = useCalls();
 
   const [customerName, setCustomerName] = useState<string | null>(null);
   const [messages, setMessages] = useState<RestaurantChatMessage[]>([]);
@@ -289,6 +291,14 @@ export default function RestaurantChatThreadPage() {
             <User className="h-5 w-5" strokeWidth={2} aria-hidden />
           </span>
           <h1 className="min-w-0 flex-1 truncate text-base font-bold text-ink">{customerName ?? "Chat"}</h1>
+          <button
+            type="button"
+            onClick={() => startCall({ calleeId: customerId })}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green/15 text-green"
+            aria-label="Call"
+          >
+            <Phone className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
+          </button>
         </header>
 
         <PhotoProvider>

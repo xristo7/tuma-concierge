@@ -206,6 +206,9 @@ export type DeliverySettings = {
    * out everything. See POST /riders/me/wallet/withdraw. */
   riderMinimumBalanceEnabled: boolean;
   riderMinimumBalanceAmount: number;
+  /** Which voice-calling backend "call" buttons currently use — see
+   * apps/api/src/calls/. Read-only here; change with PUT /admin/calls-settings. */
+  callsActiveProvider: CallProviderIdentity;
 } & MonetizationSettings;
 
 export type ServiceFeeType = "flat" | "percent";
@@ -555,6 +558,55 @@ export type SavedMobileNumber = {
   is_primary: number;
   created_at: string;
   updated_at: string;
+};
+
+/** "mock" is the safe default (full ring/accept/decline flow, no real
+ * audio); "cloudflare" is the first provider with a real adapter; "twilio"
+ * and "agora" are selectable in admin but not wired to a real SDK yet —
+ * see apps/api/src/calls/. */
+export type CallProviderIdentity = "mock" | "cloudflare" | "twilio" | "agora";
+
+export type CallStatus = "ringing" | "accepted" | "declined" | "missed" | "ended" | "failed";
+
+export type Call = {
+  id: string;
+  caller_id: string;
+  callee_id: string;
+  /** Only set when the caller app passed context — informational only. */
+  order_id: string | null;
+  restaurant_id: string | null;
+  provider: CallProviderIdentity;
+  status: CallStatus;
+  caller_session_id: string | null;
+  callee_session_id: string | null;
+  created_at: string;
+  answered_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+};
+
+/** The GET /calls/incoming shape — a Call row plus the caller's name, so
+ * the callee's ringing screen doesn't need a second lookup. */
+export type IncomingCall = Call & { caller_name: string | null };
+
+export type SdpDescription = { type: "offer" | "answer"; sdp: string };
+
+export type CallCredentialFieldStatus = {
+  key: string;
+  label: string;
+  secret: boolean;
+  required: boolean;
+  placeholder?: string;
+  helpText?: string;
+  set: boolean;
+};
+
+export type CallsAdminSettings = {
+  activeProvider: CallProviderIdentity;
+  providers: Record<
+    Exclude<CallProviderIdentity, "mock">,
+    { configured: boolean; fields: CallCredentialFieldStatus[] }
+  >;
 };
 
 export type UserStatus = "active" | "suspended";

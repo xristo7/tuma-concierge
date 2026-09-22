@@ -5,6 +5,7 @@ import { hasPermission, requirePermission } from "../admin/permissions.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { clientIp } from "../lib/ratelimit.js";
 import {
+  getActiveCallProvider,
   getActiveProviders,
   getDeliverySettings,
   getMatchingSettings,
@@ -14,6 +15,7 @@ import {
   getRiderReserveSettings,
   getVoiceNoteMaxSeconds,
   getWalletSettings,
+  setActiveCallProvider,
   setActiveProviders,
   setMatchingModesEnabled,
   setMonetizationSettings,
@@ -21,15 +23,23 @@ import {
   setPlatformEnvironment,
   setRiderReserveSettings,
   setSetting,
+  type CallProviderIdentity,
   type PaymentProviderIdentity,
 } from "../lib/settings.js";
+import {
+  CALL_PROVIDER_CREDENTIAL_FIELDS,
+  callCredentialFieldStatus,
+  clearCallCredential,
+  isCallProviderConfigured,
+  saveCallCredentials,
+} from "../calls/credentials.js";
 import { clearCredential, PROVIDER_CREDENTIAL_FIELDS, saveCredentials } from "../payments/credentials.js";
 import { paymentsIntegrationStatus } from "../payments/service.js";
 
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve] =
+  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve, callsActiveProvider] =
     await Promise.all([
       getDeliverySettings(),
       getMatchingSettings(),
@@ -40,6 +50,7 @@ async function fullSettings() {
       getMonetizationSettings(),
       getPlatformEnvironment(),
       getRiderReserveSettings(),
+      getActiveCallProvider(),
     ]);
   return {
     ...delivery,
@@ -53,6 +64,7 @@ async function fullSettings() {
     platformEnvironment,
     riderMinimumBalanceEnabled: riderReserve.enabled,
     riderMinimumBalanceAmount: riderReserve.amount,
+    callsActiveProvider,
     ...monetization,
   };
 }
@@ -348,6 +360,136 @@ settingsRoutes.delete(
       ip: clientIp(c),
     });
 
+    return c.json({ ok: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Voice calls — which provider is live, and per-provider credentials. Same
+// shape and same permission gate as the payments provider/credentials
+// endpoints above, deliberately — see ../calls/credentials.ts and
+// ../calls/routes.ts.
+// ---------------------------------------------------------------------------
+
+const callProviderParam = z.enum(["mock", "cloudflare", "twilio", "agora"]);
+const configurableCallProvider = z.enum(["cloudflare", "twilio", "agora"]);
+
+settingsRoutes.get(
+  "/admin/calls-settings",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const [activeProvider, cloudflare, twilio, agora] = await Promise.all([
+      getActiveCallProvider(),
+      callCredentialFieldStatus("cloudflare"),
+      callCredentialFieldStatus("twilio"),
+      callCredentialFieldStatus("agora"),
+    ]);
+    return c.json({
+      activeProvider,
+      providers: {
+        cloudflare: { configured: await isCallProviderConfigured("cloudflare"), fields: cloudflare },
+        twilio: { configured: await isCallProviderConfigured("twilio"), fields: twilio },
+        agora: { configured: await isCallProviderConfigured("agora"), fields: agora },
+      },
+    });
+  },
+);
+
+const setCallProviderSchema = z.object({ provider: callProviderParam });
+
+settingsRoutes.put(
+  "/admin/calls-settings",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const parsed = setCallProviderSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+    const before = await getActiveCallProvider();
+    if (parsed.data.provider !== "mock" && !(await isCallProviderConfigured(parsed.data.provider as CallProviderIdentity))) {
+      return c.json(
+        { error: "not_configured", message: "Save that provider's credentials before switching to it" },
+        409,
+      );
+    }
+
+    await setActiveCallProvider(parsed.data.provider);
+    if (before !== parsed.data.provider) {
+      await logActivity({
+        actor: user,
+        action: "calls.provider.switch",
+        entityType: "settings",
+        summary: `Switched voice calls from ${before} to ${parsed.data.provider}`,
+        before: { callsActiveProvider: before },
+        after: { callsActiveProvider: parsed.data.provider },
+        ip: clientIp(c),
+      });
+    }
+    return c.json({ activeProvider: parsed.data.provider });
+  },
+);
+
+settingsRoutes.put(
+  "/admin/calls/credentials/:provider",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const providerParsed = configurableCallProvider.safeParse(c.req.param("provider"));
+    if (!providerParsed.success) return c.json({ error: "invalid_provider" }, 400);
+    const provider = providerParsed.data;
+
+    const bodyParsed = saveCredentialsSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!bodyParsed.success) return c.json({ error: "invalid_body", issues: bodyParsed.error.issues }, 400);
+
+    const validKeys = new Set(CALL_PROVIDER_CREDENTIAL_FIELDS[provider].map((f) => f.key));
+    const unknown = Object.keys(bodyParsed.data.fields).filter((k) => !validKeys.has(k));
+    if (unknown.length > 0) return c.json({ error: "unknown_field", fields: unknown }, 400);
+
+    const changed = await saveCallCredentials(provider, bodyParsed.data.fields);
+    if (changed.length > 0) {
+      await logActivity({
+        actor: user,
+        action: "calls.credentials.update",
+        entityType: "call_credentials",
+        entityId: provider,
+        summary: `Updated ${provider} call credentials: ${changed.join(", ")}`,
+        ip: clientIp(c),
+      });
+    }
+    return c.json({ changed });
+  },
+);
+
+settingsRoutes.delete(
+  "/admin/calls/credentials/:provider/:field",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const providerParsed = configurableCallProvider.safeParse(c.req.param("provider"));
+    if (!providerParsed.success) return c.json({ error: "invalid_provider" }, 400);
+    const provider = providerParsed.data;
+
+    const field = c.req.param("field") ?? "";
+    const validKeys = new Set(CALL_PROVIDER_CREDENTIAL_FIELDS[provider].map((f) => f.key));
+    if (!validKeys.has(field)) return c.json({ error: "unknown_field" }, 400);
+
+    await clearCallCredential(provider, field);
+    await logActivity({
+      actor: user,
+      action: "calls.credentials.clear",
+      entityType: "call_credentials",
+      entityId: provider,
+      summary: `Cleared ${provider} call credential field: ${field}`,
+      ip: clientIp(c),
+    });
     return c.json({ ok: true });
   },
 );

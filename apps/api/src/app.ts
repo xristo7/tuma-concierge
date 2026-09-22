@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { mobileNumberRoutes } from "./account/mobile-numbers.js";
 import { adminRoutes } from "./admin/routes.js";
+import { callRoutes } from "./calls/routes.js";
 import { authRoutes } from "./auth/routes.js";
 import { locationRoutes } from "./locations/routes.js";
 import { orderRoutes } from "./orders/routes.js";
@@ -182,6 +183,7 @@ app.route("/v1", restaurantChatRoutes);
 app.route("/v1", userRoutes);
 app.route("/v1", locationRoutes);
 app.route("/v1", mobileNumberRoutes);
+app.route("/v1", callRoutes);
 app.route("/v1", settingsRoutes);
 app.route("/v1", walletRoutes);
 // adminRoutes' admin gate is scoped to /admin/* (see admin/routes.ts), so

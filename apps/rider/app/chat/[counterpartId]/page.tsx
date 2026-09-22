@@ -1,12 +1,13 @@
 "use client";
 
 import type { ChatThreadDetail } from "@tuma/shared";
-import { ArrowLeft, User } from "lucide-react";
+import { ArrowLeft, Phone, User } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
 import { api } from "../../../lib/api";
+import { useCalls } from "../../../lib/calls-context";
 import { useViewportHeight } from "../../../lib/use-viewport-height";
 
 export default function ChatThreadPage() {
@@ -16,6 +17,7 @@ export default function ChatThreadPage() {
   const [thread, setThread] = useState<ChatThreadDetail | null | undefined>(undefined);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const viewportHeight = useViewportHeight();
+  const { startCall } = useCalls();
 
   useEffect(() => {
     api
@@ -88,6 +90,14 @@ export default function ChatThreadPage() {
             )}
             <h1 className="min-w-0 flex-1 truncate text-base font-bold text-ink">{thread.counterpartName}</h1>
           </Link>
+          <button
+            type="button"
+            onClick={() => startCall({ calleeId: counterpartId, orderId: thread.orderId })}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green/15 text-green"
+            aria-label="Call"
+          >
+            <Phone className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
+          </button>
         </header>
         <OrderChat orderId={thread.orderId} variant="full" />
       </div>

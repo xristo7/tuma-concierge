@@ -1,13 +1,14 @@
 "use client";
 
 import type { RestaurantChatMessage } from "@tuma/shared";
-import { ArrowLeft, Camera, Mic, Pause, Play, Send, Square, Store, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, Mic, Pause, Phone, Play, Send, Square, Store, Trash2 } from "lucide-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../../../lib/api";
+import { useCalls } from "../../../../lib/calls-context";
 import { compressImage } from "../../../../lib/image-compress";
 import { useLivePolling } from "../../../../lib/use-live-polling";
 import { useViewportHeight } from "../../../../lib/use-viewport-height";
@@ -123,7 +124,9 @@ export default function RestaurantChatPage() {
   const viewportHeight = useViewportHeight();
   const maxRecordSeconds = useVoiceNoteMaxSeconds();
 
+  const { startCall } = useCalls();
   const [restaurantName, setRestaurantName] = useState<string | null>(null);
+  const [restaurantOwnerId, setRestaurantOwnerId] = useState<string | null>(null);
   const [messages, setMessages] = useState<RestaurantChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -148,6 +151,7 @@ export default function RestaurantChatPage() {
   const load = useCallback(async () => {
     const res = await api.getRestaurantChat(id);
     setRestaurantName(res.restaurantName);
+    setRestaurantOwnerId(res.restaurantOwnerId);
     setMessages(res.messages);
     return res;
   }, [id]);
@@ -304,6 +308,16 @@ export default function RestaurantChatPage() {
             <Store className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
           </span>
           <h1 className="min-w-0 flex-1 truncate text-base font-bold text-ink">{restaurantName ?? "Chat"}</h1>
+          {restaurantOwnerId && (
+            <button
+              type="button"
+              onClick={() => startCall({ calleeId: restaurantOwnerId, restaurantId: id })}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green/15 text-green"
+              aria-label="Call"
+            >
+              <Phone className="h-4.5 w-4.5" strokeWidth={2} aria-hidden />
+            </button>
+          )}
         </header>
 
         <PhotoProvider>
