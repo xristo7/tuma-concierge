@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from "../auth/middleware.js";
 import { clientIp } from "../lib/ratelimit.js";
 import {
   getActiveCallProvider,
+  getActiveMapsProvider,
   getActiveProviders,
   getDeliverySettings,
   getMatchingSettings,
@@ -16,6 +17,7 @@ import {
   getVoiceNoteMaxSeconds,
   getWalletSettings,
   setActiveCallProvider,
+  setActiveMapsProvider,
   setActiveProviders,
   setMatchingModesEnabled,
   setMonetizationSettings,
@@ -24,6 +26,7 @@ import {
   setRiderReserveSettings,
   setSetting,
   type CallProviderIdentity,
+  type MapsProviderIdentity,
   type PaymentProviderIdentity,
 } from "../lib/settings.js";
 import {
@@ -33,13 +36,21 @@ import {
   isCallProviderConfigured,
   saveCallCredentials,
 } from "../calls/credentials.js";
+import {
+  getMapsCredential,
+  isMapsProviderConfigured,
+  MAPS_PROVIDER_CREDENTIAL_FIELDS,
+  mapsCredentialFieldStatus,
+  clearMapsCredential as clearMapsCredentialField,
+  saveMapsCredentials,
+} from "../maps/credentials.js";
 import { clearCredential, PROVIDER_CREDENTIAL_FIELDS, saveCredentials } from "../payments/credentials.js";
 import { paymentsIntegrationStatus } from "../payments/service.js";
 
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve, callsActiveProvider] =
+  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve, callsActiveProvider, mapsActiveProvider] =
     await Promise.all([
       getDeliverySettings(),
       getMatchingSettings(),
@@ -51,7 +62,23 @@ async function fullSettings() {
       getPlatformEnvironment(),
       getRiderReserveSettings(),
       getActiveCallProvider(),
+      getActiveMapsProvider(),
     ]);
+
+  // The active provider's own key/token, handed to every signed-in client
+  // so it can init that provider's SDK — Google Maps JS / Mapbox GL both
+  // expect a browser-embedded key restricted by domain, same as their own
+  // docs recommend, so this isn't a secret leak the way a payment secret
+  // key would be. Only sent once the provider is actually configured;
+  // "streetmaps" needs neither and both stay null.
+  let mapsGoogleApiKey: string | null = null;
+  let mapsMapboxAccessToken: string | null = null;
+  if (mapsActiveProvider === "google") {
+    mapsGoogleApiKey = (await getMapsCredential("google", "apiKey")) ?? null;
+  } else if (mapsActiveProvider === "mapbox") {
+    mapsMapboxAccessToken = (await getMapsCredential("mapbox", "accessToken")) ?? null;
+  }
+
   return {
     ...delivery,
     ...matching,
@@ -65,6 +92,9 @@ async function fullSettings() {
     riderMinimumBalanceEnabled: riderReserve.enabled,
     riderMinimumBalanceAmount: riderReserve.amount,
     callsActiveProvider,
+    mapsActiveProvider,
+    mapsGoogleApiKey,
+    mapsMapboxAccessToken,
     ...monetization,
   };
 }
@@ -488,6 +518,134 @@ settingsRoutes.delete(
       entityType: "call_credentials",
       entityId: provider,
       summary: `Cleared ${provider} call credential field: ${field}`,
+      ip: clientIp(c),
+    });
+    return c.json({ ok: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Map provider — which backend location pickers/geocoding use, and
+// per-provider credentials. Same shape and same permission gate as the
+// voice-calls provider/credentials endpoints above, deliberately — see
+// ../maps/credentials.ts.
+// ---------------------------------------------------------------------------
+
+const mapsProviderParam = z.enum(["streetmaps", "google", "mapbox"]);
+const configurableMapsProvider = z.enum(["google", "mapbox"]);
+
+settingsRoutes.get(
+  "/admin/maps-settings",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const [activeProvider, google, mapbox] = await Promise.all([
+      getActiveMapsProvider(),
+      mapsCredentialFieldStatus("google"),
+      mapsCredentialFieldStatus("mapbox"),
+    ]);
+    return c.json({
+      activeProvider,
+      providers: {
+        google: { configured: await isMapsProviderConfigured("google"), fields: google },
+        mapbox: { configured: await isMapsProviderConfigured("mapbox"), fields: mapbox },
+      },
+    });
+  },
+);
+
+const setMapsProviderSchema = z.object({ provider: mapsProviderParam });
+
+settingsRoutes.put(
+  "/admin/maps-settings",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const parsed = setMapsProviderSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+    const before = await getActiveMapsProvider();
+    if (parsed.data.provider !== "streetmaps" && !(await isMapsProviderConfigured(parsed.data.provider as MapsProviderIdentity))) {
+      return c.json(
+        { error: "not_configured", message: "Save that provider's API key before switching to it" },
+        409,
+      );
+    }
+
+    await setActiveMapsProvider(parsed.data.provider);
+    if (before !== parsed.data.provider) {
+      await logActivity({
+        actor: user,
+        action: "maps.provider.switch",
+        entityType: "settings",
+        summary: `Switched maps from ${before} to ${parsed.data.provider}`,
+        before: { mapsActiveProvider: before },
+        after: { mapsActiveProvider: parsed.data.provider },
+        ip: clientIp(c),
+      });
+    }
+    return c.json({ activeProvider: parsed.data.provider });
+  },
+);
+
+settingsRoutes.put(
+  "/admin/maps/credentials/:provider",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const providerParsed = configurableMapsProvider.safeParse(c.req.param("provider"));
+    if (!providerParsed.success) return c.json({ error: "invalid_provider" }, 400);
+    const provider = providerParsed.data;
+
+    const bodyParsed = saveCredentialsSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!bodyParsed.success) return c.json({ error: "invalid_body", issues: bodyParsed.error.issues }, 400);
+
+    const validKeys = new Set(MAPS_PROVIDER_CREDENTIAL_FIELDS[provider].map((f) => f.key));
+    const unknown = Object.keys(bodyParsed.data.fields).filter((k) => !validKeys.has(k));
+    if (unknown.length > 0) return c.json({ error: "unknown_field", fields: unknown }, 400);
+
+    const changed = await saveMapsCredentials(provider, bodyParsed.data.fields);
+    if (changed.length > 0) {
+      await logActivity({
+        actor: user,
+        action: "maps.credentials.update",
+        entityType: "maps_credentials",
+        entityId: provider,
+        summary: `Updated ${provider} maps credentials: ${changed.join(", ")}`,
+        ip: clientIp(c),
+      });
+    }
+    return c.json({ changed });
+  },
+);
+
+settingsRoutes.delete(
+  "/admin/maps/credentials/:provider/:field",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const providerParsed = configurableMapsProvider.safeParse(c.req.param("provider"));
+    if (!providerParsed.success) return c.json({ error: "invalid_provider" }, 400);
+    const provider = providerParsed.data;
+
+    const field = c.req.param("field") ?? "";
+    const validKeys = new Set(MAPS_PROVIDER_CREDENTIAL_FIELDS[provider].map((f) => f.key));
+    if (!validKeys.has(field)) return c.json({ error: "unknown_field" }, 400);
+
+    await clearMapsCredentialField(provider, field);
+    await logActivity({
+      actor: user,
+      action: "maps.credentials.clear",
+      entityType: "maps_credentials",
+      entityId: provider,
+      summary: `Cleared ${provider} maps credential field: ${field}`,
       ip: clientIp(c),
     });
     return c.json({ ok: true });

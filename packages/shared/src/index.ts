@@ -96,4 +96,7 @@ export type {
   SdpDescription,
   CallCredentialFieldStatus,
   CallsAdminSettings,
+  MapsProviderIdentity,
+  MapsCredentialFieldStatus,
+  MapsAdminSettings,
 } from "./domain.js";

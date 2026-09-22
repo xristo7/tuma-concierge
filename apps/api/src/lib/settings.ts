@@ -59,6 +59,12 @@ const DEFAULTS = {
    * decline flow with no real audio, safe with zero setup; switching to a
    * real provider needs that provider's credentials saved first. */
   calls_active_provider: "mock",
+  /** Which map backend location pickers/geocoding across the customer,
+   * rider, and restaurant apps actually use — see ../maps/credentials.ts.
+   * "streetmaps" (OpenStreetMap tiles + Nominatim) needs no API key and is
+   * the safe default; "google"/"mapbox" only actually take over once an
+   * admin saves a working key for that provider (see getActiveMapsProvider). */
+  maps_active_provider: "streetmaps",
   /** Force every payment through the mock/simulated adapters, even when a
    * real provider has working credentials saved. Lets an admin test live
    * credentials without switching them live, or pull the whole platform
@@ -256,6 +262,18 @@ export async function getActiveCallProvider(): Promise<CallProviderIdentity> {
 
 export async function setActiveCallProvider(provider: CallProviderIdentity): Promise<void> {
   await setSetting("calls_active_provider", ALL_CALL_PROVIDER_IDENTITIES.includes(provider) ? provider : "mock");
+}
+
+export type MapsProviderIdentity = "streetmaps" | "google" | "mapbox";
+const ALL_MAPS_PROVIDER_IDENTITIES: MapsProviderIdentity[] = ["streetmaps", "google", "mapbox"];
+
+export async function getActiveMapsProvider(): Promise<MapsProviderIdentity> {
+  const raw = await getSetting("maps_active_provider");
+  return ALL_MAPS_PROVIDER_IDENTITIES.includes(raw as MapsProviderIdentity) ? (raw as MapsProviderIdentity) : "streetmaps";
+}
+
+export async function setActiveMapsProvider(provider: MapsProviderIdentity): Promise<void> {
+  await setSetting("maps_active_provider", ALL_MAPS_PROVIDER_IDENTITIES.includes(provider) ? provider : "streetmaps");
 }
 
 export async function getPaymentsDemoMode(): Promise<boolean> {

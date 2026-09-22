@@ -209,6 +209,14 @@ export type DeliverySettings = {
   /** Which voice-calling backend "call" buttons currently use — see
    * apps/api/src/calls/. Read-only here; change with PUT /admin/calls-settings. */
   callsActiveProvider: CallProviderIdentity;
+  /** Which map backend location pickers/geocoding currently use — see
+   * apps/api/src/maps/. Read-only here; change with PUT /admin/maps-settings. */
+  mapsActiveProvider: MapsProviderIdentity;
+  /** The active provider's own browser-embeddable key, only non-null once
+   * that provider is actually configured — apps/*\/components/LocationMapPicker.tsx
+   * falls back to "streetmaps" whenever the one it wants is null. */
+  mapsGoogleApiKey: string | null;
+  mapsMapboxAccessToken: string | null;
 } & MonetizationSettings;
 
 export type ServiceFeeType = "flat" | "percent";
@@ -607,6 +615,28 @@ export type CallsAdminSettings = {
     Exclude<CallProviderIdentity, "mock">,
     { configured: boolean; fields: CallCredentialFieldStatus[] }
   >;
+};
+
+/** "streetmaps" (OpenStreetMap tiles + Nominatim geocoding, no API key)
+ * is the safe default and needs nothing configured; "google" and "mapbox"
+ * are selectable in admin and fully wired to their real SDKs, but only
+ * actually take over once an admin saves a working key — see
+ * apps/api/src/maps/credentials.ts and apps/*\/components/LocationMapPicker.tsx. */
+export type MapsProviderIdentity = "streetmaps" | "google" | "mapbox";
+
+export type MapsCredentialFieldStatus = {
+  key: string;
+  label: string;
+  secret: boolean;
+  required: boolean;
+  placeholder?: string;
+  helpText?: string;
+  set: boolean;
+};
+
+export type MapsAdminSettings = {
+  activeProvider: MapsProviderIdentity;
+  providers: Record<Exclude<MapsProviderIdentity, "streetmaps">, { configured: boolean; fields: MapsCredentialFieldStatus[] }>;
 };
 
 export type UserStatus = "active" | "suspended";

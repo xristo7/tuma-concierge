@@ -23,6 +23,8 @@ import type {
   ListDetail,
   ListItem,
   ListSummary,
+  MapsAdminSettings,
+  MapsProviderIdentity,
   MatchingMode,
   OrderDetail,
   OrderRow,
@@ -908,6 +910,27 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async adminClearCallCredential(provider: Exclude<CallProviderIdentity, "mock">, field: string) {
       return request<{ ok: true }>(`/v1/admin/calls/credentials/${provider}/${field}`, { method: "DELETE" });
+    },
+
+    // Admin — maps provider toggle + credentials (mirrors the calls
+    // provider/credentials endpoints just above).
+    async adminGetMapsSettings() {
+      return request<MapsAdminSettings>("/v1/admin/maps-settings");
+    },
+    async adminSetMapsProvider(provider: MapsProviderIdentity) {
+      return request<{ activeProvider: MapsProviderIdentity }>("/v1/admin/maps-settings", {
+        method: "PUT",
+        body: JSON.stringify({ provider }),
+      });
+    },
+    async adminSaveMapsCredentials(provider: Exclude<MapsProviderIdentity, "streetmaps">, fields: Record<string, string>) {
+      return request<{ changed: string[] }>(`/v1/admin/maps/credentials/${provider}`, {
+        method: "PUT",
+        body: JSON.stringify({ fields }),
+      });
+    },
+    async adminClearMapsCredential(provider: Exclude<MapsProviderIdentity, "streetmaps">, field: string) {
+      return request<{ ok: true }>(`/v1/admin/maps/credentials/${provider}/${field}`, { method: "DELETE" });
     },
 
     // Customer wallet — closed-loop store credit (top up, spend, no cash-out).

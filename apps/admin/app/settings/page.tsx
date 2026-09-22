@@ -17,6 +17,7 @@ import {
 import { Banknote, CreditCard, FlaskConical, Mic, Route, Settings as SettingsIcon, Wallet as WalletIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CallsSettingsPanel } from "../../components/CallsSettingsPanel";
+import { MapsSettingsPanel } from "../../components/MapsSettingsPanel";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
@@ -419,6 +420,8 @@ export default function SettingsPage() {
           </section>
 
           <CallsSettingsPanel />
+
+          <MapsSettingsPanel />
 
           <section className="home-card space-y-3">
             <div className="flex items-center gap-2">
