@@ -401,8 +401,8 @@ settingsRoutes.delete(
 // ../calls/routes.ts.
 // ---------------------------------------------------------------------------
 
-const callProviderParam = z.enum(["mock", "cloudflare", "twilio", "agora"]);
-const configurableCallProvider = z.enum(["cloudflare", "twilio", "agora"]);
+const callProviderParam = z.enum(["mock", "cloudflare", "webrtc_p2p", "twilio", "agora"]);
+const configurableCallProvider = z.enum(["cloudflare", "webrtc_p2p", "twilio", "agora"]);
 
 settingsRoutes.get(
   "/admin/calls-settings",
@@ -410,9 +410,10 @@ settingsRoutes.get(
   requireRole("admin"),
   requirePermission("settings.manage"),
   async (c) => {
-    const [activeProvider, cloudflare, twilio, agora] = await Promise.all([
+    const [activeProvider, cloudflare, webrtcP2p, twilio, agora] = await Promise.all([
       getActiveCallProvider(),
       callCredentialFieldStatus("cloudflare"),
+      callCredentialFieldStatus("webrtc_p2p"),
       callCredentialFieldStatus("twilio"),
       callCredentialFieldStatus("agora"),
     ]);
@@ -420,6 +421,7 @@ settingsRoutes.get(
       activeProvider,
       providers: {
         cloudflare: { configured: await isCallProviderConfigured("cloudflare"), fields: cloudflare },
+        webrtc_p2p: { configured: await isCallProviderConfigured("webrtc_p2p"), fields: webrtcP2p },
         twilio: { configured: await isCallProviderConfigured("twilio"), fields: twilio },
         agora: { configured: await isCallProviderConfigured("agora"), fields: agora },
       },

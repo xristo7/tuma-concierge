@@ -94,6 +94,7 @@ export type {
   Call,
   IncomingCall,
   SdpDescription,
+  IceServer,
   CallCredentialFieldStatus,
   CallsAdminSettings,
   MapsProviderIdentity,

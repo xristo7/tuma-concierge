@@ -19,6 +19,7 @@ import type {
   DeliverySettings,
   FailedPayment,
   IntegrationsStatus,
+  IceServer,
   IncomingCall,
   ListDetail,
   ListItem,
@@ -889,6 +890,20 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async renegotiateCall(id: string, answer: SdpDescription) {
       return request<{ ok: true }>(`/v1/calls/${id}/renegotiate`, { method: "POST", body: JSON.stringify({ sdp: answer.sdp }) });
+    },
+
+    // "webrtc_p2p" — direct browser-to-browser, no media relay. Free STUN
+    // (+ optional admin-configured TURN) for NAT traversal; offer/answer
+    // exchange is just two SDP blobs on the call row (see
+    // apps/api/src/calls/routes.ts).
+    async getCallIceServers() {
+      return request<{ iceServers: IceServer[] }>("/v1/calls/ice-servers");
+    },
+    async postCallOffer(id: string, offer: SdpDescription) {
+      return request<{ ok: true }>(`/v1/calls/${id}/offer`, { method: "POST", body: JSON.stringify({ sdp: offer.sdp }) });
+    },
+    async postCallAnswer(id: string, answer: SdpDescription) {
+      return request<{ ok: true }>(`/v1/calls/${id}/answer`, { method: "POST", body: JSON.stringify({ sdp: answer.sdp }) });
     },
 
     // Admin — calls provider toggle + credentials (mirrors the payments

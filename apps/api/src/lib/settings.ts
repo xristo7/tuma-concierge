@@ -252,8 +252,8 @@ export async function setActiveProviders(providers: PaymentProviderIdentity[]): 
   await setSetting("payments_active_providers", JSON.stringify(deduped.length > 0 ? deduped : ["yo"]));
 }
 
-export type CallProviderIdentity = "mock" | "cloudflare" | "twilio" | "agora";
-const ALL_CALL_PROVIDER_IDENTITIES: CallProviderIdentity[] = ["mock", "cloudflare", "twilio", "agora"];
+export type CallProviderIdentity = "mock" | "cloudflare" | "webrtc_p2p" | "twilio" | "agora";
+const ALL_CALL_PROVIDER_IDENTITIES: CallProviderIdentity[] = ["mock", "cloudflare", "webrtc_p2p", "twilio", "agora"];
 
 export async function getActiveCallProvider(): Promise<CallProviderIdentity> {
   const raw = await getSetting("calls_active_provider");

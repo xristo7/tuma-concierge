@@ -8,13 +8,16 @@ import { api, errorMessage } from "../lib/api";
 const PROVIDER_LABELS: Record<CallProviderIdentity, string> = {
   mock: "Mock (no real audio)",
   cloudflare: "Cloudflare Realtime",
+  webrtc_p2p: "Free P2P (direct WebRTC)",
   twilio: "Twilio Voice",
   agora: "Agora",
 };
 
 const PROVIDER_DESCRIPTIONS: Record<CallProviderIdentity, string> = {
   mock: "Runs the full ring/accept/decline flow with no real audio — safe default, useful for testing.",
-  cloudflare: "WebRTC voice via Cloudflare Realtime SFU. The one real provider wired up so far.",
+  cloudflare: "WebRTC voice relayed through Cloudflare Realtime SFU.",
+  webrtc_p2p:
+    "Real audio, directly between the two phones — no relay service, no per-minute cost. Works out of the box via free public STUN; an optional TURN server below improves connection odds on restrictive mobile networks.",
   twilio: "Not wired to a real SDK yet — credentials can be saved in advance, but calls will fail until it's implemented.",
   agora: "Not wired to a real SDK yet — credentials can be saved in advance, but calls will fail until it's implemented.",
 };
@@ -171,7 +174,7 @@ export function CallsSettingsPanel() {
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="space-y-2.5">
-        {(["mock", "cloudflare", "twilio", "agora"] as const).map((provider) => {
+        {(["mock", "cloudflare", "webrtc_p2p", "twilio", "agora"] as const).map((provider) => {
           const isActive = settings.activeProvider === provider;
           const info = provider === "mock" ? null : settings.providers[provider];
           return (

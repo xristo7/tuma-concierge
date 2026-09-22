@@ -569,10 +569,12 @@ export type SavedMobileNumber = {
 };
 
 /** "mock" is the safe default (full ring/accept/decline flow, no real
- * audio); "cloudflare" is the first provider with a real adapter; "twilio"
- * and "agora" are selectable in admin but not wired to a real SDK yet —
- * see apps/api/src/calls/. */
-export type CallProviderIdentity = "mock" | "cloudflare" | "twilio" | "agora";
+ * audio); "cloudflare" and "webrtc_p2p" are real, working adapters —
+ * "cloudflare" relays audio through Realtime SFU, "webrtc_p2p" connects
+ * the two browsers directly (free STUN + optional TURN, no per-minute
+ * cost); "twilio" and "agora" are selectable in admin but not wired to a
+ * real SDK yet. See apps/api/src/calls/. */
+export type CallProviderIdentity = "mock" | "cloudflare" | "webrtc_p2p" | "twilio" | "agora";
 
 export type CallStatus = "ringing" | "accepted" | "declined" | "missed" | "ended" | "failed";
 
@@ -587,6 +589,11 @@ export type Call = {
   status: CallStatus;
   caller_session_id: string | null;
   callee_session_id: string | null;
+  /** "webrtc_p2p" only — non-trickle ICE, so each side's full SDP (offer or
+   * answer) lands here in one shot once its own candidate gathering
+   * finishes. See apps/api/src/calls/routes.ts POST .../offer|/answer. */
+  offer_sdp: string | null;
+  answer_sdp: string | null;
   created_at: string;
   answered_at: string | null;
   ended_at: string | null;
@@ -598,6 +605,10 @@ export type Call = {
 export type IncomingCall = Call & { caller_name: string | null };
 
 export type SdpDescription = { type: "offer" | "answer"; sdp: string };
+
+/** RTCIceServer's own shape, re-declared so this package doesn't need DOM
+ * lib types just for the field names — see GET /calls/ice-servers. */
+export type IceServer = { urls: string | string[]; username?: string; credential?: string };
 
 export type CallCredentialFieldStatus = {
   key: string;

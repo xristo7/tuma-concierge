@@ -37,6 +37,28 @@ export type CallEngineOptions = {
 
 const DEFAULT_POLL_MS = 2000;
 
+/** Non-trickle ICE needs the full candidate set gathered before the SDP is
+ * useful to the other side — resolves once gathering finishes, or after
+ * `timeoutMs` regardless (a slow network shouldn't hang the call forever;
+ * whatever candidates gathered by then are still usable). */
+function waitForIceGatheringComplete(pc: RTCPeerConnection, timeoutMs = 4000): Promise<void> {
+  if (pc.iceGatheringState === "complete") return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pc.removeEventListener("icegatheringstatechange", check);
+      resolve();
+    }, timeoutMs);
+    function check() {
+      if (pc.iceGatheringState === "complete") {
+        clearTimeout(timer);
+        pc.removeEventListener("icegatheringstatechange", check);
+        resolve();
+      }
+    }
+    pc.addEventListener("icegatheringstatechange", check);
+  });
+}
+
 export class CallEngine {
   private api: ApiClient;
   private onStateChange: (state: CallEngineState) => void;
@@ -92,7 +114,7 @@ export class CallEngine {
     try {
       const { call: updated } = await this.api.acceptCall(call.id);
       this.setState({ call: updated, phase: "connecting" });
-      await this.connectMedia(updated);
+      await this.connectMedia(updated, "callee");
       this.pollUntilResolved(call.id);
     } catch (err) {
       this.setState({ phase: "failed", error: err instanceof Error ? err.message : "Couldn't join the call" });
@@ -142,7 +164,7 @@ export class CallEngine {
         this.setState({ call });
         if (call.status === "accepted" && this.state.phase === "ringing_outbound") {
           this.setState({ phase: "connecting" });
-          await this.connectMedia(call);
+          await this.connectMedia(call, "caller");
         } else if (call.status === "declined" || call.status === "missed" || call.status === "failed") {
           this.teardown("ended");
         } else if (call.status === "ended") {
@@ -154,14 +176,23 @@ export class CallEngine {
     }, this.pollMs);
   }
 
-  /** Real WebRTC only for the "cloudflare" provider; every other provider
-   * (including "mock") just marks the call connected with no audio path —
-   * signaling still works end-to-end for testing. */
-  private async connectMedia(call: Call) {
-    if (call.provider !== "cloudflare") {
-      this.setState({ phase: "connected" });
+  /** Real WebRTC for "cloudflare" (relayed through Realtime SFU) and
+   * "webrtc_p2p" (direct browser-to-browser, free STUN/TURN); every other
+   * provider (including "mock") just marks the call connected with no
+   * audio path — signaling still works end-to-end for testing. */
+  private async connectMedia(call: Call, role: "caller" | "callee") {
+    if (call.provider === "cloudflare") {
+      await this.connectCloudflare(call);
       return;
     }
+    if (call.provider === "webrtc_p2p") {
+      await this.connectP2P(call, role);
+      return;
+    }
+    this.setState({ phase: "connected" });
+  }
+
+  private async connectCloudflare(call: Call) {
     if (!this.getUserMedia) {
       this.setState({ phase: "connected" });
       return;
@@ -202,6 +233,70 @@ export class CallEngine {
     } catch (err) {
       this.setState({ phase: "failed", error: err instanceof Error ? err.message : "Couldn't connect audio" });
     }
+  }
+
+  /** Direct peer-to-peer — non-trickle ICE, so each side waits for its own
+   * candidate gathering to finish before posting its (full) SDP, keeping
+   * the exchange to just two text blobs on the call row rather than a
+   * stream of individual ICE candidates. A few hundred ms to a couple of
+   * seconds slower to connect than trickle ICE, but far simpler over a
+   * polled HTTP signaling channel — nothing to lose ordering or dedupe. */
+  private async connectP2P(call: Call, role: "caller" | "callee") {
+    if (!this.getUserMedia) {
+      this.setState({ phase: "connected" });
+      return;
+    }
+    try {
+      const { iceServers } = await this.api.getCallIceServers();
+      const stream = await this.getUserMedia();
+      this.localStream = stream;
+      const pc = new RTCPeerConnection({ iceServers: iceServers as RTCIceServer[] });
+      this.pc = pc;
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      pc.ontrack = (e) => {
+        if (e.streams[0]) this.onRemoteStream?.(e.streams[0]);
+      };
+
+      if (role === "caller") {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await waitForIceGatheringComplete(pc);
+        await this.api.postCallOffer(call.id, { type: "offer", sdp: pc.localDescription?.sdp ?? "" });
+
+        const answerSdp = await this.pollForSdpField(call.id, "answer_sdp");
+        if (!answerSdp) throw new Error("The other side never answered");
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: answerSdp }));
+      } else {
+        const offerSdp = await this.pollForSdpField(call.id, "offer_sdp");
+        if (!offerSdp) throw new Error("Couldn't reach the other side");
+        await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp: offerSdp }));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await waitForIceGatheringComplete(pc);
+        await this.api.postCallAnswer(call.id, { type: "answer", sdp: pc.localDescription?.sdp ?? "" });
+      }
+
+      this.setState({ phase: "connected" });
+    } catch (err) {
+      this.setState({ phase: "failed", error: err instanceof Error ? err.message : "Couldn't connect audio" });
+    }
+  }
+
+  /** Short-interval poll (separate from the main ring/status poll) for the
+   * other side's offer/answer SDP to show up — typically resolves within a
+   * second or two of the other side accepting. */
+  private async pollForSdpField(
+    callId: string,
+    field: "offer_sdp" | "answer_sdp",
+    timeoutMs = 20000,
+  ): Promise<string | null> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const { call } = await this.api.getCall(callId);
+      if (call[field]) return call[field];
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    return null;
   }
 
   destroy() {

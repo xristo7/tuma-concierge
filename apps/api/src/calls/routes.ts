@@ -27,6 +27,7 @@ import {
   CloudflareCallsApiError,
   type SdpDescription,
 } from "./cloudflare.js";
+import { resolveP2PIceServers } from "./webrtc-p2p.js";
 
 export const callRoutes = new Hono();
 callRoutes.use("*", requireAuth);
@@ -89,6 +90,15 @@ callRoutes.get("/calls/incoming", async (c) => {
     args: [user.sub],
   });
   return c.json({ call: res.rows[0] ?? null });
+});
+
+/** The ICE server list any client needs to place/answer a "webrtc_p2p"
+ * call — free public STUN always, plus an admin-configured TURN fallback
+ * if one's been saved (see ../calls/webrtc-p2p.ts). Not provider-gated:
+ * harmless to fetch regardless of the currently active provider. */
+callRoutes.get("/calls/ice-servers", async (c) => {
+  const iceServers = await resolveP2PIceServers();
+  return c.json({ iceServers });
 });
 
 callRoutes.get("/calls/:id", async (c) => {
@@ -239,4 +249,48 @@ callRoutes.post("/calls/:id/renegotiate", async (c) => {
   } catch (err) {
     return c.json(callsProviderError(err), 502);
   }
+});
+
+// ---------------------------------------------------------------------------
+// "webrtc_p2p" — direct browser-to-browser WebRTC, no media relay. Each
+// side does its own ICE gathering locally (non-trickle) and posts the
+// finished SDP here; the other side picks it up on its next GET /calls/:id
+// poll. No server-side WebRTC involvement at all — this is just two blobs
+// of text changing hands. See ../calls/webrtc-p2p.ts and
+// packages/shared/src/call-engine.ts.
+// ---------------------------------------------------------------------------
+
+const sdpSchema = z.object({ sdp: z.string().min(1) });
+
+/** Caller posts their offer once (after accept isn't needed — the callee
+ * only needs it once THEY'VE accepted, but the caller can publish it as
+ * soon as the call is placed; the callee simply won't look until they
+ * answer the ring). */
+callRoutes.post("/calls/:id/offer", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const call = await loadOwnedCall(id, user.sub);
+  if (!call) return c.json({ error: "not_found" }, 404);
+  if (call.provider !== "webrtc_p2p") return c.json({ error: "wrong_provider" }, 400);
+  if (call.caller_id !== user.sub) return c.json({ error: "forbidden" }, 403);
+  const parsed = sdpSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body" }, 400);
+
+  await db.execute({ sql: "UPDATE calls SET offer_sdp = ? WHERE id = ?", args: [parsed.data.sdp, id] });
+  return c.json({ ok: true });
+});
+
+/** Callee posts their answer once they've accepted and pulled the offer. */
+callRoutes.post("/calls/:id/answer", async (c) => {
+  const user = c.get("user");
+  const id = c.req.param("id");
+  const call = await loadOwnedCall(id, user.sub);
+  if (!call) return c.json({ error: "not_found" }, 404);
+  if (call.provider !== "webrtc_p2p") return c.json({ error: "wrong_provider" }, 400);
+  if (call.callee_id !== user.sub) return c.json({ error: "forbidden" }, 403);
+  const parsed = sdpSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body" }, 400);
+
+  await db.execute({ sql: "UPDATE calls SET answer_sdp = ? WHERE id = ?", args: [parsed.data.sdp, id] });
+  return c.json({ ok: true });
 });

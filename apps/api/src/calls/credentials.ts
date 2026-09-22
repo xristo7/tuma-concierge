@@ -37,6 +37,25 @@ export const CALL_PROVIDER_CREDENTIAL_FIELDS: Record<Exclude<CallProviderIdentit
       envVar: "CALLS_CLOUDFLARE_APP_SECRET",
     },
   ],
+  // Direct browser-to-browser WebRTC — no media-relay service, so no
+  // required fields at all; free public STUN (hardcoded in
+  // ../calls/webrtc-p2p.ts) already gets most calls connected. These are
+  // purely optional, for a TURN relay to fall back to when a direct
+  // connection can't punch through both sides' NAT (common on carrier
+  // mobile networks) — a free-tier TURN service, or a self-hosted coturn.
+  webrtc_p2p: [
+    {
+      key: "turnUrls",
+      label: "TURN server URL(s)",
+      secret: false,
+      required: false,
+      envVar: "CALLS_P2P_TURN_URLS",
+      placeholder: "turn:relay.example.com:3478",
+      helpText: "Comma-separated if more than one. Leave blank to rely on STUN alone (works for most calls).",
+    },
+    { key: "turnUsername", label: "TURN username", secret: false, required: false, envVar: "CALLS_P2P_TURN_USERNAME" },
+    { key: "turnCredential", label: "TURN credential", secret: true, required: false, envVar: "CALLS_P2P_TURN_CREDENTIAL" },
+  ],
   // Not wired up to a real SDK yet — fields are here so an admin can save
   // credentials in advance, but selecting this provider currently returns
   // a "not implemented" error from ../calls/service.ts until it is.
