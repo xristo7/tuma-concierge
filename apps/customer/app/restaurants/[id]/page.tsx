@@ -1,7 +1,8 @@
 "use client";
 
 import type { MenuCategory, MenuItem, MenuItemOption, Restaurant, RestaurantMenu, SavedLocation } from "@tuma/shared";
-import { Minus, Plus, ShoppingBag, Store } from "lucide-react";
+import { MessageCircle, Minus, Plus, ShoppingBag, Store } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { LocationPicker, emptyPoint, resolvePoint, type PointState } from "../../../components/LocationPicker";
@@ -21,6 +22,40 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/** A menu item's photo, fetched lazily since it's not inlined in the menu
+ * response (mirrors ItemEditor's own photo fetch in apps/restaurant). */
+function MenuItemThumb({ itemId, size = "row" }: { itemId: string; size?: "row" | "modal" }) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    api
+      .menuItemPhotoBlob(itemId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [itemId]);
+
+  if (!url) return null;
+  const dims = size === "row" ? "h-16 w-16" : "h-40 w-full";
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt=""
+      className={`${dims} shrink-0 rounded-xl object-cover ${size === "modal" ? "mb-1" : ""}`}
+    />
+  );
+}
+
 type CartLine = {
   key: string;
   menuItemId: string;
@@ -32,10 +67,12 @@ type CartLine = {
 
 function ItemDetailModal({
   item,
+  restaurantId,
   onClose,
   onAdd,
 }: {
   item: MenuItem;
+  restaurantId: string;
   onClose: () => void;
   onAdd: (line: { unitPrice: number; choiceIds: string[]; choiceNames: string[]; quantity: number }) => void;
 }) {
@@ -60,8 +97,16 @@ function ItemDetailModal({
   return (
     <Modal title={item.name} onClose={onClose}>
       <div className="space-y-4 pb-2">
+        {item.photo_key && <MenuItemThumb itemId={item.id} size="modal" />}
         {item.description && <p className="text-sm text-ink-500">{item.description}</p>}
         <p className="text-lg font-bold text-ink">{formatUgx(item.price)}</p>
+        <Link
+          href={`/restaurants/${restaurantId}/chat?item=${item.id}&itemName=${encodeURIComponent(item.name)}`}
+          className="inline-flex items-center gap-1.5 text-xs font-bold text-gold"
+        >
+          <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+          Ask about this item
+        </Link>
 
         {item.options.map((option) => (
           <div key={option.id} className="space-y-1.5">
@@ -317,6 +362,13 @@ export default function RestaurantPage() {
             Closed
           </span>
         )}
+        <Link
+          href={`/restaurants/${id}/chat`}
+          className="flex shrink-0 items-center gap-1.5 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink"
+        >
+          <MessageCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          Chat
+        </Link>
       </section>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -331,6 +383,7 @@ export default function RestaurantPage() {
                   onClick={() => (item.options.length > 0 ? setActiveItem(item) : addToCart(item, { unitPrice: item.price, choiceIds: [], choiceNames: [], quantity: 1 }))}
                   className="home-card flex w-full items-center gap-3 !rounded-2xl !px-3 !py-3 text-left"
                 >
+                  {item.photo_key && <MenuItemThumb itemId={item.id} />}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-bold text-ink">{item.name}</span>
                     {item.description && <span className="mt-0.5 block truncate text-xs text-ink-500">{item.description}</span>}
@@ -355,6 +408,7 @@ export default function RestaurantPage() {
                   onClick={() => (item.options.length > 0 ? setActiveItem(item) : addToCart(item, { unitPrice: item.price, choiceIds: [], choiceNames: [], quantity: 1 }))}
                   className="home-card flex w-full items-center gap-3 !rounded-2xl !px-3 !py-3 text-left"
                 >
+                  {item.photo_key && <MenuItemThumb itemId={item.id} />}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-bold text-ink">{item.name}</span>
                     <span className="mt-0.5 block text-sm font-semibold text-ink">{formatUgx(item.price)}</span>
@@ -371,7 +425,12 @@ export default function RestaurantPage() {
       )}
 
       {activeItem && (
-        <ItemDetailModal item={activeItem} onClose={() => setActiveItem(null)} onAdd={(line) => addToCart(activeItem, line)} />
+        <ItemDetailModal
+          item={activeItem}
+          restaurantId={id}
+          onClose={() => setActiveItem(null)}
+          onAdd={(line) => addToCart(activeItem, line)}
+        />
       )}
 
       {cart.length > 0 && (
