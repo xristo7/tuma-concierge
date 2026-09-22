@@ -7,7 +7,7 @@ import {
   type Rider,
   type RiderSubscriptionView,
 } from "@tuma/shared";
-import { CheckCircle2, LogOut, MapPin, Upload, User } from "lucide-react";
+import { CheckCircle2, LogOut, MapPin, TriangleAlert, Upload, User } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppearanceSettings } from "../../components/AppearanceSettings";
@@ -466,6 +466,8 @@ export default function AccountPage() {
         Log out
       </button>
 
+      <CloseAccountCard onClosed={logout} />
+
       {showMap && (
         <LocationMapPicker
           initial={stageCoords ?? undefined}
@@ -579,6 +581,70 @@ function SubscriptionCard() {
       >
         {isPending ? "Confirming…" : busy ? "Sending…" : `Pay ${subscription.amount.toLocaleString()} UGX`}
       </button>
+    </section>
+  );
+}
+
+/**
+ * Pays out the rider's entire wallet balance — reserve included, unlike a
+ * normal withdrawal — then locks the account. Refused server-side if
+ * there's a job in flight. A confirm step first since this is
+ * irreversible from here (only support/admin can reopen a closed account).
+ */
+function CloseAccountCard({ onClosed }: { onClosed: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function close() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.closeRiderAccount();
+      onClosed();
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  }
+
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-red-200 px-4 text-sm font-bold text-red-600"
+      >
+        <TriangleAlert className="h-4 w-4" strokeWidth={2} aria-hidden />
+        Close my account
+      </button>
+    );
+  }
+
+  return (
+    <section className="home-card space-y-2.5 !border-l-4 !border-l-red-400">
+      <p className="text-sm font-semibold text-ink">Close your account?</p>
+      <p className="text-sm text-ink-500">
+        Your entire wallet balance — including any minimum reserve — is paid out to your mobile money number on
+        file, then your account is locked. You&apos;ll need to contact support to reopen it. This can&apos;t be
+        undone from here, and only works if you don&apos;t have a job in progress.
+      </p>
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <div className="flex gap-2">
+        <button
+          onClick={close}
+          disabled={busy}
+          className="min-h-9 flex-1 rounded-full bg-red-600 px-4 text-xs font-bold text-white disabled:opacity-60"
+        >
+          {busy ? "Closing…" : "Yes, close my account"}
+        </button>
+        <button
+          onClick={() => setConfirming(false)}
+          disabled={busy}
+          className="min-h-9 flex-1 rounded-full border border-[var(--border-faint)] px-4 text-xs font-bold text-ink disabled:opacity-60"
+        >
+          Cancel
+        </button>
+      </div>
     </section>
   );
 }

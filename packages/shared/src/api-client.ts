@@ -498,13 +498,21 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async myWallet() {
       return request<Wallet>("/v1/riders/me/wallet");
     },
-    async withdrawWallet() {
+    /** Omit `amount` to withdraw everything above the reserve (if any); pass
+     * one to leave more than that behind — never less. */
+    async withdrawWallet(amount?: number) {
       return request<{ withdrawalId: string; amount: number; status: "pending" }>("/v1/riders/me/wallet/withdraw", {
         method: "POST",
+        body: JSON.stringify(amount != null ? { amount } : {}),
       });
     },
     async refreshWithdrawal(id: string) {
       return request<{ withdrawal: Wallet["withdrawals"][number] }>(`/v1/riders/me/wallet/withdrawals/${id}/refresh`);
+    },
+    /** Pays out the rider's entire balance (reserve included) and locks the
+     * account — refused if they've got an order in flight. */
+    async closeRiderAccount() {
+      return request<{ ok: true; paidOut: number }>("/v1/riders/me/close-account", { method: "POST" });
     },
 
     // Rider subscription — see apps/api/src/riders/subscription.ts.

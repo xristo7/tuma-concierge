@@ -14,17 +14,26 @@ const WITHDRAWAL_STATUS_LABEL: Record<Wallet["withdrawals"][number]["status"], s
 export default function WalletPage() {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [reserve, setReserve] = useState<{ enabled: boolean; amount: number }>({ enabled: false, amount: 0 });
+  const [amountInput, setAmountInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const polling = useRef(false);
 
   const load = useCallback(async () => {
-    const [walletRes, ordersRes] = await Promise.all([
+    const [walletRes, ordersRes, settingsRes] = await Promise.all([
       api.myWallet(),
       api.myRiderOrders().catch(() => ({ orders: [] as OrderRow[] })),
+      api.getSettings().catch(() => null),
     ]);
     setWallet(walletRes);
     setOrders(ordersRes.orders.filter((o) => o.stage === "Settle"));
+    if (settingsRes) {
+      setReserve({
+        enabled: settingsRes.settings.riderMinimumBalanceEnabled,
+        amount: settingsRes.settings.riderMinimumBalanceAmount,
+      });
+    }
     return walletRes;
   }, []);
 
@@ -52,11 +61,15 @@ export default function WalletPage() {
     };
   }, [wallet, load]);
 
-  async function withdraw() {
+  const reserveAmount = reserve.enabled ? reserve.amount : 0;
+  const maxWithdrawable = wallet ? Math.max(0, wallet.balance - reserveAmount) : 0;
+
+  async function withdraw(amount?: number) {
     setBusy(true);
     setError(null);
     try {
-      await api.withdrawWallet();
+      await api.withdrawWallet(amount);
+      setAmountInput("");
       await load();
     } catch (err) {
       setError(errorMessage(err));
@@ -66,6 +79,9 @@ export default function WalletPage() {
   }
 
   const settledTotal = orders.reduce((sum, o) => sum + (o.final_total ?? o.estimated_total ?? 0), 0);
+  const hasPendingWithdrawal = !!wallet?.withdrawals.some((w) => w.status === "pending");
+  const parsedAmount = Number(amountInput);
+  const canWithdrawCustom = amountInput.trim().length > 0 && parsedAmount > 0 && parsedAmount <= maxWithdrawable;
 
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
@@ -76,15 +92,46 @@ export default function WalletPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Wallet balance</p>
           <p className="text-2xl font-bold text-ink">{wallet ? formatUgx(wallet.balance) : "—"}</p>
           <p className="text-xs text-ink-500">Escrow payouts land here — cash jobs pay you directly, on the spot.</p>
+          {reserve.enabled && (
+            <p className="mt-1 text-xs text-ink-500">
+              A minimum of {formatUgx(reserveAmount)} always stays in your wallet — up to {formatUgx(maxWithdrawable)}{" "}
+              is available to withdraw right now.
+            </p>
+          )}
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <button
-          onClick={withdraw}
-          disabled={busy || !wallet || wallet.balance <= 0}
-          className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-50"
-        >
-          {busy ? "Sending…" : "Withdraw to mobile money"}
-        </button>
+
+        <div className="space-y-2 text-left">
+          <label className="text-xs font-semibold text-ink-500" htmlFor="withdrawAmount">
+            Amount to withdraw (UGX) — leave blank to withdraw the full available amount
+          </label>
+          <input
+            id="withdrawAmount"
+            inputMode="numeric"
+            value={amountInput}
+            onChange={(e) => setAmountInput(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder={maxWithdrawable > 0 ? String(maxWithdrawable) : "0"}
+            disabled={busy || hasPendingWithdrawal || maxWithdrawable <= 0}
+            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold disabled:opacity-50"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => withdraw(parsedAmount)}
+            disabled={busy || hasPendingWithdrawal || !canWithdrawCustom}
+            className="min-h-11 flex-1 rounded-full border border-gold px-4 text-sm font-bold text-gold disabled:opacity-50"
+          >
+            {busy ? "Sending…" : "Withdraw amount"}
+          </button>
+          <button
+            onClick={() => withdraw(undefined)}
+            disabled={busy || hasPendingWithdrawal || maxWithdrawable <= 0}
+            className="min-h-11 flex-1 rounded-full bg-gold px-4 text-sm font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-50"
+          >
+            {busy ? "Sending…" : "Withdraw all"}
+          </button>
+        </div>
       </section>
 
       {wallet && wallet.withdrawals.length > 0 && (

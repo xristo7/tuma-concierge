@@ -11,6 +11,7 @@ import {
   getMonetizationSettings,
   getPaymentsDemoMode,
   getPlatformEnvironment,
+  getRiderReserveSettings,
   getVoiceNoteMaxSeconds,
   getWalletSettings,
   setActiveProviders,
@@ -18,6 +19,7 @@ import {
   setMonetizationSettings,
   setPaymentsDemoMode,
   setPlatformEnvironment,
+  setRiderReserveSettings,
   setSetting,
   type PaymentProviderIdentity,
 } from "../lib/settings.js";
@@ -27,7 +29,7 @@ import { paymentsIntegrationStatus } from "../payments/service.js";
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment] =
+  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve] =
     await Promise.all([
       getDeliverySettings(),
       getMatchingSettings(),
@@ -37,6 +39,7 @@ async function fullSettings() {
       getVoiceNoteMaxSeconds(),
       getMonetizationSettings(),
       getPlatformEnvironment(),
+      getRiderReserveSettings(),
     ]);
   return {
     ...delivery,
@@ -48,6 +51,8 @@ async function fullSettings() {
     walletMaxTopup: wallet.maxTopup,
     voiceNoteMaxSeconds,
     platformEnvironment,
+    riderMinimumBalanceEnabled: riderReserve.enabled,
+    riderMinimumBalanceAmount: riderReserve.amount,
     ...monetization,
   };
 }
@@ -75,6 +80,8 @@ const updateSchema = z.object({
   walletVerifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletMaxTopup: z.number().int().positive().max(100_000_000).optional(),
   voiceNoteMaxSeconds: z.number().int().positive().max(600).optional(),
+  riderMinimumBalanceEnabled: z.boolean().optional(),
+  riderMinimumBalanceAmount: z.number().int().nonnegative().max(1_000_000).optional(),
   // Monetization — see ../lib/monetization.ts for how these combine.
   deliveryCommissionEnabled: z.boolean().optional(),
   deliveryCommissionParcelPercent: z.number().min(0).max(100).optional(),
@@ -98,6 +105,8 @@ const PAYMENTS_FIELDS = [
   "walletUnverifiedCap",
   "walletVerifiedCap",
   "walletMaxTopup",
+  "riderMinimumBalanceEnabled",
+  "riderMinimumBalanceAmount",
   "deliveryCommissionEnabled",
   "deliveryCommissionParcelPercent",
   "deliveryCommissionShoppingPercent",
@@ -172,6 +181,10 @@ settingsRoutes.put(
     if (parsed.data.voiceNoteMaxSeconds != null) {
       await setSetting("voice_note_max_seconds", String(parsed.data.voiceNoteMaxSeconds));
     }
+    await setRiderReserveSettings({
+      enabled: parsed.data.riderMinimumBalanceEnabled,
+      amount: parsed.data.riderMinimumBalanceAmount,
+    });
     await setMonetizationSettings({
       deliveryCommissionEnabled: parsed.data.deliveryCommissionEnabled,
       deliveryCommissionParcelPercent: parsed.data.deliveryCommissionParcelPercent,

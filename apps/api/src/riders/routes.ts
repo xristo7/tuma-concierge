@@ -9,7 +9,7 @@ import { haversineKm } from "../lib/geo.js";
 import { newId } from "../lib/ids.js";
 import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { clientIp } from "../lib/ratelimit.js";
-import { getDeliverySettings, getMonetizationSettings, getPlatformEnvironment } from "../lib/settings.js";
+import { getDeliverySettings, getMonetizationSettings, getPlatformEnvironment, getRiderReserveSettings } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { redactOrders, toOpenJob } from "../orders/visibility.js";
 import { checkPaymentStatus, initiateCollection, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
@@ -399,22 +399,36 @@ riderRoutes.get("/riders/me/wallet", requireAuth, requireRole("rider"), async (c
   return c.json({ balance, withdrawals: withdrawalsRes.rows });
 });
 
+const withdrawSchema = z.object({
+  // Omitted (or explicitly null) means "withdraw everything above the
+  // reserve" — a rider can also name a smaller amount to leave more than
+  // the admin-set minimum behind, entirely their call above that floor.
+  amount: z.number().int().positive().optional(),
+});
+
 /**
- * Withdraws the entire current balance to the rider's mobile money number on
- * file. Always operates on whichever balance (live or sandbox) matches the
- * currently active platform environment — a sandbox withdrawal debits the
- * sandbox balance and its disbursement is forced through the mock adapter
- * (see ../payments/service.ts), so no sandbox activity can ever move real
- * money out to a real phone number, even with live credentials configured.
+ * Withdraws either the amount the rider asks for, or (with none given)
+ * their full balance above the reserve — the admin-set minimum (if
+ * enabled) that stays behind in their wallet, "presumed to keep the
+ * account active" per the admin who asked for this; a rider can always
+ * choose to leave more than that behind, just never less. Always operates
+ * on whichever balance (live or sandbox) matches the currently active
+ * platform environment — a sandbox withdrawal debits the sandbox balance
+ * and its disbursement is forced through the mock adapter (see
+ * ../payments/service.ts), so no sandbox activity can ever move real money
+ * out to a real phone number, even with live credentials configured.
  */
 riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider"), async (c) => {
   const user = c.get("user");
+  const parsed = withdrawSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
   const environment = await getPlatformEnvironment();
   const balanceColumn = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
-  const riderRes = await db.execute({
-    sql: `SELECT ${balanceColumn} as wallet_balance, momo_msisdn FROM riders WHERE user_id = ?`,
-    args: [user.sub],
-  });
+  const [riderRes, reserve] = await Promise.all([
+    db.execute({ sql: `SELECT ${balanceColumn} as wallet_balance, momo_msisdn FROM riders WHERE user_id = ?`, args: [user.sub] }),
+    getRiderReserveSettings(),
+  ]);
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider) return c.json({ error: "not_a_rider" }, 404);
   const balance = (rider.wallet_balance as number) ?? 0;
@@ -424,15 +438,41 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
     return c.json({ error: "no_mobile_money", message: "Add a mobile money number in your profile first" }, 409);
   }
 
+  const reserveAmount = reserve.enabled ? reserve.amount : 0;
+  const maxWithdrawable = balance - reserveAmount;
+  if (maxWithdrawable <= 0) {
+    return c.json(
+      {
+        error: "below_minimum_balance",
+        message: `A minimum of ${reserveAmount.toLocaleString()} UGX stays in your wallet — you don't have enough above that yet`,
+      },
+      409,
+    );
+  }
+
+  const withdrawable = parsed.data.amount ?? maxWithdrawable;
+  if (withdrawable > maxWithdrawable) {
+    return c.json(
+      {
+        error: "amount_too_high",
+        message:
+          reserveAmount > 0
+            ? `You can withdraw up to ${maxWithdrawable.toLocaleString()} UGX and still keep the ${reserveAmount.toLocaleString()} UGX minimum in your wallet`
+            : `You only have ${maxWithdrawable.toLocaleString()} UGX available`,
+      },
+      409,
+    );
+  }
+
   // Debit FIRST, conditional on the balance still being exactly what we just
   // read, and treat the row count as the lock. Two withdrawals racing each
   // other both see the same balance on the read above, but only one of them
   // can win this update — the loser is turned away having moved no money.
-  // Doing it the other way round (disburse, then zero) lets both requests
+  // Doing it the other way round (disburse, then debit) lets both requests
   // pay out against the same balance, since Workers serves them concurrently.
   const debit = await db.execute({
-    sql: `UPDATE riders SET ${balanceColumn} = 0, updated_at = datetime('now') WHERE user_id = ? AND ${balanceColumn} = ?`,
-    args: [user.sub, balance],
+    sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} - ?, updated_at = datetime('now') WHERE user_id = ? AND ${balanceColumn} = ?`,
+    args: [withdrawable, user.sub, balance],
   });
   if (debit.rowsAffected === 0) {
     return c.json({ error: "balance_changed", message: "Your balance just changed — reopen the wallet and try again" }, 409);
@@ -446,7 +486,7 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
     const initiated = await initiateDisbursement({
       referenceId: withdrawalId,
       msisdn,
-      amount: balance,
+      amount: withdrawable,
       forceMock: environment === "sandbox",
     });
     providerRef = initiated.providerRef;
@@ -456,7 +496,7 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
     // The debit already went through, so hand the money back before failing.
     await db.execute({
       sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} + ?, updated_at = datetime('now') WHERE user_id = ?`,
-      args: [balance, user.sub],
+      args: [withdrawable, user.sub],
     });
     if (err instanceof UnsupportedNetworkError) {
       return c.json({ error: "unsupported_network", message: err.message }, 400);
@@ -468,10 +508,10 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
   await db.execute({
     sql: `INSERT INTO wallet_withdrawals (id, rider_id, amount, provider, provider_ref, msisdn, network, status, environment)
           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-    args: [withdrawalId, user.sub, balance, provider, providerRef, msisdn, network, environment],
+    args: [withdrawalId, user.sub, withdrawable, provider, providerRef, msisdn, network, environment],
   });
 
-  return c.json({ withdrawalId, amount: balance, status: "pending" }, 201);
+  return c.json({ withdrawalId, amount: withdrawable, status: "pending" }, 201);
 });
 
 /** Sandbox/mock testing has no public webhook target, so the client polls this instead. */
@@ -520,6 +560,106 @@ riderRoutes.get("/riders/me/wallet/withdrawals/:id/refresh", requireAuth, requir
       502,
     );
   }
+});
+
+/**
+ * Self-service account closure — pays out the rider's ENTIRE balance,
+ * reserve included (the reserve only ever applies to a normal withdrawal;
+ * see the /wallet/withdraw handler above), then locks the account the
+ * same way an admin suspension does. Refused outright if they've got an
+ * order in flight, so a rider can't strand a customer mid-delivery by
+ * closing their account out from under them.
+ */
+riderRoutes.post("/riders/me/close-account", requireAuth, requireRole("rider"), async (c) => {
+  const user = c.get("user");
+  const environment = await getPlatformEnvironment();
+  const balanceColumn = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
+
+  const activeOrder = await db.execute({
+    sql: "SELECT 1 FROM orders WHERE rider_id = ? AND stage != 'Settle' AND environment = ? LIMIT 1",
+    args: [user.sub, environment],
+  });
+  if (activeOrder.rows.length > 0) {
+    return c.json(
+      { error: "active_order", message: "Finish or hand back your current job before closing your account" },
+      409,
+    );
+  }
+
+  const riderRes = await db.execute({
+    sql: `SELECT ${balanceColumn} as wallet_balance, momo_msisdn FROM riders WHERE user_id = ?`,
+    args: [user.sub],
+  });
+  const rider = riderRes.rows[0] as Row | undefined;
+  if (!rider) return c.json({ error: "not_a_rider" }, 404);
+  const balance = (rider.wallet_balance as number) ?? 0;
+  const msisdn = rider.momo_msisdn as string | null;
+
+  if (balance > 0 && !msisdn) {
+    return c.json(
+      { error: "no_mobile_money", message: "Add a mobile money number in your profile first so we can pay out your balance" },
+      409,
+    );
+  }
+
+  if (balance > 0) {
+    const debit = await db.execute({
+      sql: `UPDATE riders SET ${balanceColumn} = 0, updated_at = datetime('now') WHERE user_id = ? AND ${balanceColumn} = ?`,
+      args: [user.sub, balance],
+    });
+    if (debit.rowsAffected === 0) {
+      return c.json({ error: "balance_changed", message: "Your balance just changed — reopen this and try again" }, 409);
+    }
+
+    const withdrawalId = newId("wd");
+    try {
+      const initiated = await initiateDisbursement({
+        referenceId: withdrawalId,
+        msisdn: msisdn as string,
+        amount: balance,
+        forceMock: environment === "sandbox",
+      });
+      await db.execute({
+        sql: `INSERT INTO wallet_withdrawals (id, rider_id, amount, provider, provider_ref, msisdn, network, status, environment)
+              VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+        args: [withdrawalId, user.sub, balance, initiated.provider, initiated.providerRef, msisdn, initiated.network, environment],
+      });
+    } catch (err) {
+      // The debit already went through — hand the money back and refuse
+      // to close the account, rather than lock them out of a balance
+      // that never actually got paid out.
+      await db.execute({
+        sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} + ?, updated_at = datetime('now') WHERE user_id = ?`,
+        args: [balance, user.sub],
+      });
+      if (err instanceof UnsupportedNetworkError) {
+        return c.json({ error: "unsupported_network", message: err.message }, 400);
+      }
+      console.error("Close-account payout failed:", err);
+      return c.json(
+        { error: "payout_failed", message: "Couldn't pay out your balance just now — your account was not closed. Please try again." },
+        502,
+      );
+    }
+  }
+
+  await db.execute({
+    sql: "UPDATE riders SET is_online = 0, updated_at = datetime('now') WHERE user_id = ?",
+    args: [user.sub],
+  });
+  await db.execute({
+    sql: "UPDATE users SET status = 'suspended', updated_at = datetime('now') WHERE id = ?",
+    args: [user.sub],
+  });
+  await logActivity({
+    actor: { sub: user.sub, name: user.name, adminRole: null },
+    action: "rider.close_account",
+    entityType: "user",
+    entityId: user.sub,
+    summary: balance > 0 ? `Rider closed their own account — ${balance.toLocaleString()} UGX paid out` : "Rider closed their own account",
+  });
+
+  return c.json({ ok: true, paidOut: balance });
 });
 
 // ---------------------------------------------------------------------------

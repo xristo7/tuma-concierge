@@ -64,6 +64,13 @@ const DEFAULTS = {
   /** Ceiling on a single top-up request, independent of the balance cap —
    * stops one oversized top-up from being the only thing that matters. */
   wallet_max_topup: "1000000",
+  /** Floor a rider's own withdrawal always leaves behind in their wallet
+   * (UGX) — "presumed to keep the account active" per the admin who asked
+   * for this. Only a normal withdrawal respects it; closing the account
+   * (see ../riders/routes.ts POST /riders/me/close-account) always pays
+   * out everything, reserve included. */
+  rider_minimum_balance_enabled: "0",
+  rider_minimum_balance_amount: "2000",
   /** How long any voice recording (a shopping list, an order note, a fee-
    * proposal reason, a chat voice message) may run before it auto-stops.
    * Nobody's meant to be recording minutes of audio here — this is a cap,
@@ -245,6 +252,21 @@ export async function getWalletSettings(): Promise<{ unverifiedCap: number; veri
 
 export async function getVoiceNoteMaxSeconds(): Promise<number> {
   return Number(await getSetting("voice_note_max_seconds")) || Number(DEFAULTS.voice_note_max_seconds);
+}
+
+export async function getRiderReserveSettings(): Promise<{ enabled: boolean; amount: number }> {
+  const [enabled, amount] = await Promise.all([
+    getSetting("rider_minimum_balance_enabled"),
+    getSetting("rider_minimum_balance_amount"),
+  ]);
+  return { enabled: enabled === "1", amount: Number(amount) || Number(DEFAULTS.rider_minimum_balance_amount) };
+}
+
+export async function setRiderReserveSettings(input: { enabled?: boolean; amount?: number }): Promise<void> {
+  const writes: Promise<void>[] = [];
+  if (input.enabled != null) writes.push(setSetting("rider_minimum_balance_enabled", input.enabled ? "1" : "0"));
+  if (input.amount != null) writes.push(setSetting("rider_minimum_balance_amount", String(input.amount)));
+  await Promise.all(writes);
 }
 
 export type ServiceFeeType = "flat" | "percent";

@@ -39,6 +39,8 @@ export default function SettingsPage() {
   const [walletUnverifiedCap, setWalletUnverifiedCap] = useState("");
   const [walletVerifiedCap, setWalletVerifiedCap] = useState("");
   const [walletMaxTopup, setWalletMaxTopup] = useState("");
+  const [riderMinimumBalanceEnabled, setRiderMinimumBalanceEnabled] = useState(false);
+  const [riderMinimumBalanceAmount, setRiderMinimumBalanceAmount] = useState("2000");
   const [voiceNoteMaxSeconds, setVoiceNoteMaxSeconds] = useState("");
   const [deliveryCommissionEnabled, setDeliveryCommissionEnabled] = useState(false);
   const [deliveryCommissionParcelPercent, setDeliveryCommissionParcelPercent] = useState("0");
@@ -79,6 +81,8 @@ export default function SettingsPage() {
         setWalletUnverifiedCap(String(settingsRes.settings.walletUnverifiedCap));
         setWalletVerifiedCap(String(settingsRes.settings.walletVerifiedCap));
         setWalletMaxTopup(String(settingsRes.settings.walletMaxTopup));
+        setRiderMinimumBalanceEnabled(settingsRes.settings.riderMinimumBalanceEnabled);
+        setRiderMinimumBalanceAmount(String(settingsRes.settings.riderMinimumBalanceAmount));
         setVoiceNoteMaxSeconds(String(settingsRes.settings.voiceNoteMaxSeconds));
         setDeliveryCommissionEnabled(settingsRes.settings.deliveryCommissionEnabled);
         setDeliveryCommissionParcelPercent(String(settingsRes.settings.deliveryCommissionParcelPercent));
@@ -140,6 +144,8 @@ export default function SettingsPage() {
               walletUnverifiedCap: Number(walletUnverifiedCap),
               walletVerifiedCap: Number(walletVerifiedCap),
               walletMaxTopup: Number(walletMaxTopup),
+              riderMinimumBalanceEnabled,
+              riderMinimumBalanceAmount: Number(riderMinimumBalanceAmount),
               deliveryCommissionEnabled,
               deliveryCommissionParcelPercent: Number(deliveryCommissionParcelPercent),
               deliveryCommissionShoppingPercent: Number(deliveryCommissionShoppingPercent),
@@ -169,6 +175,8 @@ export default function SettingsPage() {
       setWalletUnverifiedCap(String(res.settings.walletUnverifiedCap));
       setWalletVerifiedCap(String(res.settings.walletVerifiedCap));
       setWalletMaxTopup(String(res.settings.walletMaxTopup));
+      setRiderMinimumBalanceEnabled(res.settings.riderMinimumBalanceEnabled);
+      setRiderMinimumBalanceAmount(String(res.settings.riderMinimumBalanceAmount));
       setVoiceNoteMaxSeconds(String(res.settings.voiceNoteMaxSeconds));
       setDeliveryCommissionEnabled(res.settings.deliveryCommissionEnabled);
       setDeliveryCommissionParcelPercent(String(res.settings.deliveryCommissionParcelPercent));
@@ -419,6 +427,46 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
+          </section>
+
+          <section className="home-card space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+                <WalletIcon className="h-4.5 w-4.5" strokeWidth={1.75} aria-hidden />
+              </span>
+              <h2 className="text-sm font-semibold text-ink">Rider wallet minimum balance</h2>
+            </div>
+            <label className="flex items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={riderMinimumBalanceEnabled}
+                onChange={(e) => setRiderMinimumBalanceEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-gold"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-ink">Keep a minimum balance in every rider wallet</span>
+                <span className="block text-xs text-ink-500">
+                  When on, a rider&apos;s own withdrawal always leaves at least this much behind — they can
+                  withdraw less if they choose, never below it. Only closing the account pays out everything,
+                  reserve included.
+                </span>
+              </span>
+            </label>
+            {riderMinimumBalanceEnabled && (
+              <div className="space-y-1 pl-6.5">
+                <label className="text-xs font-semibold text-ink-500" htmlFor="riderMinimumBalance">
+                  Minimum balance (UGX)
+                </label>
+                <input
+                  id="riderMinimumBalance"
+                  inputMode="numeric"
+                  value={riderMinimumBalanceAmount}
+                  onChange={(e) => setRiderMinimumBalanceAmount(e.target.value.replace(/[^\d]/g, ""))}
+                  placeholder="2000"
+                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                />
+              </div>
+            )}
           </section>
 
           <section className="home-card space-y-3">

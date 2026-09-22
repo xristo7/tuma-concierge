@@ -184,6 +184,11 @@ export type DeliverySettings = {
   /** How long any voice recording may run before it auto-stops — a shopping
    * list, an order note, a fee-proposal reason, or a chat voice message. */
   voiceNoteMaxSeconds: number;
+  /** Floor a rider's own withdrawal always leaves behind in their wallet
+   * (UGX) when enabled — doesn't apply to closing the account, which pays
+   * out everything. See POST /riders/me/wallet/withdraw. */
+  riderMinimumBalanceEnabled: boolean;
+  riderMinimumBalanceAmount: number;
 } & MonetizationSettings;
 
 export type ServiceFeeType = "flat" | "percent";
