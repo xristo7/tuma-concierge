@@ -6,6 +6,7 @@ import { locationRoutes } from "./locations/routes.js";
 import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { pushRoutes } from "./push/routes.js";
+import { menuRoutes } from "./restaurants/menu.js";
 import { restaurantRoutes } from "./restaurants/routes.js";
 import { riderRoutes } from "./riders/routes.js";
 import { settingsRoutes } from "./settings/routes.js";
@@ -21,6 +22,7 @@ const devOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:3002", // apps/admin dev server
+  "http://localhost:3003", // apps/restaurant dev server
 ];
 
 const defaultOrigins = ["https://tuma-customer-staging.onrender.com", "https://tuma-rider-staging.onrender.com"];
@@ -171,6 +173,7 @@ app.route("/v1", paymentRoutes);
 app.route("/v1", pushRoutes);
 app.route("/v1", riderRoutes);
 app.route("/v1", restaurantRoutes);
+app.route("/v1", menuRoutes);
 app.route("/v1", userRoutes);
 app.route("/v1", locationRoutes);
 app.route("/v1", settingsRoutes);

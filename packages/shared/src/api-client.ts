@@ -29,6 +29,10 @@ import type {
   Restaurant,
   AdminRestaurant,
   RestaurantStatus,
+  RestaurantMenu,
+  MenuCategory,
+  MenuItem,
+  MenuItemOption,
   Rider,
   RiderApplicant,
   RiderSubscriptionPayment,
@@ -551,6 +555,92 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         method: "PATCH",
         body: JSON.stringify(input),
       });
+    },
+
+    // Menu — see apps/api/src/restaurants/menu.ts.
+    async myMenu() {
+      return request<RestaurantMenu>("/v1/restaurants/me/menu");
+    },
+    async createMenuCategory(input: { name: string; sortOrder?: number }) {
+      return request<{ category: MenuCategory }>("/v1/restaurants/me/menu/categories", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async updateMenuCategory(id: string, input: Partial<{ name: string; sortOrder: number }>) {
+      return request<{ category: MenuCategory }>(`/v1/restaurants/me/menu/categories/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    },
+    async deleteMenuCategory(id: string) {
+      return request<{ ok: true }>(`/v1/restaurants/me/menu/categories/${id}`, { method: "DELETE" });
+    },
+    async createMenuItem(input: {
+      name: string;
+      description?: string;
+      price: number;
+      categoryId?: string | null;
+      available?: boolean;
+      prepTimeMinutes?: number;
+      sortOrder?: number;
+    }) {
+      return request<{ item: MenuItem }>("/v1/restaurants/me/menu/items", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async updateMenuItem(
+      id: string,
+      input: Partial<{
+        name: string;
+        description: string | null;
+        price: number;
+        categoryId: string | null;
+        available: boolean;
+        prepTimeMinutes: number | null;
+        sortOrder: number;
+      }>,
+    ) {
+      return request<{ item: MenuItem }>(`/v1/restaurants/me/menu/items/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    },
+    async deleteMenuItem(id: string) {
+      return request<{ ok: true }>(`/v1/restaurants/me/menu/items/${id}`, { method: "DELETE" });
+    },
+    /** Replaces the item's full option/choice set in one call — see the
+     * file doc comment in apps/api/src/restaurants/menu.ts for why. */
+    async setMenuItemOptions(
+      itemId: string,
+      options: Array<{
+        name: string;
+        required?: boolean;
+        multiSelect?: boolean;
+        choices: Array<{ name: string; priceDelta?: number }>;
+      }>,
+    ) {
+      return request<{ options: MenuItemOption[] }>(`/v1/restaurants/me/menu/items/${itemId}/options`, {
+        method: "PUT",
+        body: JSON.stringify({ options }),
+      });
+    },
+    async uploadMenuItemPhoto(itemId: string, file: Blob) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await f(`${root}/v1/restaurants/me/menu/items/${itemId}/photo`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ ok: true }>(res);
+    },
+    /** Streams a menu item's photo as a Blob (not JSON — raw fetch, mirrors uploadMenuItemPhoto). */
+    async menuItemPhotoBlob(itemId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/restaurants/menu-items/${itemId}/photo`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load photo`);
+      return res.blob();
     },
 
     // Rider subscription — see apps/api/src/riders/subscription.ts.

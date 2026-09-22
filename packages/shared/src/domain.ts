@@ -421,6 +421,65 @@ export type AdminRestaurant = Restaurant & {
   owner_email: string | null;
 };
 
+// ---------------------------------------------------------------------------
+// Menu — Phase 2 of food ordering (see apps/api/src/restaurants/menu.ts).
+// ---------------------------------------------------------------------------
+
+export type MenuItemOptionChoice = {
+  id: string;
+  name: string;
+  price_delta: number;
+  sort_order: number;
+};
+
+/** One customization group on an item — e.g. "Size" (required, pick one)
+ * or "Extras" (optional, pick several): required + multi_select together
+ * describe every real-world shape. */
+export type MenuItemOption = {
+  id: string;
+  menu_item_id: string;
+  name: string;
+  required: number;
+  multi_select: number;
+  sort_order: number;
+  choices: MenuItemOptionChoice[];
+};
+
+export type MenuItem = {
+  id: string;
+  restaurant_id: string;
+  category_id: string | null;
+  name: string;
+  description: string | null;
+  price: number;
+  photo_key: string | null;
+  /** The owner's own 86-a-dish toggle — distinct from the whole
+   * restaurant being open/closed (Restaurant.is_open). */
+  available: number;
+  prep_time_minutes: number | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  options: MenuItemOption[];
+};
+
+export type MenuCategory = {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  items: MenuItem[];
+};
+
+/** The full owner-facing menu tree — categories with their items nested,
+ * plus a bucket for items that aren't in any category. */
+export type RestaurantMenu = {
+  categories: MenuCategory[];
+  uncategorizedItems: MenuItem[];
+};
+
 export type SavedLocation = {
   id: string;
   user_id: string;
