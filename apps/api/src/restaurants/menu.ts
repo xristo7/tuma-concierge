@@ -378,12 +378,17 @@ menuRoutes.get("/restaurants/menu-items/:id/photo", requireAuth, async (c) => {
   const user = c.get("user");
 
   const res = await db.execute({
-    sql: `SELECT i.photo_key, r.owner_id FROM menu_items i JOIN restaurants r ON r.id = i.restaurant_id WHERE i.id = ?`,
+    sql: `SELECT i.photo_key, r.owner_id, r.status as restaurant_status
+          FROM menu_items i JOIN restaurants r ON r.id = i.restaurant_id WHERE i.id = ?`,
     args: [id],
   });
   const row = res.rows[0] as Row | undefined;
   if (!row?.photo_key) return c.json({ error: "not_found" }, 404);
-  if (row.owner_id !== user.sub && user.role !== "admin") return c.json({ error: "forbidden" }, 403);
+  // The owner and admins always see it; anyone else only once the
+  // restaurant is actually approved and visible for ordering from — a
+  // pending/suspended restaurant's photos stay private until then.
+  const isOwnerOrAdmin = row.owner_id === user.sub || user.role === "admin";
+  if (!isOwnerOrAdmin && row.restaurant_status !== "active") return c.json({ error: "forbidden" }, 403);
 
   const bucket = getR2Bucket();
   const object = await bucket.get(row.photo_key as string);

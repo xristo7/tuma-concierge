@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, MessageCircle, ShoppingCart, User } from "lucide-react";
+import { Home, MessageCircle, ShoppingCart, User, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -11,6 +11,7 @@ import { useLivePolling } from "../lib/use-live-polling";
 
 const tabs: { href: string; labelKey: TranslationKey; icon: LucideIcon }[] = [
   { href: "/", labelKey: "nav_home", icon: Home },
+  { href: "/restaurants", labelKey: "nav_food", icon: UtensilsCrossed },
   { href: "/orders", labelKey: "nav_orders", icon: ShoppingCart },
   { href: "/chat", labelKey: "nav_chat", icon: MessageCircle },
   { href: "/account", labelKey: "nav_account", icon: User },

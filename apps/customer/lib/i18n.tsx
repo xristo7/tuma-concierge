@@ -13,6 +13,7 @@ const STORAGE_KEY = "tuma-language";
 const STRINGS: Record<string, { en: string; lg: string }> = {
   nav_home: { en: "Home", lg: "Awaka" },
   nav_orders: { en: "Orders", lg: "Ebiragiddwa" },
+  nav_food: { en: "Food", lg: "Emmere" },
   nav_jobs: { en: "Jobs", lg: "Emirimu" },
   nav_active: { en: "Active", lg: "Ebikola" },
   nav_chat: { en: "Chat", lg: "Emboozi" },

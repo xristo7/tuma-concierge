@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FoodCard } from "./FoodCard";
 import { ParcelCard } from "./ParcelCard";
 import { ParcelModal } from "./ParcelModal";
 import { ShoppingListCard } from "./ShoppingListCard";
@@ -12,6 +13,7 @@ export function OrderTypeCards() {
   return (
     <>
       <div className="flex flex-col gap-3">
+        <FoodCard />
         <ShoppingListCard onClick={() => setOpen("shopping")} />
         <ParcelCard onClick={() => setOpen("parcel")} />
       </div>

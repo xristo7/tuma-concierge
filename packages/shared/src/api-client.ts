@@ -227,6 +227,35 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async getActiveOrder() {
       return request<{ activeOrder: OrderRow | null }>("/v1/orders/active");
     },
+
+    // Restaurant browsing + food checkout — see apps/api/src/restaurants/customer.ts.
+    async listRestaurants() {
+      return request<{ restaurants: Restaurant[] }>("/v1/restaurants");
+    },
+    async getRestaurant(id: string) {
+      return request<{ restaurant: Restaurant }>(`/v1/restaurants/${id}`);
+    },
+    async getRestaurantMenu(id: string) {
+      return request<RestaurantMenu>(`/v1/restaurants/${id}/menu`);
+    },
+    /** Server computes every price from the menu — the client only ever
+     * says *which* item/choices, never what they cost. */
+    async orderFromRestaurant(
+      restaurantId: string,
+      input: {
+        items: Array<{ menuItemId: string; quantity: number; choiceIds?: string[] }>;
+        destinationArea?: string;
+        destinationAddress?: string;
+        destinationLat?: number;
+        destinationLng?: number;
+        paymentRail?: "escrow" | "float";
+      },
+    ) {
+      return request<{ order: OrderRow }>(`/v1/restaurants/${restaurantId}/order`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
     async getOrder(orderId: string) {
       return request<OrderDetail>(`/v1/orders/${orderId}`);
     },
