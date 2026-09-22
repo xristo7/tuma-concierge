@@ -28,6 +28,8 @@ import type {
   PlatformEnvironment,
   Rider,
   RiderApplicant,
+  RiderSubscriptionPayment,
+  RiderSubscriptionView,
   SavedLocation,
   StaffMember,
   UserStatus,
@@ -503,6 +505,22 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async refreshWithdrawal(id: string) {
       return request<{ withdrawal: Wallet["withdrawals"][number] }>(`/v1/riders/me/wallet/withdrawals/${id}/refresh`);
+    },
+
+    // Rider subscription — see apps/api/src/riders/subscription.ts.
+    async myRiderSubscription() {
+      return request<{ subscription: RiderSubscriptionView; payments: RiderSubscriptionPayment[] }>(
+        "/v1/riders/me/subscription",
+      );
+    },
+    async paySubscription() {
+      return request<{ paymentId: string; amount: number; status: "pending"; network: string | null }>(
+        "/v1/riders/me/subscription/pay",
+        { method: "POST" },
+      );
+    },
+    async refreshSubscriptionPayment(id: string) {
+      return request<{ payment: RiderSubscriptionPayment }>(`/v1/riders/me/subscription/payments/${id}/refresh`);
     },
 
     // Saved locations

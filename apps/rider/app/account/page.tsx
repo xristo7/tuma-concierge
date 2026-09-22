@@ -1,9 +1,15 @@
 "use client";
 
-import { detectMobileMoneyNetwork, isRiderProfileComplete, mobileMoneyNetworkLabel, type Rider } from "@tuma/shared";
+import {
+  detectMobileMoneyNetwork,
+  isRiderProfileComplete,
+  mobileMoneyNetworkLabel,
+  type Rider,
+  type RiderSubscriptionView,
+} from "@tuma/shared";
 import { CheckCircle2, LogOut, MapPin, Upload, User } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppearanceSettings } from "../../components/AppearanceSettings";
 import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
 import { LanguageSettings } from "../../components/LanguageSettings";
@@ -228,6 +234,8 @@ export default function AccountPage() {
           </span>
         )}
       </section>
+
+      <SubscriptionCard />
 
       <AppearanceSettings />
 
@@ -471,5 +479,106 @@ export default function AccountPage() {
         />
       )}
     </div>
+  );
+}
+
+const CADENCE_LABEL: Record<string, string> = { daily: "day", weekly: "week", monthly: "month" };
+
+/**
+ * Self-contained: fetches its own subscription state and renders nothing
+ * when the admin hasn't turned a subscription requirement on at all. Same
+ * pay-then-poll pattern as ../wallet/page.tsx's withdrawal flow, since
+ * sandbox/mock mobile money has no webhook to push a result back.
+ */
+function SubscriptionCard() {
+  const [subscription, setSubscription] = useState<RiderSubscriptionView | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const polling = useRef(false);
+  const pendingIdRef = useRef<string | null>(null);
+
+  const load = useCallback(() => {
+    return api.myRiderSubscription().then((res) => {
+      setSubscription(res.subscription);
+      return res;
+    });
+  }, []);
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, [load]);
+
+  useEffect(() => {
+    const id = pendingIdRef.current;
+    if (!id || polling.current) return;
+    polling.current = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.refreshSubscriptionPayment(id);
+        if (res.payment.status !== "pending") {
+          pendingIdRef.current = null;
+          await load();
+        }
+      } catch {
+        // keep polling — a transient error shouldn't stop it
+      }
+    }, 4000);
+    return () => {
+      clearInterval(interval);
+      polling.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subscription, load]);
+
+  async function pay() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api.paySubscription();
+      pendingIdRef.current = res.paymentId;
+      polling.current = false; // let the effect above pick the new id up
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!subscription || !subscription.required) return null;
+
+  if (subscription.current) {
+    return (
+      <section className="home-card flex items-center gap-3 !border-l-4 !border-l-green">
+        <CheckCircle2 className="h-5 w-5 shrink-0 text-green" strokeWidth={1.75} aria-hidden />
+        <p className="text-sm text-ink-500">
+          {subscription.mode === "once"
+            ? "Your one-time subscription is paid — active for good."
+            : `Subscription active${subscription.paidThrough ? ` through ${new Date(subscription.paidThrough).toLocaleDateString()}` : ""}. Renews automatically at ${subscription.amount.toLocaleString()} UGX/${CADENCE_LABEL[subscription.cadence]}.`}
+        </p>
+      </section>
+    );
+  }
+
+  const isPending = !!pendingIdRef.current;
+  return (
+    <section className="home-card space-y-2.5 !border-l-4 !border-l-gold">
+      <p className="text-sm font-semibold text-ink">
+        {subscription.status === "past_due" ? "Subscription payment failed" : "Activate your subscription"}
+      </p>
+      <p className="text-sm text-ink-500">
+        {subscription.mode === "once"
+          ? `Pay a one-time ${subscription.amount.toLocaleString()} UGX fee to start claiming and applying for jobs — no renewals, ever.`
+          : `Pay ${subscription.amount.toLocaleString()} UGX/${CADENCE_LABEL[subscription.cadence]} to start claiming and applying for jobs. Charged to your mobile money number on file.`}
+      </p>
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <button
+        onClick={pay}
+        disabled={busy || isPending}
+        className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
+      >
+        {isPending ? "Confirming…" : busy ? "Sending…" : `Pay ${subscription.amount.toLocaleString()} UGX`}
+      </button>
+    </section>
   );
 }

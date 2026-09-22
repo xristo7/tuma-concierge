@@ -87,6 +87,7 @@ const updateSchema = z.object({
   processingFeeMode: z.enum(["customer", "rider", "split"]).optional(),
   processingFeeSplitCustomerPercent: z.number().min(0).max(100).optional(),
   subscriptionEnabled: z.boolean().optional(),
+  subscriptionMode: z.enum(["recurring", "once"]).optional(),
   subscriptionAmount: z.number().min(0).max(1_000_000).optional(),
   subscriptionCadence: z.enum(["daily", "weekly", "monthly"]).optional(),
 });
@@ -108,6 +109,7 @@ const PAYMENTS_FIELDS = [
   "processingFeeMode",
   "processingFeeSplitCustomerPercent",
   "subscriptionEnabled",
+  "subscriptionMode",
   "subscriptionAmount",
   "subscriptionCadence",
 ] as const;
@@ -182,6 +184,7 @@ settingsRoutes.put(
       processingFeeMode: parsed.data.processingFeeMode,
       processingFeeSplitCustomerPercent: parsed.data.processingFeeSplitCustomerPercent,
       subscriptionEnabled: parsed.data.subscriptionEnabled,
+      subscriptionMode: parsed.data.subscriptionMode,
       subscriptionAmount: parsed.data.subscriptionAmount,
       subscriptionCadence: parsed.data.subscriptionCadence,
     });

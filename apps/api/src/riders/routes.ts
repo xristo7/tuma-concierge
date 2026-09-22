@@ -9,10 +9,11 @@ import { haversineKm } from "../lib/geo.js";
 import { newId } from "../lib/ids.js";
 import { baseMimeType, extensionForMime } from "../lib/mime.js";
 import { clientIp } from "../lib/ratelimit.js";
-import { getDeliverySettings, getPlatformEnvironment } from "../lib/settings.js";
+import { getDeliverySettings, getMonetizationSettings, getPlatformEnvironment } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { redactOrders, toOpenJob } from "../orders/visibility.js";
-import { checkPaymentStatus, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
+import { checkPaymentStatus, initiateCollection, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
+import { getRiderSubscriptionView, isSubscriptionCurrent, nextPaidThrough } from "./subscription.js";
 import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
 
 export const riderRoutes = new Hono();
@@ -267,11 +268,14 @@ riderRoutes.get("/riders/me/orders", requireAuth, requireRole("rider"), async (c
 riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), async (c) => {
   const user = c.get("user");
   const riderRes = await db.execute({
-    sql: "SELECT verified, is_online, stage_lat, stage_lng FROM riders WHERE user_id = ?",
+    sql: "SELECT verified, is_online, stage_lat, stage_lng, subscription_status, subscription_paid_through FROM riders WHERE user_id = ?",
     args: [user.sub],
   });
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider?.verified || !rider.is_online) {
+    return c.json({ jobs: [] });
+  }
+  if ((await getMonetizationSettings()).subscriptionEnabled && !isSubscriptionCurrent(rider)) {
     return c.json({ jobs: [] });
   }
 
@@ -513,6 +517,131 @@ riderRoutes.get("/riders/me/wallet/withdrawals/:id/refresh", requireAuth, requir
     console.error("Withdrawal status check failed:", err);
     return c.json(
       { error: "status_check_failed", message: "Couldn't check the payout status just now. Please try again." },
+      502,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Subscription — an admin-optional recurring or one-time-lifetime fee a
+// rider pays (to their own mobile money number) before they're matchable
+// for jobs. See ./subscription.ts and orders/routes.ts's eligibility
+// queries for the actual gate.
+// ---------------------------------------------------------------------------
+
+riderRoutes.get("/riders/me/subscription", requireAuth, requireRole("rider"), async (c) => {
+  const user = c.get("user");
+  const view = await getRiderSubscriptionView(user.sub);
+  const paymentsRes = await db.execute({
+    sql: "SELECT * FROM rider_subscription_payments WHERE rider_id = ? ORDER BY created_at DESC LIMIT 10",
+    args: [user.sub],
+  });
+  return c.json({ subscription: view, payments: paymentsRes.rows });
+});
+
+/**
+ * Charges the rider's own mobile money number for the current admin-set
+ * subscription amount. "once" mode marks them active forever on success
+ * (see nextPaidThrough's lifetime sentinel); "recurring" activates them
+ * through one cadence period, after which ../worker.ts's daily Cron sweep
+ * takes over renewing them automatically.
+ */
+riderRoutes.post("/riders/me/subscription/pay", requireAuth, requireRole("rider"), async (c) => {
+  const user = c.get("user");
+  const settings = await getMonetizationSettings();
+  if (!settings.subscriptionEnabled) {
+    return c.json({ error: "subscription_not_required", message: "No subscription is currently required" }, 409);
+  }
+  if (settings.subscriptionAmount <= 0) {
+    return c.json({ error: "invalid_amount", message: "Ask an admin to set a subscription amount first" }, 409);
+  }
+
+  const riderRes = await db.execute({
+    sql: "SELECT momo_msisdn, subscription_status, subscription_paid_through FROM riders WHERE user_id = ?",
+    args: [user.sub],
+  });
+  const rider = riderRes.rows[0] as Row | undefined;
+  if (!rider) return c.json({ error: "not_a_rider" }, 404);
+
+  const msisdn = rider.momo_msisdn as string | null;
+  if (!msisdn) {
+    return c.json({ error: "no_mobile_money", message: "Add a mobile money number in your profile first" }, 409);
+  }
+
+  const environment = await getPlatformEnvironment();
+  const paymentId = newId("rsp");
+  try {
+    const initiated = await initiateCollection({
+      referenceId: paymentId,
+      msisdn,
+      amount: settings.subscriptionAmount,
+      name: user.name,
+      narrative: settings.subscriptionMode === "once" ? "Tuma rider lifetime subscription" : "Tuma rider subscription",
+      forceMock: environment === "sandbox",
+    });
+    await db.execute({
+      sql: `INSERT INTO rider_subscription_payments (id, rider_id, mode, amount, provider, provider_ref, msisdn, status, period_start, period_end, environment)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', datetime('now'), ?, ?)`,
+      args: [
+        paymentId,
+        user.sub,
+        settings.subscriptionMode,
+        settings.subscriptionAmount,
+        initiated.provider,
+        initiated.providerRef,
+        msisdn,
+        nextPaidThrough(settings),
+        environment,
+      ],
+    });
+    return c.json({ paymentId, amount: settings.subscriptionAmount, status: "pending", network: initiated.network }, 201);
+  } catch (err) {
+    if (err instanceof UnsupportedNetworkError) {
+      return c.json({ error: "unsupported_network", message: err.message }, 400);
+    }
+    console.error("Subscription payment request failed:", err);
+    return c.json({ error: "payment_request_failed", message: "Couldn't reach mobile money just now. Please try again." }, 502);
+  }
+});
+
+riderRoutes.get("/riders/me/subscription/payments/:id/refresh", requireAuth, requireRole("rider"), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const res = await db.execute({
+    sql: "SELECT * FROM rider_subscription_payments WHERE id = ? AND rider_id = ?",
+    args: [id, user.sub],
+  });
+  const payment = res.rows[0] as Row | undefined;
+  if (!payment) return c.json({ error: "not_found" }, 404);
+  if (payment.status !== "pending") return c.json({ payment });
+
+  try {
+    const status = await checkPaymentStatus({
+      provider: payment.provider as string,
+      provider_ref: payment.provider_ref as string | null,
+      created_at: payment.created_at as string,
+    });
+    if (status === "successful") {
+      await db.execute({
+        sql: "UPDATE rider_subscription_payments SET status = 'successful', updated_at = datetime('now') WHERE id = ?",
+        args: [id],
+      });
+      await db.execute({
+        sql: "UPDATE riders SET subscription_status = 'active', subscription_paid_through = ?, updated_at = datetime('now') WHERE user_id = ?",
+        args: [payment.period_end as string, user.sub],
+      });
+    } else if (status === "failed") {
+      await db.execute({
+        sql: "UPDATE rider_subscription_payments SET status = 'failed', updated_at = datetime('now') WHERE id = ?",
+        args: [id],
+      });
+    }
+    const updated = await db.execute({ sql: "SELECT * FROM rider_subscription_payments WHERE id = ?", args: [id] });
+    return c.json({ payment: updated.rows[0] });
+  } catch (err) {
+    console.error("Subscription payment status check failed:", err);
+    return c.json(
+      { error: "status_check_failed", message: "Couldn't check the payment status just now. Please try again." },
       502,
     );
   }

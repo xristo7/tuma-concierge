@@ -24,14 +24,16 @@ export default function JobsHomePage() {
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [previewJobItem, setPreviewJobItem] = useState<AvailableJob | null>(null);
+  const [subscriptionOk, setSubscriptionOk] = useState(true);
   const online = useNetworkStatus();
 
   const load = useCallback(() => {
-    Promise.all([api.myRiderProfile(), api.myRiderOrders(), api.availableJobs()])
-      .then(([r, o, j]) => {
+    Promise.all([api.myRiderProfile(), api.myRiderOrders(), api.availableJobs(), api.myRiderSubscription()])
+      .then(([r, o, j, s]) => {
         setRider(r.rider);
         setOrders(o.orders);
         setAvailableJobs(j.jobs);
+        setSubscriptionOk(!s.subscription.required || s.subscription.current);
         setLoaded(true);
       })
       .catch((err) => setError(errorMessage(err)));
@@ -40,11 +42,12 @@ export default function JobsHomePage() {
   useLivePolling(load, 6000, [load]);
 
   // This screen is the landing page once (and only once) a rider is fully
-  // set up: profile complete AND admin-verified. Anyone short of that gets
-  // sent to their account screen instead — either to finish the required
-  // fields, or to sit and wait for verification — rather than seeing an
-  // empty jobs list they can't actually do anything with yet.
-  const ready = isRiderProfileComplete(rider) && !!rider?.verified;
+  // set up: profile complete, admin-verified, and (if the admin requires
+  // one) their subscription is paid up. Anyone short of that gets sent to
+  // their account screen instead — either to finish the required fields,
+  // wait for verification, or pay their subscription — rather than seeing
+  // an empty jobs list they can't actually do anything with yet.
+  const ready = isRiderProfileComplete(rider) && !!rider?.verified && subscriptionOk;
   useEffect(() => {
     if (loaded && !ready) router.replace("/account");
   }, [loaded, ready, router]);

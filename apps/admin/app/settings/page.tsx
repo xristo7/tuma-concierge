@@ -12,6 +12,7 @@ import {
   type ProcessingFeeMode,
   type ServiceFeeType,
   type SubscriptionCadence,
+  type SubscriptionMode,
 } from "@tuma/shared";
 import { Banknote, CreditCard, FlaskConical, Mic, Route, Settings as SettingsIcon, Wallet as WalletIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -50,6 +51,7 @@ export default function SettingsPage() {
   const [processingFeeMode, setProcessingFeeMode] = useState<ProcessingFeeMode>("customer");
   const [processingFeeSplitCustomerPercent, setProcessingFeeSplitCustomerPercent] = useState("50");
   const [subscriptionEnabled, setSubscriptionEnabled] = useState(false);
+  const [subscriptionMode, setSubscriptionMode] = useState<SubscriptionMode>("recurring");
   const [subscriptionAmount, setSubscriptionAmount] = useState("0");
   const [subscriptionCadence, setSubscriptionCadence] = useState<SubscriptionCadence>("weekly");
   const [busy, setBusy] = useState(false);
@@ -89,6 +91,7 @@ export default function SettingsPage() {
         setProcessingFeeMode(settingsRes.settings.processingFeeMode);
         setProcessingFeeSplitCustomerPercent(String(settingsRes.settings.processingFeeSplitCustomerPercent));
         setSubscriptionEnabled(settingsRes.settings.subscriptionEnabled);
+        setSubscriptionMode(settingsRes.settings.subscriptionMode);
         setSubscriptionAmount(String(settingsRes.settings.subscriptionAmount));
         setSubscriptionCadence(settingsRes.settings.subscriptionCadence);
         setProviderInfo(integrationsRes.integrations.mobileMoney.providers);
@@ -148,6 +151,7 @@ export default function SettingsPage() {
               processingFeeMode,
               processingFeeSplitCustomerPercent: Number(processingFeeSplitCustomerPercent),
               subscriptionEnabled,
+              subscriptionMode,
               subscriptionAmount: Number(subscriptionAmount),
               subscriptionCadence,
             }
@@ -177,6 +181,7 @@ export default function SettingsPage() {
       setProcessingFeeMode(res.settings.processingFeeMode);
       setProcessingFeeSplitCustomerPercent(String(res.settings.processingFeeSplitCustomerPercent));
       setSubscriptionEnabled(res.settings.subscriptionEnabled);
+      setSubscriptionMode(res.settings.subscriptionMode);
       setSubscriptionAmount(String(res.settings.subscriptionAmount));
       setSubscriptionCadence(res.settings.subscriptionCadence);
       if (canManagePayments) await refreshIntegrations();
@@ -601,47 +606,64 @@ export default function SettingsPage() {
                   className="mt-0.5 h-4 w-4 shrink-0 accent-gold"
                 />
                 <span>
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-sm font-semibold text-ink">Rider subscription</span>
-                    <span className="rounded-full bg-[rgb(var(--surface-muted))] px-2 py-0.5 text-[11px] font-semibold text-ink-500">
-                      Price only — not billed yet
-                    </span>
-                  </span>
+                  <span className="text-sm font-semibold text-ink">Rider subscription</span>
                   <span className="block text-xs text-ink-500">
-                    A recurring charge instead of a per-order one. This sets the price and cadence an admin
-                    intends to charge, but actual recurring billing and blocking a rider whose subscription has
-                    lapsed aren&apos;t built yet — this is a placeholder for that follow-up.
+                    Riders pay this from their own mobile money number before they can claim or apply for jobs.
+                    Charged and enforced automatically — a lapsed rider is blocked from matching until they pay.
                   </span>
                 </span>
               </label>
               {subscriptionEnabled && (
-                <div className="grid grid-cols-2 gap-3 pl-6.5">
+                <div className="space-y-2.5 pl-6.5">
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-ink-500" htmlFor="subscriptionAmount">
-                      Amount (UGX)
-                    </label>
-                    <input
-                      id="subscriptionAmount"
-                      inputMode="numeric"
-                      value={subscriptionAmount}
-                      onChange={(e) => setSubscriptionAmount(e.target.value.replace(/[^\d.]/g, ""))}
-                      className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-ink-500" htmlFor="subscriptionCadence">
-                      Cadence
+                    <label className="text-xs font-semibold text-ink-500" htmlFor="subscriptionMode">
+                      Billing mode
                     </label>
                     <select
-                      id="subscriptionCadence"
-                      value={subscriptionCadence}
-                      onChange={(e) => setSubscriptionCadence(e.target.value as SubscriptionCadence)}
+                      id="subscriptionMode"
+                      value={subscriptionMode}
+                      onChange={(e) => setSubscriptionMode(e.target.value as SubscriptionMode)}
                       className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
                     >
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
+                      <option value="recurring">Recurring — bills every cadence</option>
+                      <option value="once">One-time — a single lifetime fee at activation</option>
                     </select>
+                    <p className="text-xs text-ink-500">
+                      {subscriptionMode === "once"
+                        ? "Charged once. A rider who pays never needs to renew — their subscription stays active for good."
+                        : "Renewed automatically by a daily check — a rider whose payment fails is blocked from matching until it succeeds."}
+                    </p>
+                  </div>
+                  <div className={`grid gap-3 ${subscriptionMode === "recurring" ? "grid-cols-2" : "grid-cols-1"}`}>
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-ink-500" htmlFor="subscriptionAmount">
+                        Amount (UGX)
+                      </label>
+                      <input
+                        id="subscriptionAmount"
+                        inputMode="numeric"
+                        value={subscriptionAmount}
+                        onChange={(e) => setSubscriptionAmount(e.target.value.replace(/[^\d.]/g, ""))}
+                        className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                      />
+                    </div>
+                    {subscriptionMode === "recurring" && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-ink-500" htmlFor="subscriptionCadence">
+                          Cadence
+                        </label>
+                        <select
+                          id="subscriptionCadence"
+                          value={subscriptionCadence}
+                          onChange={(e) => setSubscriptionCadence(e.target.value as SubscriptionCadence)}
+                          className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                        >
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

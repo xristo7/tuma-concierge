@@ -189,13 +189,13 @@ export type DeliverySettings = {
 export type ServiceFeeType = "flat" | "percent";
 export type ProcessingFeeMode = "customer" | "rider" | "split";
 export type SubscriptionCadence = "daily" | "weekly" | "monthly";
+export type SubscriptionMode = "recurring" | "once";
 
 /** Every monetization mechanism an admin can independently turn on and
  * price, from Settings → Monetization. See
  * apps/api/src/lib/monetization.ts for how these combine at Fund/Settle
- * time. Subscriptions are the odd one out — recurring, not per-order — so
- * this is just the toggle/price/cadence for now; billing and lapsed-
- * subscription enforcement aren't built yet. */
+ * time, and apps/api/src/riders/subscription.ts for how the subscription
+ * fields drive rider billing/enforcement. */
 export type MonetizationSettings = {
   /** % of the delivery fee (never item cost) withheld from the rider's
    * payout, set per order type since a parcel's whole total is its
@@ -217,8 +217,41 @@ export type MonetizationSettings = {
   /** Only used when processingFeeMode is "split" — customer's share 0-100. */
   processingFeeSplitCustomerPercent: number;
   subscriptionEnabled: boolean;
+  /** "recurring" bills every subscriptionCadence; "once" charges a single
+   * lifetime fee at activation and never bills that rider again. */
+  subscriptionMode: SubscriptionMode;
   subscriptionAmount: number;
   subscriptionCadence: SubscriptionCadence;
+};
+
+/** A rider's own subscription state — see GET /riders/me/subscription. */
+export type RiderSubscriptionView = {
+  required: boolean;
+  mode: SubscriptionMode;
+  amount: number;
+  cadence: SubscriptionCadence;
+  status: "inactive" | "active" | "past_due";
+  /** True once they're paid up (for "once" mode, this stays true forever
+   * after the first successful payment). */
+  current: boolean;
+  /** Null for a lifetime ("once") subscriber or anyone who's never paid —
+   * there's no real expiry date to show either way. */
+  paidThrough: string | null;
+};
+
+export type RiderSubscriptionPayment = {
+  id: string;
+  rider_id: string;
+  mode: SubscriptionMode;
+  amount: number;
+  provider: string;
+  provider_ref: string | null;
+  msisdn: string | null;
+  status: "pending" | "successful" | "failed";
+  period_start: string | null;
+  period_end: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type OrderEvent = {

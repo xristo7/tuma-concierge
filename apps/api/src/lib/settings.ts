@@ -102,12 +102,14 @@ const DEFAULTS = {
    * processing fee, 0-100; the rider bears the remainder. */
   monetization_processing_fee_split_customer_percent: "50",
 
-  /** Rider subscription — a recurring charge, not a per-order one, so it
-   * doesn't plug into Fund/Settle math the way the others do. This is
-   * deliberately just the toggle + price + cadence for now; the actual
-   * recurring billing and any lapsed-subscription enforcement is a
-   * separate piece of work not built yet — see the admin UI's note. */
+  /** Rider subscription — a recurring or one-time-lifetime charge, not a
+   * per-order one, so it doesn't plug into Fund/Settle math the way the
+   * others do. See ../riders/subscription.ts for the billing/enforcement
+   * logic and ../worker.ts's scheduled() for the daily renewal sweep. */
   monetization_subscription_enabled: "0",
+  /** "recurring" bills every `cadence`; "once" charges a single lifetime
+   * fee at activation and never bills that rider again. */
+  monetization_subscription_mode: "recurring",
   monetization_subscription_amount: "0",
   monetization_subscription_cadence: "weekly",
 } as const;
@@ -248,6 +250,7 @@ export async function getVoiceNoteMaxSeconds(): Promise<number> {
 export type ServiceFeeType = "flat" | "percent";
 export type ProcessingFeeMode = "customer" | "rider" | "split";
 export type SubscriptionCadence = "daily" | "weekly" | "monthly";
+export type SubscriptionMode = "recurring" | "once";
 
 export type MonetizationSettings = {
   deliveryCommissionEnabled: boolean;
@@ -261,6 +264,7 @@ export type MonetizationSettings = {
   processingFeeMode: ProcessingFeeMode;
   processingFeeSplitCustomerPercent: number;
   subscriptionEnabled: boolean;
+  subscriptionMode: SubscriptionMode;
   subscriptionAmount: number;
   subscriptionCadence: SubscriptionCadence;
 };
@@ -277,6 +281,10 @@ function asSubscriptionCadence(raw: string): SubscriptionCadence {
   return raw === "daily" || raw === "monthly" ? raw : "weekly";
 }
 
+function asSubscriptionMode(raw: string): SubscriptionMode {
+  return raw === "once" ? "once" : "recurring";
+}
+
 export async function getMonetizationSettings(): Promise<MonetizationSettings> {
   const [
     deliveryCommissionEnabled,
@@ -290,6 +298,7 @@ export async function getMonetizationSettings(): Promise<MonetizationSettings> {
     processingFeeMode,
     processingFeeSplitCustomerPercent,
     subscriptionEnabled,
+    subscriptionMode,
     subscriptionAmount,
     subscriptionCadence,
   ] = await Promise.all([
@@ -304,6 +313,7 @@ export async function getMonetizationSettings(): Promise<MonetizationSettings> {
     getSetting("monetization_processing_fee_mode"),
     getSetting("monetization_processing_fee_split_customer_percent"),
     getSetting("monetization_subscription_enabled"),
+    getSetting("monetization_subscription_mode"),
     getSetting("monetization_subscription_amount"),
     getSetting("monetization_subscription_cadence"),
   ]);
@@ -319,6 +329,7 @@ export async function getMonetizationSettings(): Promise<MonetizationSettings> {
     processingFeeMode: asProcessingFeeMode(processingFeeMode),
     processingFeeSplitCustomerPercent: Number(processingFeeSplitCustomerPercent) || 0,
     subscriptionEnabled: subscriptionEnabled === "1",
+    subscriptionMode: asSubscriptionMode(subscriptionMode),
     subscriptionAmount: Number(subscriptionAmount) || 0,
     subscriptionCadence: asSubscriptionCadence(subscriptionCadence),
   };
@@ -360,6 +371,9 @@ export async function setMonetizationSettings(input: Partial<MonetizationSetting
   }
   if (input.subscriptionEnabled != null) {
     writes.push(setSetting("monetization_subscription_enabled", input.subscriptionEnabled ? "1" : "0"));
+  }
+  if (input.subscriptionMode != null) {
+    writes.push(setSetting("monetization_subscription_mode", input.subscriptionMode));
   }
   if (input.subscriptionAmount != null) {
     writes.push(setSetting("monetization_subscription_amount", String(input.subscriptionAmount)));

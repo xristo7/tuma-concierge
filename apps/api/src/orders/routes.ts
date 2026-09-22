@@ -23,6 +23,7 @@ import { initiateCollection, mobileMoneyNetworkLabel, UnsupportedNetworkError } 
 import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
 import { appBaseUrl } from "../verify/service.js";
 import { payFromWallet } from "../wallet/service.js";
+import { isSubscriptionCurrent } from "../riders/subscription.js";
 
 function paymentReturnUrl(orderId: string): string {
   return `${appBaseUrl("customer")}/orders/${orderId}?payment_return=1`;
@@ -576,9 +577,15 @@ async function findAutoMatchCandidate(
   const visibleRadiusKm = currentVisibilityRadiusKm(order.updated_at as string);
   const fullyOpen = visibleRadiusKm == null;
 
+  // Skips a lapsed subscriber entirely when one's required — auto-match
+  // never hands work to a rider who couldn't have claimed it themselves.
+  const subscriptionGate = (await getMonetizationSettings()).subscriptionEnabled
+    ? "AND r.subscription_status = 'active' AND r.subscription_paid_through >= datetime('now')"
+    : "";
   const eligible = await db.execute({
     sql: `SELECT u.id, u.name, r.stage_lat, r.stage_lng, r.area FROM riders r JOIN users u ON u.id = r.user_id
           WHERE r.verified = 1 AND r.is_online = 1
+          ${subscriptionGate}
           AND u.id NOT IN (
             SELECT rider_id FROM orders WHERE rider_id IS NOT NULL AND stage != 'Settle' AND environment = ?
           )
@@ -732,13 +739,16 @@ orderRoutes.post("/orders/:id/claim", requireRole("rider"), async (c) => {
   }
 
   const riderRes = await db.execute({
-    sql: `SELECT r.verified, r.is_online, r.stage_lat, r.stage_lng, u.name FROM riders r
-          JOIN users u ON u.id = r.user_id WHERE r.user_id = ?`,
+    sql: `SELECT r.verified, r.is_online, r.stage_lat, r.stage_lng, r.subscription_status, r.subscription_paid_through, u.name
+          FROM riders r JOIN users u ON u.id = r.user_id WHERE r.user_id = ?`,
     args: [user.sub],
   });
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider?.verified) return c.json({ error: "not_verified" }, 403);
   if (!rider.is_online) return c.json({ error: "not_online", message: "Go online to claim jobs" }, 409);
+  if ((await getMonetizationSettings()).subscriptionEnabled && !isSubscriptionCurrent(rider)) {
+    return c.json({ error: "subscription_required", message: "Pay your subscription to start claiming jobs" }, 403);
+  }
 
   const { serviceRangeKm } = await getDeliverySettings();
   const matchPoint = orderMatchPoint(order);
@@ -800,12 +810,15 @@ orderRoutes.post("/orders/:id/apply", requireRole("rider"), async (c) => {
   }
 
   const riderRes = await db.execute({
-    sql: "SELECT verified, is_online, stage_lat, stage_lng FROM riders WHERE user_id = ?",
+    sql: "SELECT verified, is_online, stage_lat, stage_lng, subscription_status, subscription_paid_through FROM riders WHERE user_id = ?",
     args: [user.sub],
   });
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider?.verified) return c.json({ error: "not_verified" }, 403);
   if (!rider.is_online) return c.json({ error: "not_online", message: "Go online to apply for jobs" }, 409);
+  if ((await getMonetizationSettings()).subscriptionEnabled && !isSubscriptionCurrent(rider)) {
+    return c.json({ error: "subscription_required", message: "Pay your subscription to start applying for jobs" }, 403);
+  }
 
   const matchPoint = orderMatchPoint(order);
   const riderLat = rider.stage_lat as number | null;
