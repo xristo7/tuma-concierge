@@ -292,8 +292,9 @@ export default function SettingsPage() {
                 className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
               />
               <p className="text-xs text-ink-500">
-                A passenger ride ("call a rider to pick you up and take you somewhere") is priced the same way
-                as a parcel — distance × rate — but carrying a person is its own fare, tracked separately.
+                A passenger ride (&quot;call a rider to pick you up and take you somewhere&quot;) is priced the
+                same way as a parcel — distance × rate — but carrying a person is its own fare, tracked
+                separately.
               </p>
             </div>
             <div className="space-y-1">
