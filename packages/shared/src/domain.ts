@@ -388,6 +388,39 @@ export type AdminRider = Rider & {
   status: UserStatus;
 };
 
+/** pending_approval: signed up, admin hasn't reviewed yet — invisible to
+ * customers. active: approved, visible (subject to is_open). suspended:
+ * admin pulled it from the platform. */
+export type RestaurantStatus = "pending_approval" | "active" | "suspended";
+
+/** A restaurant business — not yet a first-class users.role (see
+ * apps/api/src/db/migrations/0032_restaurants.sql for why); owner_id
+ * points at a normal customer-role account that manages it. */
+export type Restaurant = {
+  id: string;
+  owner_id: string;
+  name: string;
+  description: string | null;
+  cuisine: string | null;
+  phone: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  logo_key: string | null;
+  cover_key: string | null;
+  status: RestaurantStatus;
+  is_open: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Shape returned by the admin restaurant directory: a `Restaurant` row joined with its owner's account. */
+export type AdminRestaurant = Restaurant & {
+  owner_name: string;
+  owner_phone: string | null;
+  owner_email: string | null;
+};
+
 export type SavedLocation = {
   id: string;
   user_id: string;

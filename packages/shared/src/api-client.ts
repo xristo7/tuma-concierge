@@ -26,6 +26,9 @@ import type {
   Payment,
   PaymentProviderIdentity,
   PlatformEnvironment,
+  Restaurant,
+  AdminRestaurant,
+  RestaurantStatus,
   Rider,
   RiderApplicant,
   RiderSubscriptionPayment,
@@ -515,6 +518,41 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       return request<{ ok: true; paidOut: number }>("/v1/riders/me/close-account", { method: "POST" });
     },
 
+    // Restaurants — Phase 1 (see apps/api/src/restaurants/routes.ts). Not
+    // yet a first-class account role; any signed-in customer can apply.
+    async applyAsRestaurant(input: {
+      name: string;
+      description?: string;
+      cuisine?: string;
+      phone?: string;
+      address?: string;
+      lat?: number;
+      lng?: number;
+    }) {
+      return request<{ restaurant: Restaurant }>("/v1/restaurants/apply", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async myRestaurant() {
+      return request<{ restaurant: Restaurant }>("/v1/restaurants/me");
+    },
+    async updateRestaurant(input: Partial<{
+      name: string;
+      description: string;
+      cuisine: string;
+      phone: string;
+      address: string;
+      lat: number;
+      lng: number;
+      isOpen: boolean;
+    }>) {
+      return request<{ restaurant: Restaurant }>("/v1/restaurants/me", {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    },
+
     // Rider subscription — see apps/api/src/riders/subscription.ts.
     async myRiderSubscription() {
       return request<{ subscription: RiderSubscriptionView; payments: RiderSubscriptionPayment[] }>(
@@ -618,6 +656,16 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       return request<{ rider: Rider }>(`/v1/admin/riders/${userId}/verify`, {
         method: "POST",
         body: JSON.stringify({ verified }),
+      });
+    },
+    async adminListRestaurants(status?: RestaurantStatus) {
+      const qs = status ? `?status=${status}` : "";
+      return request<{ restaurants: AdminRestaurant[] }>(`/v1/admin/restaurants${qs}`);
+    },
+    async adminSetRestaurantStatus(id: string, status: RestaurantStatus) {
+      return request<{ restaurant: AdminRestaurant }>(`/v1/admin/restaurants/${id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
       });
     },
     /** Fetches a rider's National ID scan as a Blob (not JSON — raw fetch, mirrors uploadRiderIdDocument). */

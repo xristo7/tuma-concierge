@@ -1,13 +1,21 @@
 "use client";
 
-import type { AdminCustomer, AdminRider } from "@tuma/shared";
-import { ChevronRight, Search, ShieldCheck, ShieldQuestion } from "lucide-react";
+import { hasPermission, type AdminCustomer, type AdminRestaurant, type AdminRider, type RestaurantStatus } from "@tuma/shared";
+import { ChevronRight, Search, ShieldCheck, ShieldQuestion, Store } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
+import { useAuth } from "../../lib/auth-context";
 
-type Tab = "riders" | "customers";
+type Tab = "riders" | "customers" | "restaurants";
 type RiderFilter = "all" | "pending" | "verified";
+type RestaurantFilter = "all" | RestaurantStatus;
+
+const RESTAURANT_STATUS_LABEL: Record<RestaurantStatus, string> = {
+  pending_approval: "Pending",
+  active: "Active",
+  suspended: "Suspended",
+};
 
 function StatusBadge({ status }: { status: "active" | "suspended" }) {
   if (status === "active") return null;
@@ -133,6 +141,112 @@ function CustomersTab() {
   );
 }
 
+function RestaurantsTab() {
+  const { user } = useAuth();
+  const canManage = hasPermission(user?.adminRole ?? null, "restaurants.manage");
+  const [restaurants, setRestaurants] = useState<AdminRestaurant[]>([]);
+  const [filter, setFilter] = useState<RestaurantFilter>("all");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api
+      .adminListRestaurants()
+      .then((res) => setRestaurants(res.restaurants))
+      .catch((err) => setError(errorMessage(err)));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function setStatus(id: string, status: RestaurantStatus) {
+    setBusyId(id);
+    setError(null);
+    try {
+      await api.adminSetRestaurantStatus(id, status);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const filtered = restaurants.filter((r) => filter === "all" || r.status === filter);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {(["all", "pending_approval", "active", "suspended"] as const).map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+              filter === f ? "bg-ink text-white" : "bg-[rgb(var(--surface-muted))] text-ink-500"
+            }`}
+          >
+            {f === "all" ? "All" : RESTAURANT_STATUS_LABEL[f]}
+          </button>
+        ))}
+      </div>
+
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No restaurants here.</p>}
+
+      <ul className="space-y-2.5">
+        {filtered.map((r) => (
+          <li key={r.id} className="home-card space-y-2 !rounded-2xl !px-3 !py-3">
+            <div className="flex items-center gap-3">
+              <Store className="h-5 w-5 shrink-0 text-ink-500" strokeWidth={1.75} aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-bold text-ink">{r.name}</span>
+                <span className="mt-0.5 block truncate text-xs text-ink-500">
+                  {r.owner_name}
+                  {r.cuisine ? ` · ${r.cuisine}` : ""}
+                </span>
+              </span>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  r.status === "active"
+                    ? "bg-green/15 text-green"
+                    : r.status === "suspended"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-[rgb(var(--surface-muted))] text-ink-500"
+                }`}
+              >
+                {RESTAURANT_STATUS_LABEL[r.status]}
+              </span>
+            </div>
+            {canManage && (
+              <div className="flex gap-2">
+                {r.status !== "active" && (
+                  <button
+                    onClick={() => setStatus(r.id, "active")}
+                    disabled={busyId === r.id}
+                    className="min-h-9 flex-1 rounded-full bg-gold px-3 text-xs font-bold text-ink-gold disabled:opacity-60"
+                  >
+                    Approve
+                  </button>
+                )}
+                {r.status !== "suspended" && (
+                  <button
+                    onClick={() => setStatus(r.id, "suspended")}
+                    disabled={busyId === r.id}
+                    className="min-h-9 flex-1 rounded-full border border-red-200 px-3 text-xs font-bold text-red-600 disabled:opacity-60"
+                  >
+                    Suspend
+                  </button>
+                )}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function PeoplePage() {
   const [tab, setTab] = useState<Tab>("riders");
 
@@ -141,7 +255,7 @@ export default function PeoplePage() {
       <h1 className="text-xl font-bold text-ink">People</h1>
 
       <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
-        {(["riders", "customers"] as const).map((t) => (
+        {(["riders", "customers", "restaurants"] as const).map((t) => (
           <button
             key={t}
             type="button"
@@ -155,7 +269,7 @@ export default function PeoplePage() {
         ))}
       </div>
 
-      {tab === "riders" ? <RidersTab /> : <CustomersTab />}
+      {tab === "riders" ? <RidersTab /> : tab === "customers" ? <CustomersTab /> : <RestaurantsTab />}
     </div>
   );
 }

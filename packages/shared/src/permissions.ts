@@ -49,6 +49,8 @@ export type Permission =
   | "riders.view"
   | "riders.verify"
   | "riders.manage"
+  | "restaurants.view"
+  | "restaurants.manage"
   | "payments.view"
   | "payments.manage"
   | "wallets.manage"
@@ -76,8 +78,17 @@ const ROLE_PERMISSIONS: Record<AdminRole, readonly Permission[]> = {
   customer_manager: ["stats.view", "orders.view", "customers.view", "customers.manage", "chat.view_support"],
   rider_manager: ["stats.view", "orders.view", "riders.view", "riders.verify", "riders.manage"],
   support_manager: ["stats.view", "orders.view", "customers.view", "riders.view", "chat.view_support"],
-  operations_manager: ["stats.view", "orders.view", "riders.view", "settings.view", "settings.manage", "integrations.view"],
-  compliance_manager: ["stats.view", "orders.view", "riders.view", "customers.view", "activity_log.view"],
+  operations_manager: [
+    "stats.view",
+    "orders.view",
+    "riders.view",
+    "settings.view",
+    "settings.manage",
+    "integrations.view",
+    "restaurants.view",
+    "restaurants.manage",
+  ],
+  compliance_manager: ["stats.view", "orders.view", "riders.view", "customers.view", "restaurants.view", "activity_log.view"],
 };
 
 export function hasPermission(role: AdminRole | null | undefined, permission: Permission): boolean {
@@ -94,6 +105,8 @@ const ALL_PERMISSIONS: Permission[] = [
   "riders.view",
   "riders.verify",
   "riders.manage",
+  "restaurants.view",
+  "restaurants.manage",
   "payments.view",
   "payments.manage",
   "wallets.manage",
