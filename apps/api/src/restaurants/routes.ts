@@ -24,6 +24,10 @@ export const restaurantRoutes = new Hono();
 
 type Row = Record<string, unknown>;
 
+const timeOfDay = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Expected HH:MM (24-hour)");
+
 const profileSchema = z.object({
   name: z.string().min(1).max(120),
   description: z.string().max(2000).optional(),
@@ -32,6 +36,10 @@ const profileSchema = z.object({
   address: z.string().max(240).optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
+  // Scheduled opening hours, "HH:MM" local time. Both null/omitted means no
+  // schedule — is_open below is a pure manual toggle in that case.
+  openTime: timeOfDay.nullable().optional(),
+  closeTime: timeOfDay.nullable().optional(),
 });
 
 /**
@@ -54,8 +62,8 @@ restaurantRoutes.post("/restaurants/apply", requireAuth, requireRole("customer")
   const id = newId("rst");
   const environment = await getPlatformEnvironment();
   await db.execute({
-    sql: `INSERT INTO restaurants (id, owner_id, name, description, cuisine, phone, address, lat, lng, environment)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO restaurants (id, owner_id, name, description, cuisine, phone, address, lat, lng, open_time, close_time, environment)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       user.sub,
@@ -66,6 +74,8 @@ restaurantRoutes.post("/restaurants/apply", requireAuth, requireRole("customer")
       d.address ?? null,
       d.lat ?? null,
       d.lng ?? null,
+      d.openTime ?? null,
+      d.closeTime ?? null,
       environment,
     ],
   });
@@ -109,6 +119,8 @@ restaurantRoutes.patch("/restaurants/me", requireAuth, requireRole("customer"), 
   if (d.lat != null) fields.lat = d.lat;
   if (d.lng != null) fields.lng = d.lng;
   if (d.isOpen != null) fields.is_open = d.isOpen ? 1 : 0;
+  if (d.openTime !== undefined) fields.open_time = d.openTime;
+  if (d.closeTime !== undefined) fields.close_time = d.closeTime;
 
   const keys = Object.keys(fields);
   if (keys.length > 0) {

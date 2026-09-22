@@ -609,6 +609,8 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       address?: string;
       lat?: number;
       lng?: number;
+      openTime?: string | null;
+      closeTime?: string | null;
     }) {
       return request<{ restaurant: Restaurant }>("/v1/restaurants/apply", {
         method: "POST",
@@ -627,6 +629,8 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       lat: number;
       lng: number;
       isOpen: boolean;
+      openTime: string | null;
+      closeTime: string | null;
     }>) {
       return request<{ restaurant: Restaurant }>("/v1/restaurants/me", {
         method: "PATCH",

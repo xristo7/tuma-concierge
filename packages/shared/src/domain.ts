@@ -410,6 +410,10 @@ export type Restaurant = {
   cover_key: string | null;
   status: RestaurantStatus;
   is_open: number;
+  /** Scheduled opening hours, "HH:MM" 24-hour local time. Both null means
+   * no schedule — is_open is a pure manual toggle. */
+  open_time: string | null;
+  close_time: string | null;
   created_at: string;
   updated_at: string;
 };

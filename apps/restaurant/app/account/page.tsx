@@ -61,6 +61,8 @@ export default function AccountPage() {
   const [address, setAddress] = useState("");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [showMap, setShowMap] = useState(false);
+  const [openTime, setOpenTime] = useState("");
+  const [closeTime, setCloseTime] = useState("");
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +84,8 @@ export default function AccountPage() {
     setPhone(r.phone ?? "");
     setAddress(r.address ?? "");
     if (r.lat != null && r.lng != null) setCoords({ lat: r.lat, lng: r.lng });
+    setOpenTime(r.open_time ?? "");
+    setCloseTime(r.close_time ?? "");
   }
 
   async function submit(e: React.FormEvent) {
@@ -98,6 +102,8 @@ export default function AccountPage() {
         address: address || undefined,
         lat: coords?.lat,
         lng: coords?.lng,
+        openTime: openTime || null,
+        closeTime: closeTime || null,
       };
       const res = restaurant ? await api.updateRestaurant(input) : await api.applyAsRestaurant(input);
       applyRestaurant(res.restaurant);
@@ -181,6 +187,29 @@ export default function AccountPage() {
         <Field label="Description" value={description} onChange={setDescription} placeholder="A short line about your restaurant" />
         <Field label="Phone" value={phone} onChange={setPhone} placeholder="+256…" />
         <Field label="Address" value={address} onChange={setAddress} placeholder="Street, area" />
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-ink-500">Scheduled hours (optional)</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="time"
+              value={openTime}
+              onChange={(e) => setOpenTime(e.target.value)}
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            />
+            <span className="text-sm text-ink-500">to</span>
+            <input
+              type="time"
+              value={closeTime}
+              onChange={(e) => setCloseTime(e.target.value)}
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            />
+          </div>
+          <p className="text-xs text-ink-500">
+            When set, you&apos;ll be prompted to open or close automatically at these times — the Home screen toggle
+            always has the final say.
+          </p>
+        </div>
 
         <button
           type="button"

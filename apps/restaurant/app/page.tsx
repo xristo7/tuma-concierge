@@ -4,10 +4,11 @@ import { ChevronRight, Store, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { OpenStatusCard } from "../components/OpenStatusCard";
 import { useAuth } from "../lib/auth-context";
 
 export default function HomePage() {
-  const { user, restaurant, restaurantReady } = useAuth();
+  const { user, restaurant, restaurantReady, refreshRestaurant } = useAuth();
   const router = useRouter();
 
   // No restaurant registered yet — send them straight to the form rather
@@ -56,9 +57,8 @@ export default function HomePage() {
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
       <h1 className="text-xl font-bold text-ink">{restaurant.name}</h1>
-      <p className="text-sm text-ink-500">
-        {restaurant.is_open ? "You're open — visible to customers." : "You're closed — hidden from customers until you reopen."}
-      </p>
+
+      <OpenStatusCard restaurant={restaurant} onUpdated={refreshRestaurant} />
 
       <Link href="/menu" className="home-card flex items-center gap-3 !rounded-2xl">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
