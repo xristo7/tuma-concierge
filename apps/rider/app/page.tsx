@@ -5,13 +5,30 @@ import { isRiderProfileComplete } from "@tuma/shared";
 import { ChevronRight, MapPin, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { JobPreviewModal } from "../components/JobPreviewModal";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
-import { formatUgx, jobTitle, stageLabel } from "../lib/order-display";
+import {
+  formatUgx,
+  JOB_CATEGORY_LABELS,
+  jobCategory,
+  jobTitle,
+  stageLabel,
+  type JobCategory,
+} from "../lib/order-display";
 import { useLivePolling } from "../lib/use-live-polling";
 import { useNetworkStatus } from "../lib/use-network-status";
+
+type SortOrder = "distance" | "price_high" | "price_low" | "newest" | "oldest";
+
+const SORT_LABELS: Record<SortOrder, string> = {
+  distance: "Nearest first",
+  price_high: "Price: high to low",
+  price_low: "Price: low to high",
+  newest: "Newest first",
+  oldest: "Oldest first",
+};
 
 export default function JobsHomePage() {
   const { user } = useAuth();
@@ -25,6 +42,8 @@ export default function JobsHomePage() {
   const [error, setError] = useState<string | null>(null);
   const [previewJobItem, setPreviewJobItem] = useState<AvailableJob | null>(null);
   const [subscriptionOk, setSubscriptionOk] = useState(true);
+  const [categoryFilter, setCategoryFilter] = useState<JobCategory | "all">("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("distance");
   const online = useNetworkStatus();
 
   const load = useCallback(() => {
@@ -93,6 +112,34 @@ export default function JobsHomePage() {
     }
   }
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<JobCategory, number> = { parcel: 0, shopping: 0, food: 0 };
+    for (const job of availableJobs) counts[jobCategory(job)] += 1;
+    return counts;
+  }, [availableJobs]);
+
+  const visibleJobs = useMemo(() => {
+    const filtered =
+      categoryFilter === "all" ? availableJobs : availableJobs.filter((job) => jobCategory(job) === categoryFilter);
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (sortOrder) {
+        case "price_high":
+          return (b.final_total ?? b.estimated_total ?? 0) - (a.final_total ?? a.estimated_total ?? 0);
+        case "price_low":
+          return (a.final_total ?? a.estimated_total ?? 0) - (b.final_total ?? b.estimated_total ?? 0);
+        case "newest":
+          return b.created_at.localeCompare(a.created_at);
+        case "oldest":
+          return a.created_at.localeCompare(b.created_at);
+        case "distance":
+        default:
+          return (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity);
+      }
+    });
+    return sorted;
+  }, [availableJobs, categoryFilter, sortOrder]);
+
   if (!ready) {
     return <div className="p-4 text-sm text-ink-500">Loading…</div>;
   }
@@ -118,18 +165,58 @@ export default function JobsHomePage() {
 
       <section className="space-y-2.5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Available jobs</h2>
+
+        {rider?.is_online && availableJobs.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+              {(["all", "parcel", "shopping", "food"] as const).map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${
+                    categoryFilter === cat
+                      ? "border-gold bg-gold/15 text-ink"
+                      : "border-[var(--border-faint)] text-ink-500"
+                  }`}
+                >
+                  {cat === "all" ? `All (${availableJobs.length})` : `${JOB_CATEGORY_LABELS[cat]} (${categoryCounts[cat]})`}
+                </button>
+              ))}
+            </div>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+              className="w-full rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-gold"
+            >
+              {(Object.keys(SORT_LABELS) as SortOrder[]).map((key) => (
+                <option key={key} value={key}>
+                  Sort: {SORT_LABELS[key]}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {!rider?.is_online && (
           <p className="py-4 text-center text-sm text-ink-500">Go online to see nearby orders.</p>
         )}
         {rider?.is_online && availableJobs.length === 0 && (
           <p className="py-4 text-center text-sm text-ink-500">No open orders near you right now.</p>
         )}
+        {rider?.is_online && availableJobs.length > 0 && visibleJobs.length === 0 && (
+          <p className="py-4 text-center text-sm text-ink-500">No {JOB_CATEGORY_LABELS[categoryFilter as JobCategory]?.toLowerCase() ?? ""} jobs right now.</p>
+        )}
         <ul className="space-y-2.5">
-          {availableJobs.map((job) => (
+          {visibleJobs.map((job) => (
             <li key={job.id} className="home-card space-y-2.5 !rounded-2xl !px-3 !py-3">
               <div className="flex items-center justify-between gap-3">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-bold text-ink">{jobTitle(job)}</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-[15px] font-bold text-ink">{jobTitle(job)}</span>
+                    <span className="shrink-0 rounded-full bg-[rgb(var(--surface-muted))] px-1.5 py-0.5 text-[10px] font-semibold text-ink-500">
+                      {JOB_CATEGORY_LABELS[jobCategory(job)]}
+                    </span>
+                  </span>
                   <span className="mt-0.5 flex items-center gap-1 text-xs text-ink-500">
                     <MapPin className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
                     {job.distanceKm != null ? `${job.distanceKm} km away` : "Distance unknown"}

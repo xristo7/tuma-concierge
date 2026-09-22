@@ -285,8 +285,9 @@ riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), asy
 
   const [res, appliedRes] = await Promise.all([
     db.execute({
-      sql: `SELECT o.*, u.name as customer_name FROM orders o
+      sql: `SELECT o.*, u.name as customer_name, r.name as restaurant_name FROM orders o
             LEFT JOIN users u ON u.id = o.customer_id
+            LEFT JOIN restaurants r ON r.id = o.restaurant_id
             WHERE o.rider_id IS NULL AND o.stage IN ('Create', 'Match') AND o.environment = ?
             AND o.id NOT IN (SELECT order_id FROM order_rider_exclusions WHERE rider_id = ?)
             ORDER BY o.created_at ASC`,

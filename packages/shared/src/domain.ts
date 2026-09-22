@@ -79,6 +79,9 @@ export type OrderRow = {
   voice_note_key: string | null;
   pin_code: string | null;
   eta_minutes: number | null;
+  /** Set only for restaurant food orders — type stays 'shopping' (see
+   * apps/api/src/db/migrations/0034_order_restaurant.sql). */
+  restaurant_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -113,6 +116,7 @@ export type AvailableJob = Pick<
   | "matched_out_of_range"
   | "created_at"
   | "updated_at"
+  | "restaurant_id"
 > & {
   /**
    * Deliberately narrower than a full OrderRow. This feed goes to every
@@ -123,6 +127,8 @@ export type AvailableJob = Pick<
    * GET /v1/orders/:id once the job is claimed.
    */
   customer_name: string | null;
+  /** Only set for food orders (restaurant_id != null). */
+  restaurant_name: string | null;
   distanceKm: number | null;
   outOfServiceRange: boolean;
   /** Set once this rider has already applied — only meaningful for "nearest_window"/"customer_selects"

@@ -71,6 +71,11 @@ export function toOpenJob(
     // First name only — enough to label the card ("Sharon's List"), not
     // enough to identify someone from a feed anyone can sign up to watch.
     customer_name: fullName ? fullName.split(/\s+/)[0] : null,
+    // A food order is `type: 'shopping'` with restaurant_id set (see
+    // 0034_order_restaurant.sql) — surfaced here so the rider app can
+    // categorize it as "Food" rather than plain "Shopping".
+    restaurant_id: order.restaurant_id ?? null,
+    restaurant_name: order.restaurant_name ?? null,
     ...extras,
   };
 }
