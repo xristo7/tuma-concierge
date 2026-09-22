@@ -490,6 +490,34 @@ export type RestaurantMenu = {
   uncategorizedItems: MenuItem[];
 };
 
+// ---------------------------------------------------------------------------
+// Restaurant chat — customer <-> restaurant messaging, separate from
+// order-level chat_messages (customer/rider only). See
+// apps/api/src/restaurants/chat.ts and migrations/0037_restaurant_chat.sql.
+// ---------------------------------------------------------------------------
+
+export type RestaurantChatMessage = {
+  id: string;
+  restaurant_id: string;
+  customer_id: string;
+  sender_role: "customer" | "restaurant";
+  body: string | null;
+  type: "text" | "image";
+  media_key: string | null;
+  menu_item_id: string | null;
+  menu_item_name: string | null;
+  read: number;
+  created_at: string;
+};
+
+/** One row per customer who's messaged a restaurant — the owner's inbox list. */
+export type RestaurantChatThread = {
+  customer_id: string;
+  customer_name: string;
+  last_message_at: string;
+  unread_count: number;
+};
+
 export type SavedLocation = {
   id: string;
   user_id: string;
@@ -499,6 +527,23 @@ export type SavedLocation = {
   lat: number | null;
   lng: number | null;
   created_at: string;
+};
+
+/** 'payment': a customer funding an order or topping up their wallet.
+ * 'withdrawal': a rider (and, once it exists, a restaurant) cashing out.
+ * Keyed on the signed-in account generically, not a role-specific table —
+ * see apps/api/src/db/migrations/0036_saved_mobile_numbers.sql. */
+export type MobileNumberPurpose = "payment" | "withdrawal";
+
+export type SavedMobileNumber = {
+  id: string;
+  owner_id: string;
+  purpose: MobileNumberPurpose;
+  phone: string;
+  label: string | null;
+  is_primary: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type UserStatus = "active" | "suspended";

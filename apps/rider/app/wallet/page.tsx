@@ -1,6 +1,6 @@
 "use client";
 
-import type { OrderRow, Wallet } from "@tuma/shared";
+import type { OrderRow, SavedMobileNumber, Wallet } from "@tuma/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { formatUgx } from "../../lib/order-display";
@@ -18,13 +18,16 @@ export default function WalletPage() {
   const [amountInput, setAmountInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [withdrawalNumbers, setWithdrawalNumbers] = useState<SavedMobileNumber[]>([]);
+  const [selectedNumberId, setSelectedNumberId] = useState<string | null>(null);
   const polling = useRef(false);
 
   const load = useCallback(async () => {
-    const [walletRes, ordersRes, settingsRes] = await Promise.all([
+    const [walletRes, ordersRes, settingsRes, numbersRes] = await Promise.all([
       api.myWallet(),
       api.myRiderOrders().catch(() => ({ orders: [] as OrderRow[] })),
       api.getSettings().catch(() => null),
+      api.getMobileNumbers("withdrawal").catch(() => ({ numbers: [] as SavedMobileNumber[] })),
     ]);
     setWallet(walletRes);
     setOrders(ordersRes.orders.filter((o) => o.stage === "Settle"));
@@ -34,6 +37,8 @@ export default function WalletPage() {
         amount: settingsRes.settings.riderMinimumBalanceAmount,
       });
     }
+    setWithdrawalNumbers(numbersRes.numbers);
+    setSelectedNumberId((prev) => prev ?? numbersRes.numbers.find((n) => n.is_primary)?.id ?? numbersRes.numbers[0]?.id ?? null);
     return walletRes;
   }, []);
 
@@ -68,7 +73,7 @@ export default function WalletPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.withdrawWallet(amount);
+      await api.withdrawWallet(amount, selectedNumberId ?? undefined);
       setAmountInput("");
       await load();
     } catch (err) {
@@ -81,7 +86,12 @@ export default function WalletPage() {
   const settledTotal = orders.reduce((sum, o) => sum + (o.final_total ?? o.estimated_total ?? 0), 0);
   const hasPendingWithdrawal = !!wallet?.withdrawals.some((w) => w.status === "pending");
   const parsedAmount = Number(amountInput);
-  const canWithdrawCustom = amountInput.trim().length > 0 && parsedAmount > 0 && parsedAmount <= maxWithdrawable;
+  // With 2 saved numbers there's no reasonable default — a choice is
+  // mandatory before any withdrawal can go out (see the API's own check in
+  // apps/api/src/riders/routes.ts).
+  const needsNumberChoice = withdrawalNumbers.length >= 2 && !selectedNumberId;
+  const canWithdrawCustom =
+    amountInput.trim().length > 0 && parsedAmount > 0 && parsedAmount <= maxWithdrawable && !needsNumberChoice;
 
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
@@ -100,6 +110,27 @@ export default function WalletPage() {
           )}
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+        {withdrawalNumbers.length >= 2 && (
+          <div className="space-y-1.5 text-left">
+            <label className="text-xs font-semibold text-ink-500">Withdraw to</label>
+            <div className="flex gap-2">
+              {withdrawalNumbers.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => setSelectedNumberId(n.id)}
+                  disabled={busy || hasPendingWithdrawal}
+                  className={`min-h-10 flex-1 rounded-xl border px-3 text-sm font-semibold disabled:opacity-50 ${
+                    selectedNumberId === n.id ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink-500"
+                  }`}
+                >
+                  {n.phone}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2 text-left">
           <label className="text-xs font-semibold text-ink-500" htmlFor="withdrawAmount">
@@ -126,12 +157,13 @@ export default function WalletPage() {
           </button>
           <button
             onClick={() => withdraw(undefined)}
-            disabled={busy || hasPendingWithdrawal || maxWithdrawable <= 0}
+            disabled={busy || hasPendingWithdrawal || maxWithdrawable <= 0 || needsNumberChoice}
             className="min-h-11 flex-1 rounded-full bg-gold px-4 text-sm font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-50"
           >
             {busy ? "Sending…" : "Withdraw all"}
           </button>
         </div>
+        {needsNumberChoice && <p className="text-xs text-red-600">Choose which number to withdraw to.</p>}
       </section>
 
       {wallet && wallet.withdrawals.length > 0 && (

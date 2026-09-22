@@ -29,15 +29,19 @@ import type {
   Restaurant,
   AdminRestaurant,
   RestaurantStatus,
+  RestaurantChatMessage,
+  RestaurantChatThread,
   RestaurantMenu,
   MenuCategory,
   MenuItem,
   MenuItemOption,
+  MobileNumberPurpose,
   Rider,
   RiderApplicant,
   RiderSubscriptionPayment,
   RiderSubscriptionView,
   SavedLocation,
+  SavedMobileNumber,
   StaffMember,
   UserStatus,
   Wallet,
@@ -583,11 +587,13 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       return request<Wallet>("/v1/riders/me/wallet");
     },
     /** Omit `amount` to withdraw everything above the reserve (if any); pass
-     * one to leave more than that behind — never less. */
-    async withdrawWallet(amount?: number) {
+     * one to leave more than that behind — never less. `mobileNumberId` is
+     * required once the rider has 2 saved withdrawal numbers (no reasonable
+     * default between them), optional with 0 or 1 saved. */
+    async withdrawWallet(amount?: number, mobileNumberId?: string) {
       return request<{ withdrawalId: string; amount: number; status: "pending" }>("/v1/riders/me/wallet/withdraw", {
         method: "POST",
-        body: JSON.stringify(amount != null ? { amount } : {}),
+        body: JSON.stringify({ ...(amount != null ? { amount } : {}), ...(mobileNumberId ? { mobileNumberId } : {}) }),
       });
     },
     async refreshWithdrawal(id: string) {
@@ -724,6 +730,67 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       return res.blob();
     },
 
+    // Restaurant chat — customer <-> restaurant messaging, separate from the
+    // order chat (customer/rider). One continuous thread per (restaurant,
+    // customer) pair; a message can optionally reference a menu item.
+    async getRestaurantChat(restaurantId: string) {
+      return request<{ restaurantName: string; messages: RestaurantChatMessage[] }>(
+        `/v1/restaurants/${restaurantId}/chat`,
+      );
+    },
+    async sendRestaurantChat(restaurantId: string, body: string, menuItem?: { id: string; name: string }) {
+      return request<{ id: string }>(`/v1/restaurants/${restaurantId}/chat`, {
+        method: "POST",
+        body: JSON.stringify({ body, menuItemId: menuItem?.id, menuItemName: menuItem?.name }),
+      });
+    },
+    async sendRestaurantChatImage(restaurantId: string, image: Blob) {
+      const form = new FormData();
+      form.append("image", image, "photo.jpg");
+      const res = await f(`${root}/v1/restaurants/${restaurantId}/chat`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ id: string }>(res);
+    },
+    async markRestaurantChatRead(restaurantId: string) {
+      return request<{ ok: true }>(`/v1/restaurants/${restaurantId}/chat/read`, { method: "POST" });
+    },
+    /** Restaurant-owner side: every customer thread, and replying to one. */
+    async myRestaurantChatThreads() {
+      return request<{ threads: RestaurantChatThread[] }>("/v1/restaurants/me/chat/threads");
+    },
+    async myRestaurantChatThread(customerId: string) {
+      return request<{ customerName: string | null; messages: RestaurantChatMessage[] }>(
+        `/v1/restaurants/me/chat/${customerId}`,
+      );
+    },
+    async replyRestaurantChat(customerId: string, body: string) {
+      return request<{ id: string }>(`/v1/restaurants/me/chat/${customerId}`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+    },
+    async replyRestaurantChatImage(customerId: string, image: Blob) {
+      const form = new FormData();
+      form.append("image", image, "photo.jpg");
+      const res = await f(`${root}/v1/restaurants/me/chat/${customerId}`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ id: string }>(res);
+    },
+    async markRestaurantChatReadAsOwner(customerId: string) {
+      return request<{ ok: true }>(`/v1/restaurants/me/chat/${customerId}/read`, { method: "POST" });
+    },
+    async restaurantChatMediaBlob(messageId: string): Promise<Blob> {
+      const res = await f(`${root}/v1/restaurant-chat/media/${messageId}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load photo`);
+      return res.blob();
+    },
+
     // Rider subscription — see apps/api/src/riders/subscription.ts.
     async myRiderSubscription() {
       return request<{ subscription: RiderSubscriptionView; payments: RiderSubscriptionPayment[] }>(
@@ -752,6 +819,27 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async deleteLocation(id: string) {
       return request<{ ok: true }>(`/v1/locations/${id}`, { method: "DELETE" });
+    },
+
+    // Saved mobile money numbers — up to 2 per purpose (see
+    // apps/api/src/account/mobile-numbers.ts).
+    async getMobileNumbers(purpose: MobileNumberPurpose) {
+      return request<{ numbers: SavedMobileNumber[] }>(`/v1/mobile-numbers?purpose=${purpose}`);
+    },
+    async addMobileNumber(input: { purpose: MobileNumberPurpose; phone: string; label?: string; isPrimary?: boolean }) {
+      return request<{ number: SavedMobileNumber }>("/v1/mobile-numbers", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async updateMobileNumber(id: string, input: Partial<{ phone: string; label: string | null; isPrimary: boolean }>) {
+      return request<{ number: SavedMobileNumber }>(`/v1/mobile-numbers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    },
+    async deleteMobileNumber(id: string) {
+      return request<{ ok: true }>(`/v1/mobile-numbers/${id}`, { method: "DELETE" });
     },
 
     // Customer wallet — closed-loop store credit (top up, spend, no cash-out).

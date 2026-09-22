@@ -405,6 +405,11 @@ const withdrawSchema = z.object({
   // reserve" — a rider can also name a smaller amount to leave more than
   // the admin-set minimum behind, entirely their call above that floor.
   amount: z.number().int().positive().optional(),
+  // Which saved withdrawal number to pay out to — required whenever the
+  // rider has 2 saved (there's no reasonable default to pick between two),
+  // optional with 0 or 1 saved (falls back to the single one, or the
+  // legacy riders.momo_msisdn field for anyone who hasn't saved one yet).
+  mobileNumberId: z.string().optional(),
 });
 
 /**
@@ -426,14 +431,40 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
 
   const environment = await getPlatformEnvironment();
   const balanceColumn = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
-  const [riderRes, reserve] = await Promise.all([
+  const [riderRes, reserve, savedNumbersRes] = await Promise.all([
     db.execute({ sql: `SELECT ${balanceColumn} as wallet_balance, momo_msisdn FROM riders WHERE user_id = ?`, args: [user.sub] }),
     getRiderReserveSettings(),
+    db.execute({
+      sql: "SELECT id, phone FROM saved_mobile_numbers WHERE owner_id = ? AND purpose = 'withdrawal' ORDER BY is_primary DESC, created_at ASC",
+      args: [user.sub],
+    }),
   ]);
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider) return c.json({ error: "not_a_rider" }, 404);
   const balance = (rider.wallet_balance as number) ?? 0;
-  const msisdn = rider.momo_msisdn as string | null;
+  const savedNumbers = savedNumbersRes.rows as Row[];
+
+  // 2 saved numbers means there's no reasonable default — the rider has to
+  // say which one this payout goes to. 0 or 1 falls back automatically (1
+  // saved number, or the legacy single momo_msisdn field for anyone who
+  // registered before this existed).
+  let msisdn: string | null;
+  if (savedNumbers.length >= 2) {
+    if (!parsed.data.mobileNumberId) {
+      return c.json(
+        { error: "mobile_number_required", message: "Choose which mobile money number to withdraw to" },
+        400,
+      );
+    }
+    const chosen = savedNumbers.find((n) => n.id === parsed.data.mobileNumberId);
+    if (!chosen) return c.json({ error: "invalid_mobile_number" }, 400);
+    msisdn = chosen.phone as string;
+  } else if (savedNumbers.length === 1) {
+    msisdn = savedNumbers[0].phone as string;
+  } else {
+    msisdn = rider.momo_msisdn as string | null;
+  }
+
   if (balance <= 0) return c.json({ error: "no_balance", message: "Nothing to withdraw yet" }, 409);
   if (!msisdn) {
     return c.json({ error: "no_mobile_money", message: "Add a mobile money number in your profile first" }, 409);
@@ -587,14 +618,18 @@ riderRoutes.post("/riders/me/close-account", requireAuth, requireRole("rider"), 
     );
   }
 
-  const riderRes = await db.execute({
-    sql: `SELECT ${balanceColumn} as wallet_balance, momo_msisdn FROM riders WHERE user_id = ?`,
-    args: [user.sub],
-  });
+  const [riderRes, savedNumbersRes] = await Promise.all([
+    db.execute({ sql: `SELECT ${balanceColumn} as wallet_balance, momo_msisdn FROM riders WHERE user_id = ?`, args: [user.sub] }),
+    db.execute({
+      sql: "SELECT phone FROM saved_mobile_numbers WHERE owner_id = ? AND purpose = 'withdrawal' ORDER BY is_primary DESC, created_at ASC LIMIT 1",
+      args: [user.sub],
+    }),
+  ]);
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider) return c.json({ error: "not_a_rider" }, 404);
   const balance = (rider.wallet_balance as number) ?? 0;
-  const msisdn = rider.momo_msisdn as string | null;
+  const savedPrimary = savedNumbersRes.rows[0] as Row | undefined;
+  const msisdn = (rider.momo_msisdn as string | null) ?? (savedPrimary?.phone as string | undefined) ?? null;
 
   if (balance > 0 && !msisdn) {
     return c.json(

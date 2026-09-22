@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppearanceSettings } from "../../components/AppearanceSettings";
 import { ChangePasswordPanel } from "../../components/ChangePasswordPanel";
 import { LanguageSettings } from "../../components/LanguageSettings";
+import { MobileNumberManager } from "../../components/MobileNumberManager";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 import { compressImage } from "../../lib/image-compress";
@@ -355,16 +356,25 @@ export default function AccountPage() {
 
         <section className="home-card space-y-3">
           <h2 className="text-sm font-semibold text-ink">Payout</h2>
-          <Field
-            label="Mobile money number (optional)"
-            value={momoMsisdn}
-            onChange={setMomoMsisdn}
-            placeholder="0772345678"
-          />
-          {detectedNetwork && (
-            <p className="px-1 text-xs font-semibold text-ink-500">{mobileMoneyNetworkLabel(detectedNetwork)} detected</p>
-          )}
-          <p className="text-xs text-ink-500">This is where your delivery payouts are sent once a job settles.</p>
+          <p className="text-xs text-ink-500">Save up to 2 numbers your wallet withdrawals can go to.</p>
+          <MobileNumberManager purpose="withdrawal" />
+          <details className="text-xs text-ink-500">
+            <summary className="cursor-pointer font-semibold">Legacy single number (optional)</summary>
+            <div className="mt-2 space-y-1">
+              <Field
+                label="Mobile money number"
+                value={momoMsisdn}
+                onChange={setMomoMsisdn}
+                placeholder="0772345678"
+              />
+              {detectedNetwork && (
+                <p className="px-1 text-xs font-semibold text-ink-500">{mobileMoneyNetworkLabel(detectedNetwork)} detected</p>
+              )}
+              <p className="px-1 text-xs text-ink-500">
+                Only used as a fallback if you haven&apos;t saved any numbers above.
+              </p>
+            </div>
+          </details>
         </section>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

@@ -76,6 +76,8 @@ export type {
   MenuItem,
   MenuCategory,
   RestaurantMenu,
+  RestaurantChatMessage,
+  RestaurantChatThread,
   AvailableJob,
   MatchingMode,
   RiderApplicant,
@@ -83,4 +85,6 @@ export type {
   ChatThreadDetail,
   StaffMember,
   ActivityLogEntry,
+  MobileNumberPurpose,
+  SavedMobileNumber,
 } from "./domain.js";
