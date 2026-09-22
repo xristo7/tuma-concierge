@@ -45,6 +45,48 @@ export const MAPS_PROVIDER_CREDENTIAL_FIELDS: Record<Exclude<MapsProviderIdentit
         "Public tokens are meant to be used client-side, same as Mapbox's own docs expect.",
     },
   ],
+  maptiler: [
+    {
+      key: "apiKey",
+      label: "API key",
+      secret: true,
+      required: true,
+      envVar: "MAPTILER_API_KEY",
+      helpText: "From your MapTiler Cloud account's Keys page. Still OpenStreetMap data, styled by MapTiler.",
+    },
+  ],
+  stadia: [
+    {
+      key: "apiKey",
+      label: "API key",
+      secret: true,
+      required: true,
+      envVar: "STADIA_MAPS_API_KEY",
+      helpText:
+        "From your Stadia Maps account's API Keys page. Restrict it to this app's domains — Stadia's free tier " +
+        "requires either domain restriction or a set-up billing account.",
+    },
+  ],
+  thunderforest: [
+    {
+      key: "apiKey",
+      label: "API key",
+      secret: true,
+      required: true,
+      envVar: "THUNDERFOREST_API_KEY",
+      helpText: "From your Thunderforest account's dashboard.",
+    },
+  ],
+  jawg: [
+    {
+      key: "accessToken",
+      label: "Access token",
+      secret: true,
+      required: true,
+      envVar: "JAWG_ACCESS_TOKEN",
+      helpText: "From your Jawg Maps account's Access tokens page.",
+    },
+  ],
 };
 
 type Row = { value: string };

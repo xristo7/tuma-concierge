@@ -264,8 +264,16 @@ export async function setActiveCallProvider(provider: CallProviderIdentity): Pro
   await setSetting("calls_active_provider", ALL_CALL_PROVIDER_IDENTITIES.includes(provider) ? provider : "mock");
 }
 
-export type MapsProviderIdentity = "streetmaps" | "google" | "mapbox";
-const ALL_MAPS_PROVIDER_IDENTITIES: MapsProviderIdentity[] = ["streetmaps", "google", "mapbox"];
+export type MapsProviderIdentity = "streetmaps" | "google" | "mapbox" | "maptiler" | "stadia" | "thunderforest" | "jawg";
+const ALL_MAPS_PROVIDER_IDENTITIES: MapsProviderIdentity[] = [
+  "streetmaps",
+  "google",
+  "mapbox",
+  "maptiler",
+  "stadia",
+  "thunderforest",
+  "jawg",
+];
 
 export async function getActiveMapsProvider(): Promise<MapsProviderIdentity> {
   const raw = await getSetting("maps_active_provider");

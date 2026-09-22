@@ -1,0 +1,51 @@
+"use client";
+
+import { OsmStyledPicker } from "./OsmStyledPicker";
+import type { MapPickerProps } from "./map-types";
+
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+/** Same OpenStreetMap data and free Nominatim search as StreetMapsPicker,
+ * rendered with MapTiler's custom tile styling instead of the plain OSM
+ * look — only mounted once an admin saves a working MapTiler key. */
+export function MapTilerPicker({ apiKey, ...props }: MapPickerProps & { apiKey: string }) {
+  const tileUrl = `https://api.maptiler.com/maps/streets-v2/{z}/{x}/{y}.png?key=${encodeURIComponent(apiKey)}`;
+  return <OsmStyledPicker {...props} tileUrl={tileUrl} attribution={`${OSM_ATTR} &copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a>`} />;
+}
+
+/** Stadia Maps' "Alidade Smooth" style over OSM data. */
+export function StadiaMapsPicker({ apiKey, ...props }: MapPickerProps & { apiKey: string }) {
+  const tileUrl = `https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png?api_key=${encodeURIComponent(apiKey)}`;
+  return (
+    <OsmStyledPicker
+      {...props}
+      tileUrl={tileUrl}
+      attribution={`${OSM_ATTR} &copy; <a href="https://stadiamaps.com/">Stadia Maps</a>`}
+    />
+  );
+}
+
+/** Thunderforest's "Transport" style over OSM data — leans into road/transit
+ * detail, a reasonable default for a delivery/ride app. */
+export function ThunderforestPicker({ apiKey, ...props }: MapPickerProps & { apiKey: string }) {
+  const tileUrl = `https://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=${encodeURIComponent(apiKey)}`;
+  return (
+    <OsmStyledPicker
+      {...props}
+      tileUrl={tileUrl}
+      attribution={`${OSM_ATTR} &copy; <a href="https://www.thunderforest.com/">Thunderforest</a>`}
+    />
+  );
+}
+
+/** Jawg's default "jawg-streets" style over OSM data. */
+export function JawgMapsPicker({ accessToken, ...props }: MapPickerProps & { accessToken: string }) {
+  const tileUrl = `https://{s}.tile.jawg.io/jawg-streets/{z}/{x}/{y}{r}.png?access-token=${encodeURIComponent(accessToken)}`;
+  return (
+    <OsmStyledPicker
+      {...props}
+      tileUrl={tileUrl}
+      attribution={`${OSM_ATTR} &copy; <a href="https://www.jawg.io/">Jawg</a>`}
+    />
+  );
+}

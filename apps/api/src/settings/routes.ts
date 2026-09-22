@@ -66,17 +66,29 @@ async function fullSettings() {
     ]);
 
   // The active provider's own key/token, handed to every signed-in client
-  // so it can init that provider's SDK — Google Maps JS / Mapbox GL both
-  // expect a browser-embedded key restricted by domain, same as their own
-  // docs recommend, so this isn't a secret leak the way a payment secret
-  // key would be. Only sent once the provider is actually configured;
-  // "streetmaps" needs neither and both stay null.
+  // so it can init that provider's SDK/tile URLs — these are all
+  // browser-embedded keys meant to be restricted by domain, same as each
+  // provider's own docs recommend, so this isn't a secret leak the way a
+  // payment secret key would be. Only the active provider's field is ever
+  // populated; "streetmaps" needs none and all stay null.
   let mapsGoogleApiKey: string | null = null;
   let mapsMapboxAccessToken: string | null = null;
+  let mapsMaptilerApiKey: string | null = null;
+  let mapsStadiaApiKey: string | null = null;
+  let mapsThunderforestApiKey: string | null = null;
+  let mapsJawgAccessToken: string | null = null;
   if (mapsActiveProvider === "google") {
     mapsGoogleApiKey = (await getMapsCredential("google", "apiKey")) ?? null;
   } else if (mapsActiveProvider === "mapbox") {
     mapsMapboxAccessToken = (await getMapsCredential("mapbox", "accessToken")) ?? null;
+  } else if (mapsActiveProvider === "maptiler") {
+    mapsMaptilerApiKey = (await getMapsCredential("maptiler", "apiKey")) ?? null;
+  } else if (mapsActiveProvider === "stadia") {
+    mapsStadiaApiKey = (await getMapsCredential("stadia", "apiKey")) ?? null;
+  } else if (mapsActiveProvider === "thunderforest") {
+    mapsThunderforestApiKey = (await getMapsCredential("thunderforest", "apiKey")) ?? null;
+  } else if (mapsActiveProvider === "jawg") {
+    mapsJawgAccessToken = (await getMapsCredential("jawg", "accessToken")) ?? null;
   }
 
   return {
@@ -95,6 +107,10 @@ async function fullSettings() {
     mapsActiveProvider,
     mapsGoogleApiKey,
     mapsMapboxAccessToken,
+    mapsMaptilerApiKey,
+    mapsStadiaApiKey,
+    mapsThunderforestApiKey,
+    mapsJawgAccessToken,
     ...monetization,
   };
 }
@@ -533,8 +549,9 @@ settingsRoutes.delete(
 // ../maps/credentials.ts.
 // ---------------------------------------------------------------------------
 
-const mapsProviderParam = z.enum(["streetmaps", "google", "mapbox"]);
-const configurableMapsProvider = z.enum(["google", "mapbox"]);
+const mapsProviderParam = z.enum(["streetmaps", "google", "mapbox", "maptiler", "stadia", "thunderforest", "jawg"]);
+const configurableMapsProvider = z.enum(["google", "mapbox", "maptiler", "stadia", "thunderforest", "jawg"]);
+const CONFIGURABLE_MAPS_PROVIDERS = configurableMapsProvider.options;
 
 settingsRoutes.get(
   "/admin/maps-settings",
@@ -542,18 +559,16 @@ settingsRoutes.get(
   requireRole("admin"),
   requirePermission("settings.manage"),
   async (c) => {
-    const [activeProvider, google, mapbox] = await Promise.all([
+    const [activeProvider, entries] = await Promise.all([
       getActiveMapsProvider(),
-      mapsCredentialFieldStatus("google"),
-      mapsCredentialFieldStatus("mapbox"),
+      Promise.all(
+        CONFIGURABLE_MAPS_PROVIDERS.map(async (provider) => [
+          provider,
+          { configured: await isMapsProviderConfigured(provider), fields: await mapsCredentialFieldStatus(provider) },
+        ] as const),
+      ),
     ]);
-    return c.json({
-      activeProvider,
-      providers: {
-        google: { configured: await isMapsProviderConfigured("google"), fields: google },
-        mapbox: { configured: await isMapsProviderConfigured("mapbox"), fields: mapbox },
-      },
-    });
+    return c.json({ activeProvider, providers: Object.fromEntries(entries) });
   },
 );
 

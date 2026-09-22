@@ -9,13 +9,23 @@ const PROVIDER_LABELS: Record<MapsProviderIdentity, string> = {
   streetmaps: "Streetmaps (OpenStreetMap)",
   google: "Google Maps",
   mapbox: "Mapbox",
+  maptiler: "MapTiler",
+  stadia: "Stadia Maps",
+  thunderforest: "Thunderforest",
+  jawg: "Jawg Maps",
 };
 
 const PROVIDER_DESCRIPTIONS: Record<MapsProviderIdentity, string> = {
-  streetmaps: "Free, no API key needed — OpenStreetMap tiles and Nominatim geocoding. Safe default.",
+  streetmaps: "Free, no API key needed — plain OpenStreetMap tiles and Nominatim geocoding. Safe default.",
   google: "Google Maps JavaScript API, Places search, and Geocoding — fully wired, just needs an API key.",
   mapbox: "Mapbox GL JS and its Geocoding API — fully wired, just needs an access token.",
+  maptiler: "OpenStreetMap data with MapTiler's custom tile styling — fully wired, just needs an API key.",
+  stadia: "OpenStreetMap data with Stadia's custom tile styling — fully wired, just needs an API key.",
+  thunderforest: "OpenStreetMap data with Thunderforest's custom tile styling — fully wired, just needs an API key.",
+  jawg: "OpenStreetMap data with Jawg's custom tile styling — fully wired, just needs an access token.",
 };
+
+const MAPS_PROVIDER_ORDER: MapsProviderIdentity[] = ["streetmaps", "google", "mapbox", "maptiler", "stadia", "thunderforest", "jawg"];
 
 function MapsCredentialFieldsForm({
   provider,
@@ -171,7 +181,7 @@ export function MapsSettingsPanel() {
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="space-y-2.5">
-        {(["streetmaps", "google", "mapbox"] as const).map((provider) => {
+        {MAPS_PROVIDER_ORDER.map((provider) => {
           const isActive = settings.activeProvider === provider;
           const info = provider === "streetmaps" ? null : settings.providers[provider];
           return (

@@ -217,6 +217,10 @@ export type DeliverySettings = {
    * falls back to "streetmaps" whenever the one it wants is null. */
   mapsGoogleApiKey: string | null;
   mapsMapboxAccessToken: string | null;
+  mapsMaptilerApiKey: string | null;
+  mapsStadiaApiKey: string | null;
+  mapsThunderforestApiKey: string | null;
+  mapsJawgAccessToken: string | null;
 } & MonetizationSettings;
 
 export type ServiceFeeType = "flat" | "percent";
@@ -633,7 +637,7 @@ export type CallsAdminSettings = {
  * are selectable in admin and fully wired to their real SDKs, but only
  * actually take over once an admin saves a working key — see
  * apps/api/src/maps/credentials.ts and apps/*\/components/LocationMapPicker.tsx. */
-export type MapsProviderIdentity = "streetmaps" | "google" | "mapbox";
+export type MapsProviderIdentity = "streetmaps" | "google" | "mapbox" | "maptiler" | "stadia" | "thunderforest" | "jawg";
 
 export type MapsCredentialFieldStatus = {
   key: string;
