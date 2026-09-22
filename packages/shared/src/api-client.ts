@@ -64,6 +64,54 @@ export type CreateApiClientOptions = {
   onUnauthorized?: () => void;
 };
 
+/** Thrown by the API client on any non-2xx response. Keeps the raw HTTP
+ * status and the server's machine-readable error code (when it sent one)
+ * separate from the human-readable message, so callers can map `code` to
+ * friendly copy instead of showing "API 400: invalid_category" to users. */
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(status: number, code: string | undefined, message: string) {
+    super(`API ${status}: ${message}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+/** Known server error codes mapped to plain-English copy. Anything not
+ * listed here falls back to a generic, still-friendly message rather than
+ * surfacing the raw code or HTTP status to the user. */
+const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
+  not_found: "We couldn't find that. It may have been removed — please refresh and try again.",
+  invalid_category: "That category no longer exists. Refresh the page and try again.",
+  invalid_choice: "One of the options you picked is no longer available. Please review your order and try again.",
+  item_unavailable: "That item is no longer available.",
+  restaurant_closed: "This restaurant is currently closed.",
+  restaurant_inactive: "This restaurant isn't accepting orders right now.",
+  forbidden: "You don't have permission to do that.",
+  unauthorized: "Please sign in again to continue.",
+  validation_error: "Some information is missing or invalid. Please check the form and try again.",
+  invalid_input: "Some information is missing or invalid. Please check the form and try again.",
+  network_error: "Couldn't connect. Please check your internet connection and try again.",
+};
+
+/** Turns any error from the API client into a message safe to show a user —
+ * never a raw "API 400: xxx" string. Use this (or an app's local wrapper
+ * around it) at every UI call site instead of `err.message`. */
+export function friendlyErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.code && FRIENDLY_ERROR_MESSAGES[err.code]) return FRIENDLY_ERROR_MESSAGES[err.code];
+    if (err.status >= 500) return "Something went wrong on our end. Please try again in a moment.";
+    if (err.status === 401 || err.status === 403) return "You don't have permission to do that.";
+    if (err.status === 404) return FRIENDLY_ERROR_MESSAGES.not_found;
+    return "Something went wrong. Please try again.";
+  }
+  if (err instanceof TypeError) return FRIENDLY_ERROR_MESSAGES.network_error;
+  return "Something went wrong. Please try again.";
+}
+
 /** API client for tuma-api (apps/api on Render). */
 export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }: CreateApiClientOptions) {
   const root = baseUrl.replace(/\/$/, "");
@@ -78,9 +126,9 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     if (!res.ok) {
       if (res.status === 401 && getToken?.()) onUnauthorized?.();
       const body = await res.json().catch(() => ({}));
-      throw new Error(
-        `API ${res.status}: ${(body as { message?: string; error?: string }).message ?? (body as { error?: string }).error ?? res.statusText}`,
-      );
+      const code = (body as { error?: string }).error;
+      const message = (body as { message?: string }).message ?? code ?? res.statusText;
+      throw new ApiError(res.status, code, message);
     }
     return (await res.json()) as T;
   }

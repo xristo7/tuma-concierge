@@ -1,4 +1,4 @@
-import { createApiClient } from "@tuma/shared";
+import { createApiClient, friendlyErrorMessage } from "@tuma/shared";
 
 export const TOKEN_KEY = "tuma_customer_token";
 export const USER_KEY = "tuma_customer_user";
@@ -25,8 +25,8 @@ export const api = createApiClient({
   onUnauthorized,
 });
 
-/** Extracts a human-readable message from an ApiClient error. */
+/** Extracts a human-readable message from an ApiClient error — never a
+ * raw "API 400: xxx" string. */
 export function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return "Something went wrong. Please try again.";
+  return friendlyErrorMessage(err);
 }

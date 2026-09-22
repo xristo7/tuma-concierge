@@ -1,7 +1,9 @@
 "use client";
 
+import { ApiError } from "@tuma/shared";
 import type { MenuCategory, MenuItem, MenuItemOption, RestaurantMenu } from "@tuma/shared";
 import { Camera, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal } from "../../components/Modal";
 import { api, errorMessage } from "../../lib/api";
@@ -398,6 +400,7 @@ function ItemRow({ item, onClick }: { item: MenuItem; onClick: () => void }) {
 }
 
 export default function MenuPage() {
+  const router = useRouter();
   const [menu, setMenu] = useState<RestaurantMenu | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -408,8 +411,16 @@ export default function MenuPage() {
     api
       .myMenu()
       .then(setMenu)
-      .catch((err) => setError(errorMessage(err)));
-  }, []);
+      .catch((err) => {
+        // No restaurant registered yet — send them to set one up instead of
+        // showing a raw "not found" error on a page that assumes one exists.
+        if (err instanceof ApiError && err.status === 404) {
+          router.replace("/account");
+          return;
+        }
+        setError(errorMessage(err));
+      });
+  }, [router]);
 
   useEffect(() => {
     load();

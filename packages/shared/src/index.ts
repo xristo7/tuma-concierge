@@ -2,7 +2,7 @@ export { OrderStage, ORDER_STAGES } from "./order-stage.js";
 export type { OrderStage as OrderStageValue } from "./order-stage.js";
 export { PaymentRail } from "./payment-rail.js";
 export type { PaymentRail as PaymentRailValue } from "./payment-rail.js";
-export { createApiClient } from "./api-client.js";
+export { createApiClient, ApiError, friendlyErrorMessage } from "./api-client.js";
 export type { CreateApiClientOptions, ApiClient } from "./api-client.js";
 export { isRiderProfileComplete, isUserVerified, MATCHING_MODE_LABELS, MATCHING_MODE_DESCRIPTIONS } from "./domain.js";
 export {

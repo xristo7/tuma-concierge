@@ -4,9 +4,7 @@
   "compatibility_date": "2026-09-12",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  // No custom_domain route yet — restaurant.tumaffe.online DNS isn't set
-  // up. Live at the workers.dev URL until that's added; add a routes
-  // entry here (matching rider/admin's pattern) once it is.
+  "routes": [{ "pattern": "restaurant.tumaffe.online", "custom_domain": true }],
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
