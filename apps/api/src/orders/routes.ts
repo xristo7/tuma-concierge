@@ -1501,6 +1501,48 @@ orderRoutes.get("/orders/:id/fee-proposals/:proposalId/voice-note", async (c) =>
 // Deliver / Handover / Settle
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Live rider location — powers the customer-facing tracking map (see
+// apps/customer/components/LiveTrackingMap.tsx). Only ever called by the
+// rider app's InAppNavigation while nav_mode = "in_app" (see
+// apps/api/src/lib/settings.ts getNavMode); pings land here every few
+// seconds while a job is open, so this deliberately writes straight to
+// the row rather than going through touchOrder — bumping updated_at on
+// every GPS tick would make "last updated" misleading everywhere else
+// the field is used (admin order lists, etc).
+// ---------------------------------------------------------------------------
+
+const orderLocationSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
+orderRoutes.post("/orders/:id/location", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertRider(order, user.sub);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: e.message }, e.status);
+    throw e;
+  }
+  if (["Settle", "Create"].includes(order.stage as string)) {
+    return c.json({ error: "invalid_stage", message: `No active journey to track at stage ${order.stage}` }, 409);
+  }
+
+  const parsed = orderLocationSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+  await db.execute({
+    sql: "UPDATE orders SET rider_lat = ?, rider_lng = ?, rider_location_updated_at = datetime('now') WHERE id = ?",
+    args: [parsed.data.lat, parsed.data.lng, id],
+  });
+
+  return c.json({ ok: true });
+});
+
 const deliverSchema = z.object({ etaMinutes: z.number().int().positive().optional() });
 
 orderRoutes.post("/orders/:id/deliver", async (c) => {

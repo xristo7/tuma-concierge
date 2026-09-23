@@ -441,6 +441,16 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         body: JSON.stringify({ etaMinutes }),
       });
     },
+    /** Rider's live position while in-app navigation is open — powers the
+     * customer's tracking map. Fired every few seconds; deliberately
+     * lightweight (no order returned) since it's called far more often
+     * than any other order action. */
+    async postOrderLocation(orderId: string, lat: number, lng: number) {
+      return request<{ ok: true }>(`/v1/orders/${orderId}/location`, {
+        method: "POST",
+        body: JSON.stringify({ lat, lng }),
+      });
+    },
     /** Rider's own "I've arrived" tap — notifies the customer. */
     async arrivedOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/arrived`, { method: "POST" });

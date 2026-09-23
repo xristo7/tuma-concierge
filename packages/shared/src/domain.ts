@@ -86,6 +86,15 @@ export type OrderRow = {
    * apps/api/src/db/migrations/0039_ride_orders.sql). Pickup = where the
    * rider collects the passenger, destination = where they're going. */
   is_ride: number;
+  /** The rider's most recent live position and when it was reported —
+   * only ever populated while the rider has in-app navigation open with
+   * nav_mode = "in_app" (see apps/rider/components/InAppNavigation.tsx
+   * POST /orders/:id/location). Null once stale/never reported; the
+   * customer-facing tracking map treats anything older than a couple
+   * minutes as the rider being offline rather than trusting a frozen pin. */
+  rider_lat: number | null;
+  rider_lng: number | null;
+  rider_location_updated_at: string | null;
   created_at: string;
   updated_at: string;
 };

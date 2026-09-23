@@ -86,6 +86,7 @@ export function DeliveryNavigation({
     <div className="space-y-2 border-t border-[var(--border-faint)] pt-3">
       {inAppNav && hasDestination && (
         <InAppNavigation
+          orderId={orderId}
           destinationLat={destinationLat as number}
           destinationLng={destinationLng as number}
           confirmButtonLabel={confirmButtonLabel}

@@ -6,6 +6,7 @@ import { MapPin, MessageCircle, Star, ThumbsUp, TriangleAlert, User } from "luci
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeeProposalVoicePlayer } from "../../../components/FeeProposalVoicePlayer";
+import { LiveTrackingMap } from "../../../components/LiveTrackingMap";
 import { MobileNumberPicker } from "../../../components/MobileNumberPicker";
 import { OrderTimeline } from "../../../components/OrderTimeline";
 import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
@@ -329,6 +330,10 @@ export default function OrderDetailPage() {
       </header>
 
       <OrderTimeline order={order} events={detail.events} statusLabel={stageLabel(order.stage, order.type)} />
+
+      {order.rider_id && !["Settle", "Handover"].includes(order.stage) && (
+        <LiveTrackingMap order={order} events={detail.events} />
+      )}
 
       {order.rider_id && (
         <RiderSummaryCard

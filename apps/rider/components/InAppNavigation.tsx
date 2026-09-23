@@ -57,12 +57,14 @@ function formatDuration(seconds: number): string {
  * distance/ETA remaining computed live off the rider's position —
  * everything stays on-platform, nothing links out. */
 export function InAppNavigation({
+  orderId,
   destinationLat,
   destinationLng,
   onArrived,
   onClose,
   confirmButtonLabel = "Confirm Delivery",
 }: {
+  orderId: string;
   destinationLat: number;
   destinationLng: number;
   onArrived: () => void;
@@ -75,6 +77,7 @@ export function InAppNavigation({
   const [follow, setFollow] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const routeFetched = useRef(false);
+  const lastBroadcast = useRef(0);
   const destination: [number, number] = [destinationLat, destinationLng];
 
   useEffect(() => {
@@ -101,13 +104,20 @@ export function InAppNavigation({
             },
           );
         }
+        // Powers the customer's live tracking map — throttled to once
+        // every ~5s so a fast GPS tick rate doesn't hammer the API.
+        const nowMs = Date.now();
+        if (nowMs - lastBroadcast.current > 5000) {
+          lastBroadcast.current = nowMs;
+          api.postOrderLocation(orderId, next[0], next[1]).catch(() => {});
+        }
       },
       () => setError("Couldn't get your location — check location permissions."),
       { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 },
     );
     return () => navigator.geolocation.clearWatch(watchId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [destinationLat, destinationLng]);
+  }, [orderId, destinationLat, destinationLng]);
 
   const remainingMeters = position ? haversineMeters({ lat: position[0], lng: position[1] }, { lat: destinationLat, lng: destinationLng }) : null;
   const arrived = remainingMeters != null && remainingMeters < 40;
