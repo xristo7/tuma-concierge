@@ -27,6 +27,7 @@ import type {
   MapsAdminSettings,
   MapsProviderIdentity,
   MatchingMode,
+  NavMode,
   OrderDetail,
   OrderRow,
   SdpDescription,
@@ -946,6 +947,12 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async adminClearMapsCredential(provider: Exclude<MapsProviderIdentity, "streetmaps">, field: string) {
       return request<{ ok: true }>(`/v1/admin/maps/credentials/${provider}/${field}`, { method: "DELETE" });
+    },
+    async adminSetNavMode(mode: NavMode) {
+      return request<{ navMode: NavMode }>("/v1/admin/nav-mode", {
+        method: "PUT",
+        body: JSON.stringify({ mode }),
+      });
     },
 
     // Customer wallet — closed-loop store credit (top up, spend, no cash-out).

@@ -221,7 +221,13 @@ export type DeliverySettings = {
   mapsStadiaApiKey: string | null;
   mapsThunderforestApiKey: string | null;
   mapsJawgAccessToken: string | null;
+  /** Whether the rider app's "Start Navigation" sends riders out to Google
+   * Maps ("external", the default) or renders navigation in-app using the
+   * active maps provider ("in_app"). Change with PUT /admin/nav-mode. */
+  navMode: NavMode;
 } & MonetizationSettings;
+
+export type NavMode = "external" | "in_app";
 
 export type ServiceFeeType = "flat" | "percent";
 export type ProcessingFeeMode = "customer" | "rider" | "split";

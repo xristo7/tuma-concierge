@@ -100,4 +100,5 @@ export type {
   MapsProviderIdentity,
   MapsCredentialFieldStatus,
   MapsAdminSettings,
+  NavMode,
 } from "./domain.js";

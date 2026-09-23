@@ -2,7 +2,9 @@
 
 import { Download, Navigation, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { InAppNavigation } from "./InAppNavigation";
 import { Modal } from "./Modal";
+import { api } from "../lib/api";
 import { mapsStoreUrl, openMapsNavigation } from "../lib/navigation";
 
 function storageKey(orderId: string) {
@@ -35,6 +37,8 @@ export function DeliveryNavigation({
   const [navStarted, setNavStarted] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+  const [inAppNav, setInAppNav] = useState(false);
+  const [navMode, setNavMode] = useState<"external" | "in_app">("external");
   const hasDestination = destinationLat != null && destinationLng != null;
   const storeUrl = mapsStoreUrl();
 
@@ -44,8 +48,23 @@ export function DeliveryNavigation({
     } catch {}
   }, [orderId]);
 
+  useEffect(() => {
+    api
+      .getSettings()
+      .then((res) => setNavMode(res.settings.navMode))
+      .catch(() => {});
+  }, []);
+
   function startNavigation() {
     if (!hasDestination) return;
+    if (navMode === "in_app") {
+      setInAppNav(true);
+      setNavStarted(true);
+      try {
+        localStorage.setItem(storageKey(orderId), "1");
+      } catch {}
+      return;
+    }
     openMapsNavigation(destinationLat as number, destinationLng as number, () => {
       if (storeUrl) setShowInstallPrompt(true);
     });
@@ -65,6 +84,18 @@ export function DeliveryNavigation({
 
   return (
     <div className="space-y-2 border-t border-[var(--border-faint)] pt-3">
+      {inAppNav && hasDestination && (
+        <InAppNavigation
+          destinationLat={destinationLat as number}
+          destinationLng={destinationLng as number}
+          confirmButtonLabel={confirmButtonLabel}
+          onArrived={() => {
+            setInAppNav(false);
+            setConfirming(true);
+          }}
+          onClose={() => setInAppNav(false)}
+        />
+      )}
       {!navStarted ? (
         <button
           type="button"

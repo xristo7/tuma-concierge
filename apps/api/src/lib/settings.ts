@@ -65,6 +65,13 @@ const DEFAULTS = {
    * the safe default; "google"/"mapbox" only actually take over once an
    * admin saves a working key for that provider (see getActiveMapsProvider). */
   maps_active_provider: "streetmaps",
+  /** Whether the rider's "Start Navigation" button sends them out to Google
+   * Maps (default, unchanged behavior) or renders turn-by-turn-style
+   * navigation inside the app itself, using whichever maps_active_provider
+   * is on. "external" is the safe default since it needs nothing extra
+   * configured; "in_app" keeps riders on the platform end to end. See
+   * apps/rider/components/DeliveryNavigation.tsx. */
+  nav_mode: "external",
   /** Force every payment through the mock/simulated adapters, even when a
    * real provider has working credentials saved. Lets an admin test live
    * credentials without switching them live, or pull the whole platform
@@ -282,6 +289,18 @@ export async function getActiveMapsProvider(): Promise<MapsProviderIdentity> {
 
 export async function setActiveMapsProvider(provider: MapsProviderIdentity): Promise<void> {
   await setSetting("maps_active_provider", ALL_MAPS_PROVIDER_IDENTITIES.includes(provider) ? provider : "streetmaps");
+}
+
+export type NavMode = "external" | "in_app";
+const ALL_NAV_MODES: NavMode[] = ["external", "in_app"];
+
+export async function getNavMode(): Promise<NavMode> {
+  const raw = await getSetting("nav_mode");
+  return ALL_NAV_MODES.includes(raw as NavMode) ? (raw as NavMode) : "external";
+}
+
+export async function setNavMode(mode: NavMode): Promise<void> {
+  await setSetting("nav_mode", ALL_NAV_MODES.includes(mode) ? mode : "external");
 }
 
 export async function getPaymentsDemoMode(): Promise<boolean> {

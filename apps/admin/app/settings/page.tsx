@@ -18,6 +18,7 @@ import { Banknote, CreditCard, FlaskConical, Mic, Route, Settings as SettingsIco
 import { useEffect, useState } from "react";
 import { CallsSettingsPanel } from "../../components/CallsSettingsPanel";
 import { MapsSettingsPanel } from "../../components/MapsSettingsPanel";
+import { NavModeSettingsPanel } from "../../components/NavModeSettingsPanel";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
@@ -422,6 +423,7 @@ export default function SettingsPage() {
           <CallsSettingsPanel />
 
           <MapsSettingsPanel />
+          <NavModeSettingsPanel />
 
           <section className="home-card space-y-3">
             <div className="flex items-center gap-2">

@@ -11,6 +11,7 @@ import {
   getDeliverySettings,
   getMatchingSettings,
   getMonetizationSettings,
+  getNavMode,
   getPaymentsDemoMode,
   getPlatformEnvironment,
   getRiderReserveSettings,
@@ -21,12 +22,14 @@ import {
   setActiveProviders,
   setMatchingModesEnabled,
   setMonetizationSettings,
+  setNavMode,
   setPaymentsDemoMode,
   setPlatformEnvironment,
   setRiderReserveSettings,
   setSetting,
   type CallProviderIdentity,
   type MapsProviderIdentity,
+  type NavMode,
   type PaymentProviderIdentity,
 } from "../lib/settings.js";
 import {
@@ -50,7 +53,7 @@ import { paymentsIntegrationStatus } from "../payments/service.js";
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve, callsActiveProvider, mapsActiveProvider] =
+  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve, callsActiveProvider, mapsActiveProvider, navMode] =
     await Promise.all([
       getDeliverySettings(),
       getMatchingSettings(),
@@ -63,6 +66,7 @@ async function fullSettings() {
       getRiderReserveSettings(),
       getActiveCallProvider(),
       getActiveMapsProvider(),
+      getNavMode(),
     ]);
 
   // The active provider's own key/token, handed to every signed-in client
@@ -111,6 +115,7 @@ async function fullSettings() {
     mapsStadiaApiKey,
     mapsThunderforestApiKey,
     mapsJawgAccessToken,
+    navMode,
     ...monetization,
   };
 }
@@ -666,5 +671,42 @@ settingsRoutes.delete(
       ip: clientIp(c),
     });
     return c.json({ ok: true });
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Navigation mode — whether the rider app's "Start Navigation" sends riders
+// out to Google Maps (default) or renders turn-by-turn-style navigation
+// in-app using the active maps provider. Independent of which maps provider
+// is active; both options work with any provider (in-app navigation just
+// draws a route/position on whichever map is currently rendering).
+// ---------------------------------------------------------------------------
+
+const setNavModeSchema = z.object({ mode: z.enum(["external", "in_app"]) });
+
+settingsRoutes.put(
+  "/admin/nav-mode",
+  requireAuth,
+  requireRole("admin"),
+  requirePermission("settings.manage"),
+  async (c) => {
+    const user = c.get("user");
+    const parsed = setNavModeSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+
+    const before: NavMode = await getNavMode();
+    if (before !== parsed.data.mode) {
+      await setNavMode(parsed.data.mode);
+      await logActivity({
+        actor: user,
+        action: "nav.mode.switch",
+        entityType: "settings",
+        summary: `Switched rider navigation from ${before} to ${parsed.data.mode}`,
+        before: { navMode: before },
+        after: { navMode: parsed.data.mode },
+        ip: clientIp(c),
+      });
+    }
+    return c.json({ navMode: parsed.data.mode });
   },
 );
