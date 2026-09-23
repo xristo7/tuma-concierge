@@ -58,7 +58,7 @@ export function NavModeSettingsPanel() {
         <h2 className="text-sm font-semibold text-ink">Rider navigation</h2>
       </div>
       <p className="text-xs text-ink-500">
-        Where the rider app's &quot;Start Navigation&quot; button sends riders when heading to a pickup or drop-off.
+        Where the rider app&apos;s &quot;Start Navigation&quot; button sends riders when heading to a pickup or drop-off.
       </p>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
