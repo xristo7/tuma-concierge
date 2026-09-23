@@ -17,6 +17,7 @@ import { MobileNumberManager } from "../../components/MobileNumberManager";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 import { compressImage } from "../../lib/image-compress";
+import { useLivePolling } from "../../lib/use-live-polling";
 
 const LocationMapPicker = dynamic(
   () => import("../../components/LocationMapPicker").then((m) => m.LocationMapPicker),
@@ -92,6 +93,23 @@ export default function AccountPage() {
       .then((res) => applyRider(res.rider))
       .catch(() => {});
   }, []);
+
+  // Keeps the "Pending"/"Verified" badge and the waiting-on-admin card in
+  // sync without another visit to this page — previously this only ever
+  // fetched once on mount, so a rider who got approved while sitting on
+  // this screen saw no change until they navigated away and back. Updates
+  // `rider` directly rather than going through applyRider(), which would
+  // otherwise stomp whatever the rider is mid-typing into the form below.
+  useLivePolling(
+    () => {
+      api
+        .myRiderProfile()
+        .then((res) => setRider(res.rider))
+        .catch(() => {});
+    },
+    8000,
+    [],
+  );
 
   // Google sign-up already has a verified email on the account — carry it
   // into this field instead of leaving it blank for the rider to retype.
