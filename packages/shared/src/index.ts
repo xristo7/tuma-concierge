@@ -70,6 +70,7 @@ export type {
   ProcessingFeeMode,
   SubscriptionCadence,
   SubscriptionMode,
+  CashFeeSource,
   RiderSubscriptionView,
   RiderSubscriptionPayment,
   PlatformEnvironment,

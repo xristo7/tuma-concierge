@@ -137,6 +137,16 @@ const DEFAULTS = {
    * per-order one, so it doesn't plug into Fund/Settle math the way the
    * others do. See ../riders/subscription.ts for the billing/enforcement
    * logic and ../worker.ts's scheduled() for the daily renewal sweep. */
+  /** Which pool absorbs a cash (float-rail) order's platform-fee deduction
+   * at Settle — see apps/api/src/orders/routes.ts POST /orders/:id/settle.
+   * "wallet": comes out of the rider's normal earnings balance, allowed to
+   * go negative, nets against their next payout automatically — no
+   * restriction on taking new jobs either way. "deposit": treats the
+   * existing rider minimum-balance reserve (rider_minimum_balance_amount
+   * above) as a hard floor a rider must keep topped up to work at all —
+   * once their balance dips below it, POST /riders/jobs/available and
+   * claim/apply both refuse until they top back up. */
+  monetization_cash_fee_source: "wallet",
   monetization_subscription_enabled: "0",
   /** "recurring" bills every `cadence`; "once" charges a single lifetime
    * fee at activation and never bills that rider again. */
@@ -347,6 +357,7 @@ export type ServiceFeeType = "flat" | "percent";
 export type ProcessingFeeMode = "customer" | "rider" | "split";
 export type SubscriptionCadence = "daily" | "weekly" | "monthly";
 export type SubscriptionMode = "recurring" | "once";
+export type CashFeeSource = "wallet" | "deposit";
 
 export type MonetizationSettings = {
   deliveryCommissionEnabled: boolean;
@@ -359,6 +370,7 @@ export type MonetizationSettings = {
   processingFeePercent: number;
   processingFeeMode: ProcessingFeeMode;
   processingFeeSplitCustomerPercent: number;
+  cashFeeSource: CashFeeSource;
   subscriptionEnabled: boolean;
   subscriptionMode: SubscriptionMode;
   subscriptionAmount: number;
@@ -381,6 +393,10 @@ function asSubscriptionMode(raw: string): SubscriptionMode {
   return raw === "once" ? "once" : "recurring";
 }
 
+function asCashFeeSource(raw: string): CashFeeSource {
+  return raw === "deposit" ? "deposit" : "wallet";
+}
+
 export async function getMonetizationSettings(): Promise<MonetizationSettings> {
   const [
     deliveryCommissionEnabled,
@@ -393,6 +409,7 @@ export async function getMonetizationSettings(): Promise<MonetizationSettings> {
     processingFeePercent,
     processingFeeMode,
     processingFeeSplitCustomerPercent,
+    cashFeeSource,
     subscriptionEnabled,
     subscriptionMode,
     subscriptionAmount,
@@ -408,6 +425,7 @@ export async function getMonetizationSettings(): Promise<MonetizationSettings> {
     getSetting("monetization_processing_fee_percent"),
     getSetting("monetization_processing_fee_mode"),
     getSetting("monetization_processing_fee_split_customer_percent"),
+    getSetting("monetization_cash_fee_source"),
     getSetting("monetization_subscription_enabled"),
     getSetting("monetization_subscription_mode"),
     getSetting("monetization_subscription_amount"),
@@ -424,6 +442,7 @@ export async function getMonetizationSettings(): Promise<MonetizationSettings> {
     processingFeePercent: Number(processingFeePercent) || 0,
     processingFeeMode: asProcessingFeeMode(processingFeeMode),
     processingFeeSplitCustomerPercent: Number(processingFeeSplitCustomerPercent) || 0,
+    cashFeeSource: asCashFeeSource(cashFeeSource),
     subscriptionEnabled: subscriptionEnabled === "1",
     subscriptionMode: asSubscriptionMode(subscriptionMode),
     subscriptionAmount: Number(subscriptionAmount) || 0,
@@ -464,6 +483,9 @@ export async function setMonetizationSettings(input: Partial<MonetizationSetting
     writes.push(
       setSetting("monetization_processing_fee_split_customer_percent", String(input.processingFeeSplitCustomerPercent)),
     );
+  }
+  if (input.cashFeeSource != null) {
+    writes.push(setSetting("monetization_cash_fee_source", input.cashFeeSource));
   }
   if (input.subscriptionEnabled != null) {
     writes.push(setSetting("monetization_subscription_enabled", input.subscriptionEnabled ? "1" : "0"));

@@ -13,8 +13,9 @@ import {
   getMaxOrderValue,
   getMonetizationSettings,
   getPlatformEnvironment,
+  getRiderReserveSettings,
 } from "../lib/settings.js";
-import { computeCheckoutFees, riderPayout } from "../lib/monetization.js";
+import { computeCheckoutFees, isCashDepositOk, riderPayout } from "../lib/monetization.js";
 import { notifyUser } from "../lib/webpush.js";
 import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
 import { redactOrder } from "./visibility.js";
@@ -746,16 +747,29 @@ orderRoutes.post("/orders/:id/claim", requireRole("rider"), async (c) => {
     return c.json({ error: "not_eligible", message: "You previously declined this order" }, 403);
   }
 
+  const environmentForBalance = order.environment === "sandbox" ? "sandbox" : "live";
+  const balanceColumn = environmentForBalance === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
   const riderRes = await db.execute({
-    sql: `SELECT r.verified, r.is_online, r.stage_lat, r.stage_lng, r.subscription_status, r.subscription_paid_through, u.name
+    sql: `SELECT r.verified, r.is_online, r.stage_lat, r.stage_lng, r.subscription_status, r.subscription_paid_through, r.${balanceColumn} as wallet_balance, u.name
           FROM riders r JOIN users u ON u.id = r.user_id WHERE r.user_id = ?`,
     args: [user.sub],
   });
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider?.verified) return c.json({ error: "not_verified" }, 403);
   if (!rider.is_online) return c.json({ error: "not_online", message: "Go online to claim jobs" }, 409);
-  if ((await getMonetizationSettings()).subscriptionEnabled && !isSubscriptionCurrent(rider)) {
+  const monetizationSettings = await getMonetizationSettings();
+  if (monetizationSettings.subscriptionEnabled && !isSubscriptionCurrent(rider)) {
     return c.json({ error: "subscription_required", message: "Pay your subscription to start claiming jobs" }, 403);
+  }
+  const reserveSettings = await getRiderReserveSettings();
+  if (!isCashDepositOk(Number(rider.wallet_balance) || 0, monetizationSettings.cashFeeSource, reserveSettings)) {
+    return c.json(
+      {
+        error: "deposit_required",
+        message: `Top up your wallet to at least ${formatAmount(reserveSettings.amount)} to keep claiming jobs`,
+      },
+      403,
+    );
   }
 
   const { serviceRangeKm } = await getDeliverySettings();
@@ -817,15 +831,28 @@ orderRoutes.post("/orders/:id/apply", requireRole("rider"), async (c) => {
     return c.json({ error: "not_eligible", message: "You previously declined this order" }, 403);
   }
 
+  const applyBalanceColumn = order.environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
   const riderRes = await db.execute({
-    sql: "SELECT verified, is_online, stage_lat, stage_lng, subscription_status, subscription_paid_through FROM riders WHERE user_id = ?",
+    sql: `SELECT verified, is_online, stage_lat, stage_lng, subscription_status, subscription_paid_through, ${applyBalanceColumn} as wallet_balance
+          FROM riders WHERE user_id = ?`,
     args: [user.sub],
   });
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider?.verified) return c.json({ error: "not_verified" }, 403);
   if (!rider.is_online) return c.json({ error: "not_online", message: "Go online to apply for jobs" }, 409);
-  if ((await getMonetizationSettings()).subscriptionEnabled && !isSubscriptionCurrent(rider)) {
+  const applyMonetizationSettings = await getMonetizationSettings();
+  if (applyMonetizationSettings.subscriptionEnabled && !isSubscriptionCurrent(rider)) {
     return c.json({ error: "subscription_required", message: "Pay your subscription to start applying for jobs" }, 403);
+  }
+  const applyReserveSettings = await getRiderReserveSettings();
+  if (!isCashDepositOk(Number(rider.wallet_balance) || 0, applyMonetizationSettings.cashFeeSource, applyReserveSettings)) {
+    return c.json(
+      {
+        error: "deposit_required",
+        message: `Top up your wallet to at least ${formatAmount(applyReserveSettings.amount)} to keep applying for jobs`,
+      },
+      403,
+    );
   }
 
   const matchPoint = orderMatchPoint(order);
@@ -1106,11 +1133,15 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
   const baseAmount = (order.final_total as number | null) ?? (order.estimated_total as number | null) ?? 0;
 
   if (order.payment_rail === "float") {
-    // Float rail: rider fronts the cash and is paid directly by the
-    // customer — no money ever passes through Tuma on this order, so none
-    // of the monetization mechanisms below have anything to apply to.
+    // Float rail: the customer hands the rider the full cash amount —
+    // items, delivery fee, and the platform's own cut all together, same
+    // as if nothing about monetization existed. The platform's share of
+    // that cash is a debt the rider now owes Tuma, not something collected
+    // here — see POST /orders/:id/settle, which computes it and notifies
+    // the rider once the order actually completes (the fee only makes
+    // sense once the final total is locked in).
     await touchOrder(id, { stage: "Shop" });
-    await logEvent(id, "Fund", "Float rail — rider fronting funds", user.sub);
+    await logEvent(id, "Fund", "Cash rail — rider collects full payment from the customer on delivery", user.sub);
     return c.json({ order: await getOrder(id), funded: true, rail: "float" });
   }
 
@@ -1840,6 +1871,45 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
     }
   }
 
+  // Cash rail: the customer already handed the rider the full amount in
+  // person, platform cut included — so that cut comes straight back out of
+  // the rider's own wallet balance here, the same balance their escrow
+  // payouts land in. Deliberately allowed to go negative (unlike a normal
+  // withdrawal, which respects the admin-set reserve floor): this isn't
+  // the rider spending their own money, it's Tuma collecting what it's
+  // owed, and it eats into the reserve before anything else would. A
+  // negative balance then nets against their very next payout automatically
+  // — no separate "debt" to track or pay off, and POST /wallet/withdraw's
+  // existing `balance <= 0` check already blocks withdrawing while in the
+  // red, so there's nothing extra to enforce either. Computed fresh here
+  // against the FINAL settled total (not locked in at Fund time the way
+  // escrow's is) since cash changes hands only once, at the very end.
+  let cashOwed = 0;
+  if (order.payment_rail === "float" && order.rider_id) {
+    const monetizationSettings = await getMonetizationSettings();
+    const fees = computeCheckoutFees(monetizationSettings, {
+      baseAmount: total,
+      deliveryFee: (order.delivery_fee as number | null) ?? 0,
+      orderType: order.type as "parcel" | "shopping",
+      payingWithWallet: false,
+    });
+    cashOwed = fees.totalSurcharge + fees.deliveryCommission + fees.processingFeeRider;
+
+    if (cashOwed > 0) {
+      const balanceColumn = order.environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
+      await db.execute({
+        sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} - ?, updated_at = datetime('now') WHERE user_id = ?`,
+        args: [cashOwed, order.rider_id as string],
+      });
+      await notifyUser(order.rider_id as string, {
+        title: "Platform fee deducted from a cash order",
+        body: `${formatAmount(cashOwed)} from this delivery came out of your wallet — check your balance.`,
+        tag: `cash-fee-${id}`,
+        url: "/wallet",
+      }).catch(() => {});
+    }
+  }
+
   await touchOrder(id, { stage: "Settle", final_total: total });
   await db.execute({
     sql: "UPDATE lists SET status = 'delivered', updated_at = datetime('now') WHERE id = ?",
@@ -1848,7 +1918,11 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
   await logEvent(
     id,
     "Settle",
-    order.payment_rail === "escrow" ? `Order settled — ${formatAmount(payout)} released to rider wallet` : "Order settled",
+    order.payment_rail === "escrow"
+      ? `Order settled — ${formatAmount(payout)} released to rider wallet`
+      : cashOwed > 0
+        ? `Order settled — rider collected cash, owes ${formatAmount(cashOwed)} platform fee`
+        : "Order settled",
     user.sub,
   );
 

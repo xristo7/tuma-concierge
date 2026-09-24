@@ -4,6 +4,7 @@ import {
   hasPermission,
   MATCHING_MODE_DESCRIPTIONS,
   MATCHING_MODE_LABELS,
+  type CashFeeSource,
   type MatchingMode,
   type PaymentCredentialFieldStatus,
   type PaymentProviderIdentity,
@@ -56,6 +57,7 @@ export default function SettingsPage() {
   const [processingFeeEnabled, setProcessingFeeEnabled] = useState(false);
   const [processingFeePercent, setProcessingFeePercent] = useState("0");
   const [processingFeeMode, setProcessingFeeMode] = useState<ProcessingFeeMode>("customer");
+  const [cashFeeSource, setCashFeeSource] = useState<CashFeeSource>("wallet");
   const [processingFeeSplitCustomerPercent, setProcessingFeeSplitCustomerPercent] = useState("50");
   const [subscriptionEnabled, setSubscriptionEnabled] = useState(false);
   const [subscriptionMode, setSubscriptionMode] = useState<SubscriptionMode>("recurring");
@@ -101,6 +103,7 @@ export default function SettingsPage() {
         setProcessingFeePercent(String(settingsRes.settings.processingFeePercent));
         setProcessingFeeMode(settingsRes.settings.processingFeeMode);
         setProcessingFeeSplitCustomerPercent(String(settingsRes.settings.processingFeeSplitCustomerPercent));
+        setCashFeeSource(settingsRes.settings.cashFeeSource);
         setSubscriptionEnabled(settingsRes.settings.subscriptionEnabled);
         setSubscriptionMode(settingsRes.settings.subscriptionMode);
         setSubscriptionAmount(String(settingsRes.settings.subscriptionAmount));
@@ -165,6 +168,7 @@ export default function SettingsPage() {
               processingFeePercent: Number(processingFeePercent),
               processingFeeMode,
               processingFeeSplitCustomerPercent: Number(processingFeeSplitCustomerPercent),
+              cashFeeSource,
               subscriptionEnabled,
               subscriptionMode,
               subscriptionAmount: Number(subscriptionAmount),
@@ -199,6 +203,7 @@ export default function SettingsPage() {
       setProcessingFeePercent(String(res.settings.processingFeePercent));
       setProcessingFeeMode(res.settings.processingFeeMode);
       setProcessingFeeSplitCustomerPercent(String(res.settings.processingFeeSplitCustomerPercent));
+      setCashFeeSource(res.settings.cashFeeSource);
       setSubscriptionEnabled(res.settings.subscriptionEnabled);
       setSubscriptionMode(res.settings.subscriptionMode);
       setSubscriptionAmount(String(res.settings.subscriptionAmount));
@@ -689,6 +694,30 @@ export default function SettingsPage() {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Cash-order platform fee source */}
+            <div className="rounded-xl border border-[var(--border-faint)] p-3 space-y-2.5">
+              <span className="text-sm font-semibold text-ink">Cash-order platform fee</span>
+              <p className="text-xs text-ink-500">
+                On a cash order the customer pays the rider everything in person — items, delivery, and Tuma&apos;s
+                own cut all together. Pick where that cut comes back out of.
+              </p>
+              <div className="space-y-1">
+                <select
+                  value={cashFeeSource}
+                  onChange={(e) => setCashFeeSource(e.target.value as CashFeeSource)}
+                  className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+                >
+                  <option value="wallet">Rider&apos;s wallet (can go negative, nets against their next payout)</option>
+                  <option value="deposit">Rider&apos;s deposit (blocks new jobs until topped back up)</option>
+                </select>
+                <p className="text-xs text-ink-500">
+                  {cashFeeSource === "deposit"
+                    ? "Uses the rider minimum-balance reserve below as the required deposit — once a rider's balance drops below it, they can't claim or apply for anything new until they top back up."
+                    : "The fee is simply deducted from the rider's wallet balance, same one their escrow payouts land in — no restriction on taking new jobs either way."}
+                </p>
+              </div>
             </div>
 
             {/* Rider subscription */}

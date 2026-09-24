@@ -242,6 +242,12 @@ export type ServiceFeeType = "flat" | "percent";
 export type ProcessingFeeMode = "customer" | "rider" | "split";
 export type SubscriptionCadence = "daily" | "weekly" | "monthly";
 export type SubscriptionMode = "recurring" | "once";
+/** Which pool absorbs a cash-order platform-fee deduction at Settle —
+ * "wallet" comes out of the rider's normal earnings balance (can go
+ * negative, nets against the next payout, no work restriction); "deposit"
+ * treats the rider minimum-balance reserve as a hard floor they must keep
+ * topped up to take new jobs at all. See apps/api/src/orders/routes.ts. */
+export type CashFeeSource = "wallet" | "deposit";
 
 /** Every monetization mechanism an admin can independently turn on and
  * price, from Settings → Monetization. See
@@ -268,6 +274,7 @@ export type MonetizationSettings = {
   processingFeeMode: ProcessingFeeMode;
   /** Only used when processingFeeMode is "split" — customer's share 0-100. */
   processingFeeSplitCustomerPercent: number;
+  cashFeeSource: CashFeeSource;
   subscriptionEnabled: boolean;
   /** "recurring" bills every subscriptionCadence; "once" charges a single
    * lifetime fee at activation and never bills that rider again. */
@@ -818,6 +825,13 @@ export type WalletWithdrawal = {
 export type Wallet = {
   balance: number;
   withdrawals: WalletWithdrawal[];
+  /** Only meaningful when the admin's cashFeeSource is "deposit" — see
+   * apps/api/src/lib/monetization.ts isCashDepositOk. When true and
+   * depositShortfall > 0, the rider can't claim/apply for new jobs until
+   * they top back up to requiredDeposit. */
+  depositRequired: boolean;
+  requiredDeposit: number;
+  depositShortfall: number;
 };
 
 /** A customer's own top-up/spend history entry — the audit trail behind

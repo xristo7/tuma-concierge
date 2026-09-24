@@ -13,6 +13,7 @@ import { getDeliverySettings, getMonetizationSettings, getPlatformEnvironment, g
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { redactOrders, toOpenJob } from "../orders/visibility.js";
 import { checkPaymentStatus, initiateCollection, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
+import { isCashDepositOk } from "../lib/monetization.js";
 import { getRiderSubscriptionView, isSubscriptionCurrent, nextPaidThrough } from "./subscription.js";
 import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
 
@@ -267,15 +268,23 @@ riderRoutes.get("/riders/me/orders", requireAuth, requireRole("rider"), async (c
  */
 riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), async (c) => {
   const user = c.get("user");
+  const environment = await getPlatformEnvironment();
+  const balanceColumn = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
   const riderRes = await db.execute({
-    sql: "SELECT verified, is_online, stage_lat, stage_lng, subscription_status, subscription_paid_through FROM riders WHERE user_id = ?",
+    sql: `SELECT verified, is_online, stage_lat, stage_lng, subscription_status, subscription_paid_through, ${balanceColumn} as wallet_balance
+          FROM riders WHERE user_id = ?`,
     args: [user.sub],
   });
   const rider = riderRes.rows[0] as Row | undefined;
   if (!rider?.verified || !rider.is_online) {
     return c.json({ jobs: [] });
   }
-  if ((await getMonetizationSettings()).subscriptionEnabled && !isSubscriptionCurrent(rider)) {
+  const monetizationSettings = await getMonetizationSettings();
+  if (monetizationSettings.subscriptionEnabled && !isSubscriptionCurrent(rider)) {
+    return c.json({ jobs: [] });
+  }
+  const reserve = await getRiderReserveSettings();
+  if (!isCashDepositOk(Number(rider.wallet_balance) || 0, monetizationSettings.cashFeeSource, reserve)) {
     return c.json({ jobs: [] });
   }
 
@@ -291,7 +300,7 @@ riderRoutes.get("/riders/jobs/available", requireAuth, requireRole("rider"), asy
             WHERE o.rider_id IS NULL AND o.stage IN ('Create', 'Match') AND o.environment = ?
             AND o.id NOT IN (SELECT order_id FROM order_rider_exclusions WHERE rider_id = ?)
             ORDER BY o.created_at ASC`,
-      args: [await getPlatformEnvironment(), user.sub],
+      args: [environment, user.sub],
     }),
     db.execute({
       sql: "SELECT order_id FROM order_applications WHERE rider_id = ? AND status = 'pending'",
@@ -388,16 +397,112 @@ riderRoutes.get("/riders/me/wallet", requireAuth, requireRole("rider"), async (c
   const user = c.get("user");
   const environment = await getPlatformEnvironment();
   const balanceColumn = environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
-  const riderRes = await db.execute({
-    sql: `SELECT ${balanceColumn} as wallet_balance FROM riders WHERE user_id = ?`,
-    args: [user.sub],
-  });
+  const [riderRes, monetizationSettings, reserve, withdrawalsRes] = await Promise.all([
+    db.execute({ sql: `SELECT ${balanceColumn} as wallet_balance FROM riders WHERE user_id = ?`, args: [user.sub] }),
+    getMonetizationSettings(),
+    getRiderReserveSettings(),
+    db.execute({
+      sql: "SELECT * FROM wallet_withdrawals WHERE rider_id = ? AND environment = ? ORDER BY created_at DESC LIMIT 20",
+      args: [user.sub, environment],
+    }),
+  ]);
   const balance = (riderRes.rows[0]?.wallet_balance as number | undefined) ?? 0;
-  const withdrawalsRes = await db.execute({
-    sql: "SELECT * FROM wallet_withdrawals WHERE rider_id = ? AND environment = ? ORDER BY created_at DESC LIMIT 20",
-    args: [user.sub, environment],
+  // Only meaningful in "deposit" mode — see isCashDepositOk. In "wallet"
+  // mode a negative balance is fine and doesn't block anything but a
+  // withdrawal, so there's nothing to top up on demand.
+  const depositRequired = monetizationSettings.cashFeeSource === "deposit" && reserve.enabled;
+  return c.json({
+    balance,
+    withdrawals: withdrawalsRes.rows,
+    depositRequired,
+    requiredDeposit: depositRequired ? reserve.amount : 0,
+    depositShortfall: depositRequired ? Math.max(0, reserve.amount - balance) : 0,
   });
-  return c.json({ balance, withdrawals: withdrawalsRes.rows });
+});
+
+const riderTopupSchema = z.object({
+  amount: z.number().int().positive(),
+  msisdn: z.string().min(6).max(20),
+});
+
+/** A rider funding their own wallet, mobile money in — the only way
+ * "deposit" mode's required balance can be topped back up (escrow payouts
+ * are the only other thing that credits this balance, and don't happen on
+ * demand). No cap here the way the customer wallet has one: this is a
+ * rider putting their own money on deposit with the platform, not a
+ * store-of-value the platform is trying to limit exposure on. */
+riderRoutes.post("/riders/me/wallet/topup", requireAuth, requireRole("rider"), async (c) => {
+  const user = c.get("user");
+  const parsed = riderTopupSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
+  const { amount, msisdn } = parsed.data;
+  const environment = await getPlatformEnvironment();
+
+  const topupId = newId("rwtu");
+  try {
+    const initiated = await initiateCollection({
+      referenceId: topupId,
+      msisdn,
+      amount,
+      name: user.name,
+      forceMock: environment === "sandbox",
+    });
+
+    await db.execute({
+      sql: `INSERT INTO rider_wallet_topups (id, rider_id, amount, provider, provider_ref, msisdn, network, status, environment)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      args: [topupId, user.sub, amount, initiated.provider, initiated.providerRef, msisdn, initiated.network, environment],
+    });
+
+    return c.json({ topupId, status: "pending", network: initiated.network, redirectUrl: initiated.redirectUrl }, 201);
+  } catch (err) {
+    if (err instanceof UnsupportedNetworkError) {
+      return c.json({ error: "unsupported_network", message: err.message }, 400);
+    }
+    console.error("Rider wallet top-up request failed:", err);
+    return c.json({ error: "payment_request_failed", message: "Couldn't start that top-up just now. Please try again." }, 502);
+  }
+});
+
+riderRoutes.get("/riders/me/wallet/topups/:id/refresh", requireAuth, requireRole("rider"), async (c) => {
+  const id = c.req.param("id") as string;
+  const user = c.get("user");
+  const res = await db.execute({ sql: "SELECT * FROM rider_wallet_topups WHERE id = ? AND rider_id = ?", args: [id, user.sub] });
+  const topup = res.rows[0] as Row | undefined;
+  if (!topup) return c.json({ error: "not_found" }, 404);
+  if (topup.status !== "pending") return c.json({ topup });
+
+  const status = await checkPaymentStatus({
+    provider: topup.provider as string,
+    provider_ref: topup.provider_ref as string | null,
+    created_at: topup.created_at as string,
+  });
+  if (status === "pending") return c.json({ topup });
+
+  if (status === "failed") {
+    await db.execute({
+      sql: "UPDATE rider_wallet_topups SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'pending'",
+      args: [id],
+    });
+    return c.json({ topup: { ...topup, status: "failed" } });
+  }
+
+  // Race-guarded exactly like the customer wallet's own topup refresh: only
+  // the request that actually flips pending -> successful credits the
+  // balance, so a poll and a webhook landing together can't double-credit.
+  const updated = await db.execute({
+    sql: "UPDATE rider_wallet_topups SET status = 'successful', updated_at = datetime('now') WHERE id = ? AND status = 'pending'",
+    args: [id],
+  });
+  if ((updated.rowsAffected ?? 0) > 0) {
+    const balanceColumn = topup.environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
+    await db.execute({
+      sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} + ?, updated_at = datetime('now') WHERE user_id = ?`,
+      args: [topup.amount as number, user.sub],
+    });
+  }
+
+  return c.json({ topup: { ...topup, status: "successful" } });
 });
 
 const withdrawSchema = z.object({
@@ -465,7 +570,18 @@ riderRoutes.post("/riders/me/wallet/withdraw", requireAuth, requireRole("rider")
     msisdn = rider.momo_msisdn as string | null;
   }
 
-  if (balance <= 0) return c.json({ error: "no_balance", message: "Nothing to withdraw yet" }, 409);
+  if (balance <= 0) {
+    return c.json(
+      {
+        error: "no_balance",
+        message:
+          balance < 0
+            ? `You owe ${Math.abs(balance).toLocaleString()} UGX from cash-order platform fees — your next digital job's payout will cover it automatically`
+            : "Nothing to withdraw yet",
+      },
+      409,
+    );
+  }
   if (!msisdn) {
     return c.json({ error: "no_mobile_money", message: "Add a mobile money number in your profile first" }, 409);
   }

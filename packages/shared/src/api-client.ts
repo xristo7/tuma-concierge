@@ -630,6 +630,20 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async myWallet() {
       return request<Wallet>("/v1/riders/me/wallet");
     },
+    /** Funds the rider's own wallet via mobile money — the only way to top
+     * back up when "deposit" mode requires a minimum balance to keep
+     * taking jobs. */
+    async topUpRiderWallet(input: { amount: number; msisdn: string }) {
+      return request<{ topupId: string; status: "pending"; network: string | null; redirectUrl?: string }>(
+        "/v1/riders/me/wallet/topup",
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    async refreshRiderTopup(id: string) {
+      return request<{ topup: { id: string; status: "pending" | "successful" | "failed"; amount: number } }>(
+        `/v1/riders/me/wallet/topups/${id}/refresh`,
+      );
+    },
     /** Omit `amount` to withdraw everything above the reserve (if any); pass
      * one to leave more than that behind — never less. `mobileNumberId` is
      * required once the rider has 2 saved withdrawal numbers (no reasonable

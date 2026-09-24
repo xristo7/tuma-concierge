@@ -22,6 +22,11 @@ export default function WalletPage() {
   const [selectedNumberId, setSelectedNumberId] = useState<string | null>(null);
   const polling = useRef(false);
 
+  const [topupMsisdn, setTopupMsisdn] = useState("");
+  const [topupBusy, setTopupBusy] = useState(false);
+  const [topupError, setTopupError] = useState<string | null>(null);
+  const [pendingTopupId, setPendingTopupId] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     const [walletRes, ordersRes, settingsRes, numbersRes] = await Promise.all([
       api.myWallet(),
@@ -69,6 +74,37 @@ export default function WalletPage() {
   const reserveAmount = reserve.enabled ? reserve.amount : 0;
   const maxWithdrawable = wallet ? Math.max(0, wallet.balance - reserveAmount) : 0;
 
+  useEffect(() => {
+    if (!pendingTopupId) return;
+    const interval = setInterval(() => {
+      api
+        .refreshRiderTopup(pendingTopupId)
+        .then((res) => {
+          if (res.topup.status !== "pending") {
+            setPendingTopupId(null);
+            load();
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [pendingTopupId, load]);
+
+  async function submitTopup(e: React.FormEvent) {
+    e.preventDefault();
+    if (!topupMsisdn.trim() || !wallet) return;
+    setTopupBusy(true);
+    setTopupError(null);
+    try {
+      const res = await api.topUpRiderWallet({ amount: wallet.depositShortfall, msisdn: topupMsisdn.trim() });
+      setPendingTopupId(res.topupId);
+    } catch (err) {
+      setTopupError(errorMessage(err));
+    } finally {
+      setTopupBusy(false);
+    }
+  }
+
   async function withdraw(amount?: number) {
     setBusy(true);
     setError(null);
@@ -97,11 +133,56 @@ export default function WalletPage() {
     <div className="space-y-5 px-4 pb-6 pt-4">
       <h1 className="text-xl font-bold text-ink">Wallet</h1>
 
+      {wallet && wallet.depositRequired && wallet.depositShortfall > 0 && (
+        <section className="home-card space-y-3 !border-l-4 !border-l-red-500">
+          <div>
+            <p className="text-sm font-bold text-red-600">Top up to keep taking jobs</p>
+            <p className="mt-1 text-xs text-ink-500">
+              A cash order&apos;s platform fee came out of your required deposit. You&apos;re short{" "}
+              {formatUgx(wallet.depositShortfall)} of the {formatUgx(wallet.requiredDeposit)} minimum — top up to
+              claim or apply for new jobs again.
+            </p>
+          </div>
+          {pendingTopupId ? (
+            <div className="flex items-center gap-3 py-1">
+              <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
+              <p className="text-sm text-ink-500">Confirming your top-up…</p>
+            </div>
+          ) : (
+            <form onSubmit={submitTopup} className="space-y-2">
+              {topupError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{topupError}</p>}
+              <input
+                required
+                value={topupMsisdn}
+                onChange={(e) => setTopupMsisdn(e.target.value)}
+                placeholder="Mobile money number, e.g. 0772345678"
+                className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              />
+              <button
+                type="submit"
+                disabled={topupBusy}
+                className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
+              >
+                {topupBusy ? "Starting…" : `Top up ${formatUgx(wallet.depositShortfall)}`}
+              </button>
+            </form>
+          )}
+        </section>
+      )}
+
       <section className="home-card space-y-3 text-center">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Wallet balance</p>
-          <p className="text-2xl font-bold text-ink">{wallet ? formatUgx(wallet.balance) : "—"}</p>
+          <p className={`text-2xl font-bold ${wallet && wallet.balance < 0 ? "text-red-600" : "text-ink"}`}>
+            {wallet ? formatUgx(wallet.balance) : "—"}
+          </p>
           <p className="text-xs text-ink-500">Escrow payouts land here — cash jobs pay you directly, on the spot.</p>
+          {wallet && wallet.balance < 0 && (
+            <p className="mt-1 text-xs text-ink-500">
+              A negative balance is a cash-order platform fee — it&apos;ll be covered automatically by your next
+              digital job&apos;s payout.
+            </p>
+          )}
           {reserve.enabled && (
             <p className="mt-1 text-xs text-ink-500">
               A minimum of {formatUgx(reserveAmount)} always stays in your wallet — up to {formatUgx(maxWithdrawable)}{" "}

@@ -101,3 +101,21 @@ export function computeCheckoutFees(
 export function riderPayout(collected: number, fees: CheckoutFees): number {
   return Math.max(0, collected - fees.totalSurcharge - fees.deliveryCommission - fees.processingFeeRider);
 }
+
+/**
+ * Whether a rider is allowed to take on new jobs at all, given how cash
+ * (float-rail) platform fees are collected — see ../orders/routes.ts
+ * POST /orders/:id/settle. "wallet" mode never restricts this: a negative
+ * balance just nets against the rider's next payout. "deposit" mode treats
+ * the reserve as a hard floor — a rider whose balance has been eaten into
+ * below it can't claim/apply for anything new until they top back up,
+ * exactly the "you cannot buy any other orders" rule this was asked for.
+ */
+export function isCashDepositOk(
+  walletBalance: number,
+  cashFeeSource: MonetizationSettings["cashFeeSource"],
+  reserve: { enabled: boolean; amount: number },
+): boolean {
+  if (cashFeeSource !== "deposit" || !reserve.enabled) return true;
+  return walletBalance >= reserve.amount;
+}
