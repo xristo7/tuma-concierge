@@ -390,6 +390,7 @@ export type Rider = {
   verified: number;
   is_online: number;
   area: string | null;
+  created_at: string;
   vehicle_info: string | null;
   rating: number;
   momo_msisdn: string | null;
@@ -727,6 +728,10 @@ export type AdminCustomer = {
   status: UserStatus;
   created_at: string;
   order_count: number;
+  /** Approximated from the customer's most recent order's pickup point —
+   * there's no dedicated city field on a customer account. Null if they've
+   * never placed an order. */
+  city: string | null;
 };
 
 export type AdminStats = {

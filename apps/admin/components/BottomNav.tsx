@@ -11,7 +11,7 @@ type Tab = { href: string; label: string; icon: LucideIcon };
 
 const ALL_TABS: Tab[] = [
   { href: "/", label: "Overview", icon: LayoutGrid },
-  { href: "/people", label: "People", icon: Users },
+  { href: "/people", label: "Users", icon: Users },
   { href: "/orders", label: "Orders", icon: Package },
 ];
 

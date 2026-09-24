@@ -126,20 +126,26 @@ adminRoutes.get("/admin/integrations", requirePermission("integrations.view"), a
 adminRoutes.get("/admin/customers", requirePermission("customers.view"), async (c) => {
   const q = c.req.query("q")?.trim();
   const environment = resolveViewEnvironment(c, await getPlatformEnvironment());
+  // City has no dedicated column on a customer account — approximated from
+  // their most recent order's pickup point, the closest thing to "where
+  // this customer actually is" that already exists in the schema.
+  const citySubquery = `(SELECT o.pickup_area FROM orders o WHERE o.customer_id = u.id AND o.environment = ? ORDER BY o.created_at DESC LIMIT 1) as city`;
   const res = await db.execute(
     q
       ? {
           sql: `SELECT u.id, u.name, u.phone, u.email, u.status, u.created_at,
-                  (SELECT COUNT(*) FROM orders WHERE customer_id = u.id AND environment = ?) as order_count
+                  (SELECT COUNT(*) FROM orders WHERE customer_id = u.id AND environment = ?) as order_count,
+                  ${citySubquery}
                 FROM users u WHERE u.role = 'customer' AND (u.name LIKE ? OR u.phone LIKE ?)
                 ORDER BY u.created_at DESC LIMIT 100`,
-          args: [environment, `%${q}%`, `%${q}%`],
+          args: [environment, environment, `%${q}%`, `%${q}%`],
         }
       : {
           sql: `SELECT u.id, u.name, u.phone, u.email, u.status, u.created_at,
-             (SELECT COUNT(*) FROM orders WHERE customer_id = u.id AND environment = ?) as order_count
+             (SELECT COUNT(*) FROM orders WHERE customer_id = u.id AND environment = ?) as order_count,
+             ${citySubquery}
            FROM users u WHERE u.role = 'customer' ORDER BY u.created_at DESC LIMIT 100`,
-          args: [environment],
+          args: [environment, environment],
         },
   );
   return c.json({ customers: res.rows });

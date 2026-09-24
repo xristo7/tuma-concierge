@@ -78,7 +78,7 @@ export default function RiderDetailPage() {
     <div className="space-y-5 px-4 pb-6 pt-4">
       <Link href="/people" className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-500">
         <ArrowLeft className="h-4 w-4" strokeWidth={2} aria-hidden />
-        People
+        Users
       </Link>
 
       <header className="flex items-center justify-between gap-3">
