@@ -1,7 +1,7 @@
 "use client";
 
 import type { RestaurantChatMessage } from "@tuma/shared";
-import { ArrowLeft, Camera, Mic, Pause, Phone, Play, Send, Square, Trash2, User } from "lucide-react";
+import { ArrowLeft, Camera, Mic, Pause, Phone, PhoneMissed, PhoneOff, Play, Send, Square, Trash2, User } from "lucide-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import Link from "next/link";
@@ -18,6 +18,28 @@ function formatTime(iso: string): string {
   const d = new Date(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+/** WhatsApp-style call-log entry — centered, not attributed to either
+ * side of the conversation, unlike every other bubble type. `mine`
+ * reflects who placed the call, which only changes the icon's
+ * direction, not the layout. */
+function CallLogEntry({ message, mine }: { message: RestaurantChatMessage; mine: boolean }) {
+  const missedOrDeclined = message.call_status === "missed" || message.call_status === "declined";
+  const Icon = message.call_status === "missed" ? PhoneMissed : message.call_status === "declined" ? PhoneOff : Phone;
+  return (
+    <div className="flex justify-center py-1">
+      <div
+        className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium ${
+          missedOrDeclined ? "bg-red-500/10 text-red-600" : "bg-[rgb(var(--surface-muted))] text-ink-500"
+        }`}
+      >
+        <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+        <span>{mine && message.call_status === "missed" ? "No answer" : message.body}</span>
+        <span className="text-ink-500/60">· {formatTime(message.created_at)}</span>
+      </div>
+    </div>
+  );
 }
 
 /** m:ss, for a recording's running length or a preview's fixed one. */
@@ -306,6 +328,9 @@ export default function RestaurantChatThreadPage() {
             {messages.length === 0 && <p className="py-8 text-center text-xs text-ink-500">No messages yet.</p>}
             {messages.map((m) => {
               const mine = m.sender_role === "restaurant";
+              if (m.type === "call") {
+                return <CallLogEntry key={m.id} message={m} mine={mine} />;
+              }
               return (
                 <div key={m.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>
                   <div className={`flex max-w-[75%] flex-col ${mine ? "items-end" : "items-start"}`}>

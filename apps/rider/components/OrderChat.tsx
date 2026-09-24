@@ -1,7 +1,7 @@
 "use client";
 
 import type { ChatMessage } from "@tuma/shared";
-import { Camera, Check, CheckCheck, Clock, Mic, Pause, Play, Send, Square, Trash2 } from "lucide-react";
+import { Camera, Check, CheckCheck, Clock, Mic, Pause, Phone, PhoneMissed, PhoneOff, Play, Send, Square, Trash2 } from "lucide-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,6 +11,28 @@ import { getQueuedMessages, queueMessage, removeQueuedMessage, type QueuedMessag
 import { compressImage } from "../lib/image-compress";
 import { useLivePolling } from "../lib/use-live-polling";
 import { useVoiceNoteMaxSeconds } from "../lib/useVoiceNoteMaxSeconds";
+
+/** WhatsApp-style call-log entry — centered, not attributed to either
+ * side of the conversation, unlike every other bubble type. `mine`
+ * reflects who placed the call (the message's sender_id), which only
+ * changes the icon's direction, not the layout. */
+function CallLogEntry({ message, mine }: { message: ChatMessage; mine: boolean }) {
+  const missedOrDeclined = message.call_status === "missed" || message.call_status === "declined";
+  const Icon = message.call_status === "missed" ? PhoneMissed : message.call_status === "declined" ? PhoneOff : Phone;
+  return (
+    <div className="flex justify-center py-1">
+      <div
+        className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium ${
+          missedOrDeclined ? "bg-red-500/10 text-red-600" : "bg-[rgb(var(--surface-muted))] text-ink-500"
+        }`}
+      >
+        <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+        <span>{mine && message.call_status === "missed" ? "No answer" : message.body}</span>
+        <span className="text-ink-500/60">· {formatTime(message.created_at)}</span>
+      </div>
+    </div>
+  );
+}
 
 function formatTime(iso: string): string {
   const d = new Date(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
@@ -362,6 +384,10 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
       )}
       {messages.map((m) => {
         const mine = m.sender_id === user?.id;
+
+        if (m.type === "call") {
+          return <CallLogEntry key={m.id} message={m} mine={mine} />;
+        }
 
         return (
           <div key={m.id} className={`flex items-end gap-2 ${mine ? "justify-end" : "justify-start"}`}>

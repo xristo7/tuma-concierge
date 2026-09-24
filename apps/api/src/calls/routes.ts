@@ -152,8 +152,85 @@ callRoutes.post("/calls/:id/end", async (c) => {
     args: [status, id],
   });
   const res = await db.execute({ sql: "SELECT * FROM calls WHERE id = ?", args: [id] });
-  return c.json({ call: res.rows[0] });
+  const updated = res.rows[0] as Row;
+  await logCallToChat(updated, status, updated.duration_seconds as number | null).catch((err) =>
+    console.error("Failed to log call to chat:", err),
+  );
+  return c.json({ call: updated });
 });
+
+function formatCallDuration(seconds: number | null): string {
+  const s = Math.max(0, seconds ?? 0);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m === 0 ? `${r}s` : `${m}m ${r}s`;
+}
+
+/**
+ * Drops a WhatsApp-style call-log entry ("Missed call", "Declined call",
+ * "Call · 3m 12s") into whichever chat thread this call's pair maps to —
+ * order-based customer<->rider chat, or restaurant<->customer chat — so
+ * there's some record of a call in the conversation itself, not just the
+ * ephemeral ring UI. See ../db/migrations/0043_call_log_messages.sql for
+ * the `type = 'call'` + call_id/call_status/call_duration_seconds columns
+ * this writes. Best-effort: a pairing that can't be resolved to a known
+ * customer/rider or customer/restaurant-owner (e.g. two admins calling
+ * each other) is silently skipped rather than guessing.
+ */
+async function logCallToChat(call: Row, status: string, durationSeconds: number | null): Promise<void> {
+  if (status !== "declined" && status !== "missed" && status !== "ended") return;
+  const body =
+    status === "declined" ? "Declined call" : status === "missed" ? "Missed call" : `Call · ${formatCallDuration(durationSeconds)}`;
+
+  const callerId = call.caller_id as string;
+  const calleeId = call.callee_id as string;
+  const messageId = newId("msg");
+
+  const restaurantId = call.restaurant_id as string | null;
+  const orderId = call.order_id as string | null;
+  const callId = call.id as string;
+
+  if (restaurantId) {
+    const restaurantRes = await db.execute({
+      sql: "SELECT owner_id FROM restaurants WHERE id = ?",
+      args: [restaurantId],
+    });
+    const ownerId = (restaurantRes.rows[0] as Row | undefined)?.owner_id as string | undefined;
+    if (!ownerId) return;
+    const customerId = callerId === ownerId ? calleeId : callerId;
+    const senderRole = callerId === ownerId ? "restaurant" : "customer";
+    await db.execute({
+      sql: `INSERT INTO restaurant_chat_messages (id, restaurant_id, customer_id, sender_role, body, type, call_id, call_status, call_duration_seconds)
+            VALUES (?, ?, ?, ?, ?, 'call', ?, ?, ?)`,
+      args: [messageId, restaurantId, customerId, senderRole, body, callId, status, durationSeconds],
+    });
+    return;
+  }
+
+  const usersRes = await db.execute({ sql: "SELECT id, role FROM users WHERE id IN (?, ?)", args: [callerId, calleeId] });
+  const rolesById = new Map((usersRes.rows as Row[]).map((u) => [u.id as string, u.role as string]));
+  const customerId =
+    rolesById.get(callerId) === "customer" ? callerId : rolesById.get(calleeId) === "customer" ? calleeId : null;
+  const riderId = rolesById.get(callerId) === "rider" ? callerId : rolesById.get(calleeId) === "rider" ? calleeId : null;
+  if (!customerId) return;
+
+  await db.execute({
+    sql: `INSERT INTO chat_messages (id, order_id, sender_id, sender_role, body, type, customer_id, rider_id, call_id, call_status, call_duration_seconds)
+          VALUES (?, ?, ?, ?, ?, 'call', ?, ?, ?, ?, ?)`,
+    args: [
+      messageId,
+      orderId,
+      callerId,
+      rolesById.get(callerId) ?? "customer",
+      body,
+      customerId,
+      riderId,
+      callId,
+      status,
+      durationSeconds,
+    ],
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Cloudflare Realtime negotiation proxy — only meaningful when the active

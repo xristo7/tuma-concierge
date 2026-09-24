@@ -2248,6 +2248,7 @@ orderRoutes.get("/chat/media/:messageId", async (c) => {
 function chatPreview(type: unknown, body: unknown): string {
   if (type === "image") return "📷 Photo";
   if (type === "voice") return "🎤 Voice message";
+  if (type === "call") return "📞 " + ((body as string | null) ?? "Call");
   return (body as string | null) ?? "";
 }
 

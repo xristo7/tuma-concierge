@@ -32,6 +32,7 @@ const ALLOWED_VOICE_MIME = new Set(["audio/webm", "audio/ogg", "audio/mp4", "aud
 function preview(type: string, body: string | null): string {
   if (type === "image") return "📷 Photo";
   if (type === "voice") return "🎤 Voice message";
+  if (type === "call") return "📞 " + (body ?? "Call");
   return body && body.length > 60 ? `${body.slice(0, 60)}…` : body || "";
 }
 

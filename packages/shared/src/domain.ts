@@ -350,11 +350,13 @@ export type Payment = {
 
 export type ChatMessage = {
   id: string;
-  order_id: string;
+  /** Null for a call-log entry logged outside any specific order's chat —
+   * see call_id below. Every other message type still always has one. */
+  order_id: string | null;
   sender_id: string;
   sender_role: "customer" | "rider" | "admin";
   body: string;
-  type: "text" | "image" | "voice";
+  type: "text" | "image" | "voice" | "call";
   media_key: string | null;
   created_at: string;
   /** Set once the recipient's client has fetched this message. */
@@ -365,6 +367,12 @@ export type ChatMessage = {
   /** Whether the recipient has read up to this message — only meaningful
    * on a message the viewer themself sent (drives their own tick color). */
   read: boolean;
+  /** Only set on a `type: "call"` message — see apps/api/src/calls/routes.ts
+   * logCallToChat. `sender_id` is the call's caller, so the viewer can tell
+   * outgoing vs incoming (WhatsApp-style "Missed call" vs "Call declined"). */
+  call_id: string | null;
+  call_status: "declined" | "missed" | "ended" | null;
+  call_duration_seconds: number | null;
 };
 
 /** One row in the Chat tab's conversation list — the other party in a customer/rider pair, and their last message. */
@@ -556,12 +564,16 @@ export type RestaurantChatMessage = {
   customer_id: string;
   sender_role: "customer" | "restaurant";
   body: string | null;
-  type: "text" | "image" | "voice";
+  type: "text" | "image" | "voice" | "call";
   media_key: string | null;
   menu_item_id: string | null;
   menu_item_name: string | null;
   read: number;
   created_at: string;
+  /** Only set on a `type: "call"` message — see apps/api/src/calls/routes.ts logCallToChat. */
+  call_id: string | null;
+  call_status: "declined" | "missed" | "ended" | null;
+  call_duration_seconds: number | null;
 };
 
 /** One row per customer who's messaged a restaurant — the owner's inbox list. */
