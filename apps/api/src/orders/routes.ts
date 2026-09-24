@@ -1079,6 +1079,9 @@ const fundSchema = z
     // Pay from someone else's wallet instead of your own — only valid
     // when that owner has an active wallet_shares grant to this customer.
     walletOwnerId: z.string().optional(),
+    // Which of the (possibly shared) owner's wallets to pay from —
+    // omitted or "primary" means their original wallet.
+    walletId: z.string().optional(),
   })
   .refine((data) => !!data.msisdn || !!data.useWallet, { message: "Provide a mobile money number or pay from wallet" });
 
@@ -1139,14 +1142,20 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
   }
 
   if (parsed.data.useWallet) {
+    const walletId = !parsed.data.walletId || parsed.data.walletId === "primary" ? undefined : parsed.data.walletId;
     let walletOwnerId = user.sub;
     if (parsed.data.walletOwnerId && parsed.data.walletOwnerId !== user.sub) {
       const share = await db.execute({
-        sql: "SELECT 1 FROM wallet_shares WHERE owner_id = ? AND grantee_id = ? AND status = 'active'",
-        args: [parsed.data.walletOwnerId, user.sub],
+        sql: `SELECT 1 FROM wallet_shares WHERE owner_id = ? AND grantee_id = ? AND status = 'active'
+              AND wallet_id ${walletId ? "= ?" : "IS NULL"}`,
+        args: walletId ? [parsed.data.walletOwnerId, user.sub, walletId] : [parsed.data.walletOwnerId, user.sub],
       });
       if (share.rows.length === 0) return c.json({ error: "wallet_not_shared" }, 403);
       walletOwnerId = parsed.data.walletOwnerId;
+    } else if (walletId) {
+      // Paying from one of your own secondary wallets — ownership check.
+      const owned = await db.execute({ sql: "SELECT 1 FROM wallets WHERE id = ? AND owner_id = ?", args: [walletId, user.sub] });
+      if (owned.rows.length === 0) return c.json({ error: "not_found", message: "That wallet doesn't exist" }, 404);
     }
     const sharedSpend = walletOwnerId !== user.sub;
 
@@ -1157,6 +1166,7 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
       note: `Order ${id}`,
       actorId: sharedSpend ? user.sub : undefined,
       environment: order.environment as "live" | "sandbox",
+      walletId,
     });
     if (!paymentId) return c.json({ error: "insufficient_wallet_balance" }, 409);
 

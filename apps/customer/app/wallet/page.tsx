@@ -1,10 +1,24 @@
 "use client";
 
-import type { CustomerWallet, WalletLedgerEntry, WalletShares } from "@tuma/shared";
-import { ArrowDownLeft, ArrowUpRight, RotateCcw, Send, Users, Wallet as WalletIcon } from "lucide-react";
+import type { CustomerWallet, CustomerWalletSummary, WalletLedgerEntry, WalletShares, WalletUsageReport } from "@tuma/shared";
+import {
+  ArrowDownLeft,
+  ArrowLeftRight,
+  ArrowUpRight,
+  Check,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Send,
+  Trash2,
+  Users,
+  Wallet as WalletIcon,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { BottomDrawer } from "../../components/BottomDrawer";
 import { MobileNumberPicker } from "../../components/MobileNumberPicker";
+import { SwipeToConfirm } from "../../components/SwipeToConfirm";
 import { api, errorMessage } from "../../lib/api";
 import { useNetworkStatus } from "../../lib/use-network-status";
 import { formatDateTime, formatUgx } from "../../lib/order-display";
@@ -38,6 +52,8 @@ const SHARE_STATUS_LABELS: Record<string, string> = {
   declined: "Declined",
 };
 
+const SUGGESTED_WALLET_NAMES_FALLBACK = ["Family Expenses", "Office Supplies", "Personal Savings", "Travel Fund"];
+
 export default function WalletPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -48,6 +64,145 @@ export default function WalletPage() {
   const [error, setError] = useState<string | null>(null);
   const [pendingTopupId, setPendingTopupId] = useState<string | null>(null);
   const online = useNetworkStatus();
+
+  // Multiple named wallets — "primary" is the original wallet (the one
+  // `wallet` above is always about); everything else is a real wallet the
+  // customer created. Selecting one swaps which wallet the balance card,
+  // activity list, and usage report below are showing.
+  const [wallets, setWallets] = useState<CustomerWalletSummary[]>([]);
+  const [suggestedNames, setSuggestedNames] = useState<string[]>(SUGGESTED_WALLET_NAMES_FALLBACK);
+  const [maxWallets, setMaxWallets] = useState(5);
+  const [selectedWalletId, setSelectedWalletId] = useState("primary");
+  const [secondaryLedger, setSecondaryLedger] = useState<WalletLedgerEntry[]>([]);
+  const [report, setReport] = useState<WalletUsageReport | null>(null);
+  const [reportPeriod, setReportPeriod] = useState<"week" | "month" | "all">("month");
+
+  const [showCreateWallet, setShowCreateWallet] = useState(false);
+  const [newWalletName, setNewWalletName] = useState("");
+  const [walletBusy, setWalletBusy] = useState(false);
+  const [walletError, setWalletError] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  const [showMoveFunds, setShowMoveFunds] = useState(false);
+  const [moveFrom, setMoveFrom] = useState("primary");
+  const [moveTo, setMoveTo] = useState("");
+  const [moveAmount, setMoveAmount] = useState("");
+  const [moveBusy, setMoveBusy] = useState(false);
+  const [moveError, setMoveError] = useState<string | null>(null);
+
+  const loadWallets = useCallback(() => {
+    api
+      .getWallets()
+      .then((res) => {
+        setWallets(res.wallets);
+        setSuggestedNames(res.suggestedNames);
+        setMaxWallets(res.maxWallets);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadWallets();
+  }, [loadWallets]);
+
+  useEffect(() => {
+    if (selectedWalletId === "primary") {
+      setSecondaryLedger([]);
+      return;
+    }
+    api
+      .getWalletLedger(selectedWalletId)
+      .then((res) => setSecondaryLedger(res.ledger))
+      .catch(() => setSecondaryLedger([]));
+  }, [selectedWalletId]);
+
+  useEffect(() => {
+    api
+      .getWalletReport(selectedWalletId, reportPeriod)
+      .then(setReport)
+      .catch(() => setReport(null));
+  }, [selectedWalletId, reportPeriod]);
+
+  const selectedWallet = wallets.find((w) => w.id === selectedWalletId);
+  const activityLedger = selectedWalletId === "primary" ? (wallet?.ledger ?? []) : secondaryLedger;
+  const canCreateWallet = wallets.length < maxWallets;
+
+  async function submitCreateWallet(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newWalletName.trim()) return;
+    setWalletBusy(true);
+    setWalletError(null);
+    try {
+      const res = await api.createWallet(newWalletName.trim());
+      setNewWalletName("");
+      setShowCreateWallet(false);
+      loadWallets();
+      setSelectedWalletId(res.wallet.id);
+    } catch (err) {
+      setWalletError(errorMessage(err));
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+
+  async function submitRename(id: string) {
+    if (!renameValue.trim()) return;
+    setWalletBusy(true);
+    try {
+      await api.renameWallet(id, renameValue.trim());
+      setRenamingId(null);
+      loadWallets();
+    } catch (err) {
+      setWalletError(errorMessage(err));
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+
+  async function deleteWallet(id: string) {
+    setWalletBusy(true);
+    setWalletError(null);
+    try {
+      await api.deleteWallet(id);
+      if (selectedWalletId === id) setSelectedWalletId("primary");
+      loadWallets();
+    } catch (err) {
+      setWalletError(errorMessage(err));
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+
+  async function submitMoveFunds(e: React.FormEvent) {
+    e.preventDefault();
+    const parsedAmount = Number(moveAmount);
+    if (!moveTo) {
+      setMoveError("Choose a destination wallet.");
+      return;
+    }
+    if (moveFrom === moveTo) {
+      setMoveError("Choose two different wallets.");
+      return;
+    }
+    if (!parsedAmount || parsedAmount <= 0) {
+      setMoveError("Enter an amount to move.");
+      return;
+    }
+    setMoveBusy(true);
+    setMoveError(null);
+    try {
+      await api.transferBetweenWallets({ fromWalletId: moveFrom, toWalletId: moveTo, amount: parsedAmount });
+      setMoveAmount("");
+      setShowMoveFunds(false);
+      load();
+      loadWallets();
+    } catch (err) {
+      setMoveError(errorMessage(err));
+    } finally {
+      setMoveBusy(false);
+    }
+  }
 
   const [showSend, setShowSend] = useState(false);
   const [sendRecipient, setSendRecipient] = useState("");
@@ -134,16 +289,59 @@ export default function WalletPage() {
     }
   }
 
-  async function submitTransfer(e: React.FormEvent) {
-    e.preventDefault();
+  const [recipientCategory, setRecipientCategory] = useState<"all" | "shared" | "recent">("all");
+
+  const frequentRecipients = useMemo(() => {
+    const list: { id: string; name: string; target: string; type: "shared" | "recent"; subtitle: string }[] = [];
+    shares?.granted.forEach((g) => {
+      list.push({
+        id: `g-${g.id}`,
+        name: g.grantee_name,
+        target: g.grantee_name,
+        type: "shared",
+        subtitle: "Staff / Family",
+      });
+    });
+    shares?.received.forEach((r) => {
+      list.push({
+        id: `r-${r.id}`,
+        name: r.owner_name,
+        target: r.owner_name,
+        type: "shared",
+        subtitle: "Shared Pool",
+      });
+    });
+    wallet?.ledger.forEach((entry) => {
+      if (entry.type === "transfer_out" && entry.counterparty_name) {
+        if (!list.some((it) => it.name.toLowerCase() === entry.counterparty_name?.toLowerCase())) {
+          list.push({
+            id: `l-${entry.id}`,
+            name: entry.counterparty_name,
+            target: entry.counterparty_name,
+            type: "recent",
+            subtitle: "Recent Transfer",
+          });
+        }
+      }
+    });
+    return list;
+  }, [shares, wallet]);
+
+  const filteredRecipients = useMemo(() => {
+    if (recipientCategory === "shared") return frequentRecipients.filter((r) => r.type === "shared");
+    if (recipientCategory === "recent") return frequentRecipients.filter((r) => r.type === "recent");
+    return frequentRecipients;
+  }, [frequentRecipients, recipientCategory]);
+
+  async function executeTransfer(): Promise<void> {
     const parsedAmount = Number(sendAmount);
     if (!sendRecipient.trim()) {
       setSendError("Enter the recipient's phone number or email.");
-      return;
+      throw new Error("Missing recipient");
     }
     if (!parsedAmount || parsedAmount <= 0) {
       setSendError("Enter an amount to send.");
-      return;
+      throw new Error("Invalid amount");
     }
     setSendBusy(true);
     setSendError(null);
@@ -161,6 +359,7 @@ export default function WalletPage() {
       load();
     } catch (err) {
       setSendError(errorMessage(err));
+      throw err;
     } finally {
       setSendBusy(false);
     }
@@ -175,7 +374,10 @@ export default function WalletPage() {
     setShareBusy(true);
     setShareError(null);
     try {
-      await api.shareWallet({ recipient: shareRecipient.trim() });
+      await api.shareWallet({
+        recipient: shareRecipient.trim(),
+        walletId: selectedWalletId === "primary" ? undefined : selectedWalletId,
+      });
       setShareRecipient("");
       setShowShareInvite(false);
       loadShares();
@@ -210,21 +412,117 @@ export default function WalletPage() {
     <div className="space-y-5 px-4 pb-6 pt-4">
       <h1 className="text-xl font-bold text-ink">Wallet</h1>
 
+      {/* Wallet switcher — up to 5 total (the original + up to 4 named ones) */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {wallets.map((w) => (
+          <button
+            key={w.id}
+            type="button"
+            onClick={() => setSelectedWalletId(w.id)}
+            className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${
+              selectedWalletId === w.id ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink-500"
+            }`}
+          >
+            {w.name}
+          </button>
+        ))}
+        {canCreateWallet && (
+          <button
+            type="button"
+            onClick={() => setShowCreateWallet(true)}
+            className="flex shrink-0 items-center gap-1 rounded-full border border-dashed border-[var(--border-faint)] px-3 py-1.5 text-xs font-bold text-ink-500"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+            Add wallet
+          </button>
+        )}
+      </div>
+
       <section className="home-card space-y-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Balance</p>
-          <p className="text-3xl font-bold text-ink">{formatUgx(wallet.balance)}</p>
-        </div>
-        <div className="space-y-1">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgb(var(--surface-muted))]">
-            <div className="h-full rounded-full bg-gold" style={{ width: `${pctUsed}%` }} />
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+              {selectedWallet?.name ?? "Main Wallet"}
+            </p>
+            {renamingId === selectedWalletId ? (
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  maxLength={40}
+                  className="min-w-0 flex-1 rounded-lg border border-[var(--border-faint)] px-2 py-1 text-sm outline-none focus:border-gold"
+                />
+                <button
+                  type="button"
+                  onClick={() => submitRename(selectedWalletId)}
+                  disabled={walletBusy}
+                  className="shrink-0 text-xs font-bold text-gold"
+                >
+                  Save
+                </button>
+                <button type="button" onClick={() => setRenamingId(null)} className="shrink-0 text-xs font-semibold text-ink-500">
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <p className="text-3xl font-bold text-ink">{formatUgx(selectedWallet?.balance ?? wallet.balance)}</p>
+            )}
           </div>
-          <p className="text-xs text-ink-500">
-            Up to {formatUgx(wallet.cap)} {wallet.verified ? "(verified account)" : "(verify your phone or email to raise this)"}
-          </p>
+          {renamingId !== selectedWalletId && (
+            <div className="flex shrink-0 gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setRenamingId(selectedWalletId);
+                  setRenameValue(selectedWallet?.name ?? "");
+                }}
+                aria-label="Rename wallet"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-ink-500"
+              >
+                <Pencil className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </button>
+              {selectedWalletId !== "primary" && (selectedWallet?.balance ?? 0) === 0 && (
+                <button
+                  type="button"
+                  onClick={() => deleteWallet(selectedWalletId)}
+                  disabled={walletBusy}
+                  aria-label="Delete wallet"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600 disabled:opacity-60"
+                >
+                  <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                </button>
+              )}
+            </div>
+          )}
         </div>
+        {walletError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{walletError}</p>}
+        {selectedWalletId === "primary" && (
+          <div className="space-y-1">
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[rgb(var(--surface-muted))]">
+              <div className="h-full rounded-full bg-gold" style={{ width: `${pctUsed}%` }} />
+            </div>
+            <p className="text-xs text-ink-500">
+              Up to {formatUgx(wallet.cap)} {wallet.verified ? "(verified account)" : "(verify your phone or email to raise this)"}
+            </p>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            setMoveFrom(selectedWalletId);
+            setMoveTo(wallets.find((w) => w.id !== selectedWalletId)?.id ?? "");
+            setShowMoveFunds(true);
+          }}
+          disabled={wallets.length < 2}
+          className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[var(--border-faint)] text-sm font-bold text-ink disabled:opacity-50"
+        >
+          <ArrowLeftRight className="h-4 w-4" strokeWidth={2} aria-hidden />
+          Move funds between wallets
+        </button>
       </section>
 
+      {selectedWalletId === "primary" && (
       <section className="home-card space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Top up</h2>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
@@ -259,10 +557,15 @@ export default function WalletPage() {
           </form>
         )}
       </section>
+      )}
 
-      <section className="home-card space-y-3">
+      {selectedWalletId === "primary" && (
+      <section className="home-card space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Send money</h2>
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-ink">Send & Transfer</h2>
+            <p className="text-xs text-ink-500">Quick peer transfers and shared wallet allowances</p>
+          </div>
           {!showSend && (
             <button
               type="button"
@@ -271,65 +574,139 @@ export default function WalletPage() {
                 setSendSuccess(null);
               }}
               disabled={!online}
-              className="flex items-center gap-1.5 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-1.5 text-xs font-bold text-ink disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-full bg-gold px-3.5 py-1.5 text-xs font-bold text-ink-gold shadow-sm disabled:opacity-50 active:scale-95 transition-transform"
             >
-              <Send className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              <Send className="h-3.5 w-3.5 stroke-[2.2]" aria-hidden />
               Send
             </button>
           )}
         </div>
-        {sendSuccess && !showSend && <p className="rounded-lg bg-green/10 px-3 py-2 text-sm text-green">{sendSuccess}</p>}
+
+        {/* Avatar-Driven Frequent Recipient Carousel / Grid */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 overflow-x-auto scrollbar-none py-1 -mx-1 px-1">
+            {/* New recipient avatar */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowSend(true);
+                setSendRecipient("");
+              }}
+              className="flex flex-col items-center gap-1.5 shrink-0 group"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed border-gold/60 bg-gold/10 text-gold group-hover:scale-105 transition-transform">
+                <Plus className="h-5 w-5 stroke-[2.5]" />
+              </div>
+              <span className="text-[11px] font-semibold text-ink-500 truncate max-w-[56px]">New</span>
+            </button>
+
+            {/* Frequent / Shared contact avatars */}
+            {filteredRecipients.map((rec) => {
+              const isSelected = sendRecipient.toLowerCase() === rec.target.toLowerCase();
+              return (
+                <button
+                  key={rec.id}
+                  type="button"
+                  onClick={() => {
+                    setSendRecipient(rec.target);
+                    setShowSend(true);
+                  }}
+                  className="flex flex-col items-center gap-1.5 shrink-0 group"
+                >
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-full transition-all text-sm font-extrabold ${
+                      isSelected
+                        ? "bg-gold text-ink-gold ring-2 ring-gold ring-offset-2 scale-105 shadow-[var(--shadow-glow-gold)]"
+                        : "bg-[rgb(var(--surface-muted))] text-ink hover:bg-gold/20"
+                    }`}
+                  >
+                    {rec.name.slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-[11px] font-bold text-ink truncate max-w-[62px]">
+                    {rec.name.split(" ")[0]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Segmented Switch: All vs Shared Wallets vs Recent */}
+          <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
+            {(["all", "shared", "recent"] as const).map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setRecipientCategory(cat)}
+                className={`flex-1 rounded-full py-1 text-[11px] font-bold transition-all ${
+                  recipientCategory === cat
+                    ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm"
+                    : "text-ink-500 hover:text-ink"
+                }`}
+              >
+                {cat === "all" ? "All Contacts" : cat === "shared" ? "Shared Wallets" : "Recent P2P"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Transfer Drawer / Form */}
         {showSend && (
-          <form onSubmit={submitTransfer} className="space-y-2">
+          <div className="space-y-3 pt-2 border-t border-[var(--border-faint)] animate-drawer-in">
             {sendError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{sendError}</p>}
             <input
               required
               value={sendRecipient}
               onChange={(e) => setSendRecipient(e.target.value)}
-              placeholder="Recipient's phone or email"
-              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              placeholder="Recipient phone or email"
+              className="w-full rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
             />
-            <input
-              required
-              inputMode="numeric"
-              value={sendAmount}
-              onChange={(e) => setSendAmount(e.target.value.replace(/[^\d]/g, ""))}
-              placeholder="Amount (UGX)"
-              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
-            />
+            <div className="relative flex items-center">
+              <span className="pointer-events-none absolute left-3 text-xs font-bold text-ink-500">UGX</span>
+              <input
+                required
+                inputMode="numeric"
+                value={sendAmount}
+                onChange={(e) => setSendAmount(e.target.value.replace(/[^\d]/g, ""))}
+                placeholder="Amount to send"
+                className="w-full rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] py-2.5 pl-12 pr-3 text-[15px] font-semibold text-ink outline-none focus:border-gold"
+              />
+            </div>
             <input
               value={sendNote}
               onChange={(e) => setSendNote(e.target.value.slice(0, 140))}
-              placeholder="Note (optional)"
-              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+              placeholder="Note (e.g. Groceries or rent share)"
+              className="w-full rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
             />
-            <div className="flex gap-2">
+
+            <div className="space-y-2 pt-1">
+              <SwipeToConfirm
+                label="Slide to transfer funds"
+                confirmedLabel="Transferring…"
+                onConfirm={executeTransfer}
+                disabled={sendBusy || !online || !sendRecipient.trim() || !sendAmount}
+              />
               <button
                 type="button"
                 onClick={() => {
                   setShowSend(false);
                   setSendError(null);
                 }}
-                className="min-h-11 flex-1 rounded-full border border-[var(--border-faint)] text-sm font-bold text-ink"
+                className="w-full py-1.5 text-center text-xs font-semibold text-ink-500 hover:text-ink"
               >
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={sendBusy || !online}
-                className="min-h-11 flex-[2] rounded-full bg-gold text-sm font-bold text-ink-gold disabled:opacity-60"
-              >
-                {sendBusy ? "Sending…" : "Send"}
-              </button>
             </div>
-          </form>
+          </div>
         )}
       </section>
+      )}
 
       <section className="home-card space-y-3">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-ink-500" strokeWidth={2} aria-hidden />
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Shared wallets</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">
+            Share &ldquo;{selectedWallet?.name ?? "Main Wallet"}&rdquo;
+          </h2>
         </div>
 
         {shares && shares.received.filter((r) => r.status === "pending").length > 0 && (
@@ -339,7 +716,8 @@ export default function WalletPage() {
               .map((r) => (
                 <div key={r.id} className="space-y-2 rounded-xl border border-[var(--border-faint)] p-3">
                   <p className="text-sm text-ink">
-                    <span className="font-bold">{r.owner_name}</span> wants to share their wallet with you.
+                    <span className="font-bold">{r.owner_name}</span> wants to share their &ldquo;{r.wallet_name}&rdquo;
+                    wallet with you.
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -372,7 +750,9 @@ export default function WalletPage() {
               .map((r) => (
                 <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border-faint)] p-3">
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold text-ink">{r.owner_name}</span>
+                    <span className="block truncate text-sm font-bold text-ink">
+                      {r.owner_name} · {r.wallet_name}
+                    </span>
                     <span className="block text-xs text-ink-500">
                       {r.owner_balance != null ? `${formatUgx(r.owner_balance)} available` : "Active"}
                     </span>
@@ -410,7 +790,9 @@ export default function WalletPage() {
           {shares?.granted.map((g) => (
             <div key={g.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border-faint)] p-3">
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-bold text-ink">{g.grantee_name}</span>
+                <span className="block truncate text-sm font-bold text-ink">
+                  {g.grantee_name} · {g.wallet_name}
+                </span>
                 <span className="block text-xs text-ink-500">{SHARE_STATUS_LABELS[g.status] ?? g.status}</span>
               </span>
               {(g.status === "pending" || g.status === "active") && (
@@ -459,11 +841,49 @@ export default function WalletPage() {
         </div>
       </section>
 
+      <section className="home-card space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Usage report</h2>
+          <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
+            {(["week", "month", "all"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setReportPeriod(p)}
+                className={`rounded-full px-2.5 py-1 text-[11px] font-bold capitalize ${
+                  reportPeriod === p ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        {report ? (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-xl bg-green/10 px-2 py-2.5">
+              <p className="text-xs text-ink-500">In</p>
+              <p className="text-sm font-bold text-green">{formatUgx(report.totalIn)}</p>
+            </div>
+            <div className="rounded-xl bg-[rgb(var(--surface-muted))] px-2 py-2.5">
+              <p className="text-xs text-ink-500">Out</p>
+              <p className="text-sm font-bold text-ink">{formatUgx(report.totalOut)}</p>
+            </div>
+            <div className="rounded-xl bg-gold/10 px-2 py-2.5">
+              <p className="text-xs text-ink-500">Net</p>
+              <p className="text-sm font-bold text-ink">{formatUgx(report.net)}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-ink-500">No activity in this period.</p>
+        )}
+      </section>
+
       <section className="space-y-2.5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Activity</h2>
-        {wallet.ledger.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No wallet activity yet.</p>}
+        {activityLedger.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No wallet activity yet.</p>}
         <ul className="space-y-2">
-          {wallet.ledger.map((entry) => {
+          {activityLedger.map((entry) => {
             const Icon = LEDGER_ICONS[entry.type] ?? WalletIcon;
             const isCredit = entry.amount > 0;
             return (
@@ -491,6 +911,110 @@ export default function WalletPage() {
           })}
         </ul>
       </section>
+
+      {/* Full-Screen Vibrant Green Flash Success Overlay */}
+      {sendSuccess && (
+        <div
+          onClick={() => setSendSuccess(null)}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-green p-6 text-white cursor-pointer select-none animate-drawer-in"
+          style={{ animationDuration: "350ms" }}
+        >
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 mb-5 shadow-lg">
+            <Check className="h-10 w-10 text-white stroke-[3.5]" />
+          </div>
+          <h3 className="text-2xl font-black tracking-tight text-white mb-2">Transfer Confirmed!</h3>
+          <p className="text-base font-semibold text-white/95 text-center max-w-xs mb-8">{sendSuccess}</p>
+          <span className="rounded-full bg-white/25 px-5 py-2 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm">
+            Tap anywhere to close
+          </span>
+        </div>
+      )}
+
+      <BottomDrawer isOpen={showCreateWallet} onClose={() => setShowCreateWallet(false)} title="New wallet">
+        <form onSubmit={submitCreateWallet} className="space-y-3">
+          <div className="flex flex-wrap gap-1.5">
+            {suggestedNames.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setNewWalletName(name)}
+                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                  newWalletName === name ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink-500"
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+          <input
+            required
+            value={newWalletName}
+            onChange={(e) => setNewWalletName(e.target.value.slice(0, 40))}
+            placeholder="Or type your own name"
+            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+          />
+          {walletError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{walletError}</p>}
+          <button
+            type="submit"
+            disabled={walletBusy || !newWalletName.trim()}
+            className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
+          >
+            {walletBusy ? "Creating…" : "Create wallet"}
+          </button>
+        </form>
+      </BottomDrawer>
+
+      <BottomDrawer isOpen={showMoveFunds} onClose={() => setShowMoveFunds(false)} title="Move funds">
+        <form onSubmit={submitMoveFunds} className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-ink-500">From</label>
+            <select
+              value={moveFrom}
+              onChange={(e) => setMoveFrom(e.target.value)}
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            >
+              {wallets.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name} · {formatUgx(w.balance)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-ink-500">To</label>
+            <select
+              value={moveTo}
+              onChange={(e) => setMoveTo(e.target.value)}
+              className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+            >
+              <option value="">Choose a wallet</option>
+              {wallets
+                .filter((w) => w.id !== moveFrom)
+                .map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <input
+            required
+            inputMode="numeric"
+            value={moveAmount}
+            onChange={(e) => setMoveAmount(e.target.value.replace(/[^\d]/g, ""))}
+            placeholder="Amount (UGX)"
+            className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
+          />
+          {moveError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{moveError}</p>}
+          <button
+            type="submit"
+            disabled={moveBusy || !moveTo || !moveAmount}
+            className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
+          >
+            {moveBusy ? "Moving…" : "Move funds"}
+          </button>
+        </form>
+      </BottomDrawer>
     </div>
   );
 }

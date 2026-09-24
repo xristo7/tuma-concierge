@@ -16,6 +16,8 @@ import type {
   CreateListBody,
   CreateListResponse,
   CustomerWallet,
+  CustomerWalletSummary,
+  CustomerWalletsResponse,
   DeliverySettings,
   FailedPayment,
   IntegrationsStatus,
@@ -55,8 +57,10 @@ import type {
   StaffMember,
   UserStatus,
   Wallet,
+  WalletLedgerEntry,
   WalletShares,
   WalletTopup,
+  WalletUsageReport,
 } from "./domain.js";
 
 export type CreateApiClientOptions = {
@@ -374,7 +378,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async customerDeleteOrder(orderId: string) {
       return request<{ ok: true }>(`/v1/orders/${orderId}/customer-delete`, { method: "POST" });
     },
-    async fundOrder(orderId: string, input: { msisdn?: string; useWallet?: boolean; walletOwnerId?: string } = {}) {
+    async fundOrder(
+      orderId: string,
+      input: { msisdn?: string; useWallet?: boolean; walletOwnerId?: string; walletId?: string } = {},
+    ) {
       return request<{
         order: OrderRow;
         payment?: { id: string; status: string; network: string | null };
@@ -999,8 +1006,9 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         body: JSON.stringify(input),
       });
     },
-    /** Invites another customer to spend from this wallet on their own orders. */
-    async shareWallet(input: { recipient: string }) {
+    /** Invites another customer to spend from this wallet on their own
+     * orders. `walletId` omitted (or "primary") shares the original wallet. */
+    async shareWallet(input: { recipient: string; walletId?: string }) {
       return request<{ id: string; granteeName: string; status: "pending" }>("/v1/wallet/shares", {
         method: "POST",
         body: JSON.stringify(input),
@@ -1018,6 +1026,38 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     /** Owner revoking a grant, or a grantee giving up one extended to them. */
     async revokeWalletShare(id: string) {
       return request<{ status: "revoked" }>(`/v1/wallet/shares/${id}/revoke`, { method: "POST" });
+    },
+
+    // Multiple named wallets — up to 5 total including the primary/
+    // original one. See apps/api/src/wallet/wallets.ts.
+    async getWallets() {
+      return request<CustomerWalletsResponse>("/v1/wallets");
+    },
+    async createWallet(name: string) {
+      return request<{ wallet: CustomerWalletSummary }>("/v1/wallets", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      });
+    },
+    async renameWallet(id: string, name: string) {
+      return request<{ ok: true }>(`/v1/wallets/${id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+    },
+    async deleteWallet(id: string) {
+      return request<{ ok: true }>(`/v1/wallets/${id}`, { method: "DELETE" });
+    },
+    /** Moves funds between two of your own wallets — "primary" refers to
+     * the original wallet on either side. */
+    async transferBetweenWallets(input: { fromWalletId: string; toWalletId: string; amount: number }) {
+      return request<{ fromBalance: number; toBalance: number }>("/v1/wallets/transfer", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async getWalletLedger(walletId: string) {
+      return request<{ ledger: WalletLedgerEntry[] }>(`/v1/wallets/${walletId}/ledger`);
+    },
+    async getWalletReport(walletId: string, period: "week" | "month" | "all" = "month") {
+      return request<WalletUsageReport>(`/v1/wallets/${walletId}/report?period=${period}`);
     },
     /** Admin: refunds an order's collected payment back to the customer's wallet. */
     async adminRefundToWallet(orderId: string) {

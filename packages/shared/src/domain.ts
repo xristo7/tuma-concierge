@@ -878,6 +878,10 @@ export type WalletShareGranted = {
   status: WalletShareStatus;
   created_at: string;
   responded_at: string | null;
+  /** Null means the owner's primary/original wallet — see
+   * apps/api/src/db/migrations/0045_multi_wallet.sql. */
+  wallet_id: string | null;
+  wallet_name: string;
 };
 
 /** A wallet-sharing grant extended to this customer by someone else —
@@ -891,11 +895,37 @@ export type WalletShareReceived = {
   created_at: string;
   responded_at: string | null;
   owner_balance: number | null;
+  wallet_id: string | null;
+  wallet_name: string;
 };
 
 export type WalletShares = {
   granted: WalletShareGranted[];
   received: WalletShareReceived[];
+};
+
+/** One of a customer's (up to 5) wallets — "primary" is the sentinel id
+ * for their original wallet (users.wallet_balance); every other id is a
+ * real row in the `wallets` table. See apps/api/src/wallet/wallets.ts. */
+export type CustomerWalletSummary = {
+  id: string;
+  name: string;
+  balance: number;
+  isPrimary: boolean;
+};
+
+export type CustomerWalletsResponse = {
+  wallets: CustomerWalletSummary[];
+  suggestedNames: string[];
+  maxWallets: number;
+};
+
+export type WalletUsageReport = {
+  period: "week" | "month" | "all";
+  totalIn: number;
+  totalOut: number;
+  net: number;
+  byType: { type: WalletLedgerEntry["type"]; count: number; total: number }[];
 };
 
 /** Which payment aggregator identity — the underlying provider a payment
