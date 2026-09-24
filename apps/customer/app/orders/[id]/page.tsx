@@ -14,6 +14,7 @@ import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
 import { SwipeToConfirm } from "../../../components/SwipeToConfirm";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { api, errorMessage } from "../../../lib/api";
+import { markFeeProposalSeen } from "../../../lib/fee-proposal-seen";
 import { formatDateTime, formatDuration, formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
 import { useFreshness } from "../../../lib/use-freshness";
 import { useLivePolling } from "../../../lib/use-live-polling";
@@ -221,6 +222,11 @@ export default function OrderDetailPage() {
     const res = await api.getOrder(orderId);
     setDetail(res);
     markUpdated();
+    // Opening the order counts as "seen" for the home screen's reminder
+    // card even if the customer doesn't act on it here — see
+    // lib/fee-proposal-seen.
+    const pendingProposal = res.feeProposals.find((f) => f.status === "pending");
+    if (pendingProposal) markFeeProposalSeen(pendingProposal.id);
     const pending = res.payments.find((p) => p.status === "pending");
     if (pending) {
       api.refreshPayment(pending.id).catch(() => {});
@@ -410,34 +416,6 @@ export default function OrderDetailPage() {
         )}
       </header>
 
-      <OrderTimeline order={order} events={detail.events} statusLabel={stageLabel(order.stage, order.type)} />
-
-      {order.rider_id && !["Settle", "Handover"].includes(order.stage) && (
-        <LiveTrackingMap order={order} events={detail.events} />
-      )}
-
-      {order.rider_id && (
-        <RiderSummaryCard
-          riderId={order.rider_id}
-          riderName={order.rider_name}
-          settled={order.stage === "Settle"}
-          createdAt={order.created_at}
-          settledAt={order.updated_at}
-        />
-      )}
-
-      {order.voice_note_key && <VoiceNotePlayer orderId={orderId} />}
-
-      {!!order.matched_out_of_range && order.rider_id && (
-        <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
-          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
-          <p className="text-sm text-ink">
-            Your rider is available but currently outside the normal service area, so this delivery may cost
-            a little more than usual.
-          </p>
-        </div>
-      )}
-
       {pendingFeeProposal && (
         <section className="home-card space-y-2 !border-l-4 !border-l-gold">
           <p className="text-sm text-ink">
@@ -467,6 +445,34 @@ export default function OrderDetailPage() {
             </button>
           </div>
         </section>
+      )}
+
+      <OrderTimeline order={order} events={detail.events} statusLabel={stageLabel(order.stage, order.type)} />
+
+      {order.rider_id && !["Settle", "Handover"].includes(order.stage) && (
+        <LiveTrackingMap order={order} events={detail.events} />
+      )}
+
+      {order.rider_id && (
+        <RiderSummaryCard
+          riderId={order.rider_id}
+          riderName={order.rider_name}
+          settled={order.stage === "Settle"}
+          createdAt={order.created_at}
+          settledAt={order.updated_at}
+        />
+      )}
+
+      {order.voice_note_key && <VoiceNotePlayer orderId={orderId} />}
+
+      {!!order.matched_out_of_range && order.rider_id && (
+        <div className="flex items-start gap-2 rounded-xl border border-gold bg-gold/10 p-3">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
+          <p className="text-sm text-ink">
+            Your rider is available but currently outside the normal service area, so this delivery may cost
+            a little more than usual.
+          </p>
+        </div>
       )}
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

@@ -406,7 +406,17 @@ orderRoutes.get("/orders/active", async (c) => {
           ORDER BY o.updated_at DESC LIMIT 1`,
     args: [user.sub, await getPlatformEnvironment()],
   });
-  return c.json({ activeOrder: res.rows[0] ?? null });
+  const activeOrder = res.rows[0] ?? null;
+  if (!activeOrder) return c.json({ activeOrder: null, pendingFeeProposal: null });
+
+  // Surfaced here too (not just on the order's own detail page) so the
+  // home screen can flag a pending rider fee proposal without the customer
+  // having to open the order first — see components/home/FeeProposalCard.
+  const proposalRes = await db.execute({
+    sql: "SELECT * FROM fee_proposals WHERE order_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1",
+    args: [activeOrder.id as string],
+  });
+  return c.json({ activeOrder, pendingFeeProposal: proposalRes.rows[0] ?? null });
 });
 
 orderRoutes.get("/orders/:id", async (c) => {

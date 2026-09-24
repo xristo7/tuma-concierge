@@ -21,6 +21,7 @@ import type {
   CustomerWalletsResponse,
   DeliverySettings,
   FailedPayment,
+  FeeProposal,
   IntegrationsStatus,
   IceServer,
   IncomingCall,
@@ -340,7 +341,7 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       return request<{ order: OrderRow }>("/v1/orders", { method: "POST", body: JSON.stringify(input) });
     },
     async getActiveOrder() {
-      return request<{ activeOrder: OrderRow | null }>("/v1/orders/active");
+      return request<{ activeOrder: OrderRow | null; pendingFeeProposal: FeeProposal | null }>("/v1/orders/active");
     },
 
     // Restaurant browsing + food checkout — see apps/api/src/restaurants/customer.ts.
