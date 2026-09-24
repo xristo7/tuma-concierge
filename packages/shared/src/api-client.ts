@@ -82,20 +82,40 @@ export type CreateApiClientOptions = {
   onUnauthorized?: () => void;
 };
 
+/** One zod validation failure, as every route's `safeParse(...).error.issues`
+ * already shapes them — kept minimal (just what's needed to point at the
+ * field) rather than the full zod issue type, so this file doesn't need to
+ * depend on zod itself. */
+export type ApiValidationIssue = { path: (string | number)[]; message: string };
+
 /** Thrown by the API client on any non-2xx response. Keeps the raw HTTP
  * status and the server's machine-readable error code (when it sent one)
  * separate from the human-readable message, so callers can map `code` to
- * friendly copy instead of showing "API 400: invalid_category" to users. */
+ * friendly copy instead of showing "API 400: invalid_category" to users.
+ * `issues` is populated whenever the server's 400 came from zod rejecting
+ * the request body (every route uses the same `{ error: "invalid_body",
+ * issues }` shape) — see friendlyErrorMessage, which turns it into an
+ * actual field-level message instead of a generic "something went wrong". */
 export class ApiError extends Error {
   status: number;
   code?: string;
+  issues?: ApiValidationIssue[];
 
-  constructor(status: number, code: string | undefined, message: string) {
+  constructor(status: number, code: string | undefined, message: string, issues?: ApiValidationIssue[]) {
     super(`API ${status}: ${message}`);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.issues = issues;
   }
+}
+
+/** "deliveryRatePerKm" -> "Delivery rate per km", "0.msisdn" -> "Msisdn". */
+function humanizeFieldPath(path: (string | number)[]): string {
+  const field = path.filter((p) => typeof p === "string").pop();
+  if (!field) return "";
+  const spaced = String(field).replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 /** Known server error codes mapped to plain-English copy. Anything not
@@ -116,14 +136,34 @@ const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
 };
 
 /** Turns any error from the API client into a message safe to show a user —
- * never a raw "API 400: xxx" string. Use this (or an app's local wrapper
- * around it) at every UI call site instead of `err.message`. */
+ * never a raw "API 400: xxx" string, and never a bare "something went
+ * wrong" when the server actually said what was wrong with the request
+ * (a validation failure names the field and the reason; every other 4xx
+ * still surfaces the server's own message rather than a generic fallback,
+ * as long as that message doesn't look like an internal error code). Use
+ * this (or an app's local wrapper around it) at every UI call site instead
+ * of `err.message`. */
 export function friendlyErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.code && FRIENDLY_ERROR_MESSAGES[err.code]) return FRIENDLY_ERROR_MESSAGES[err.code];
+    if (err.issues && err.issues.length > 0) {
+      const parts = err.issues.slice(0, 3).map((issue) => {
+        const field = humanizeFieldPath(issue.path);
+        return field ? `${field}: ${issue.message}` : issue.message;
+      });
+      return `Please check: ${parts.join("; ")}`;
+    }
     if (err.status >= 500) return "Something went wrong on our end. Please try again in a moment.";
     if (err.status === 401 || err.status === 403) return "You don't have permission to do that.";
     if (err.status === 404) return FRIENDLY_ERROR_MESSAGES.not_found;
+    // The server's own message, when it wrote one — most 4xx handlers in
+    // this codebase already pass a plain-English `message` alongside the
+    // machine-readable `error` code (see json() below); only a bare code
+    // with no real message left over falls through to the generic line.
+    const serverMessage = err.message.replace(/^API \d+: /, "");
+    if (serverMessage && serverMessage !== err.code && !/^[a-z0-9_]+$/.test(serverMessage)) {
+      return serverMessage;
+    }
     return "Something went wrong. Please try again.";
   }
   if (err instanceof TypeError) return FRIENDLY_ERROR_MESSAGES.network_error;
@@ -146,7 +186,8 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       const body = await res.json().catch(() => ({}));
       const code = (body as { error?: string }).error;
       const message = (body as { message?: string }).message ?? code ?? res.statusText;
-      throw new ApiError(res.status, code, message);
+      const issues = (body as { issues?: ApiValidationIssue[] }).issues;
+      throw new ApiError(res.status, code, message, issues);
     }
     return (await res.json()) as T;
   }
