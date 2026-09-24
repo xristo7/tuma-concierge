@@ -15,6 +15,7 @@ import type {
   ChatThreadDetail,
   CreateListBody,
   CreateListResponse,
+  CustomerRestaurantChatThread,
   CustomerWallet,
   CustomerWalletSummary,
   CustomerWalletsResponse,
@@ -578,6 +579,10 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     /** The Chat tab's conversation list — every counterpart this user has ever messaged, most recent first. */
     async getChatThreads() {
       return request<{ threads: ChatThread[] }>("/v1/chat/threads");
+    },
+    /** The Chat tab's restaurant conversations — every restaurant this customer has ever messaged, most recent first. */
+    async getMyRestaurantChatThreads() {
+      return request<{ threads: CustomerRestaurantChatThread[] }>("/v1/restaurants/chats/mine");
     },
     /** Opens a conversation by counterpart — resolves the order to send through plus the full shared history. */
     async getChatThread(counterpartId: string) {

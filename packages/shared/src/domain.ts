@@ -572,6 +572,17 @@ export type RestaurantChatThread = {
   unread_count: number;
 };
 
+/** One row per restaurant a customer has messaged — the customer-side
+ * counterpart to RestaurantChatThread, mirroring ChatThread's shape so the
+ * Chat tab can merge both kinds into one list. */
+export type CustomerRestaurantChatThread = {
+  restaurantId: string;
+  restaurantName: string;
+  lastMessagePreview: string;
+  lastMessageAt: string;
+  unread: boolean;
+};
+
 export type SavedLocation = {
   id: string;
   user_id: string;

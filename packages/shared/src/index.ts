@@ -90,6 +90,7 @@ export type {
   RestaurantMenu,
   RestaurantChatMessage,
   RestaurantChatThread,
+  CustomerRestaurantChatThread,
   AvailableJob,
   MatchingMode,
   RiderApplicant,

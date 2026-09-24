@@ -149,6 +149,45 @@ restaurantChatRoutes.post("/restaurants/:id/chat/read", requireAuth, requireRole
   return c.json({ ok: true });
 });
 
+/** Every restaurant this customer has ever exchanged chat messages with,
+ * most recent first — the restaurant-side counterpart to GET /chat/threads
+ * (orders/routes.ts), so the Chat tab can show both in one list. */
+restaurantChatRoutes.get("/restaurants/chats/mine", requireAuth, requireRole("customer"), async (c) => {
+  const user = c.get("user");
+
+  const res = await db.execute({
+    sql: `SELECT m.restaurant_id, r.name as restaurant_name,
+                 MAX(m.created_at) as last_at,
+                 SUM(CASE WHEN m.sender_role = 'restaurant' AND m.read = 0 THEN 1 ELSE 0 END) as unread_count
+          FROM restaurant_chat_messages m
+          JOIN restaurants r ON r.id = m.restaurant_id
+          WHERE m.customer_id = ?
+          GROUP BY m.restaurant_id
+          ORDER BY last_at DESC`,
+    args: [user.sub],
+  });
+
+  const threads = await Promise.all(
+    (res.rows as Row[]).map(async (row) => {
+      const restaurantId = row.restaurant_id as string;
+      const lastRes = await db.execute({
+        sql: `SELECT type, body FROM restaurant_chat_messages WHERE restaurant_id = ? AND customer_id = ? ORDER BY created_at DESC LIMIT 1`,
+        args: [restaurantId, user.sub],
+      });
+      const last = lastRes.rows[0] as Row | undefined;
+      return {
+        restaurantId,
+        restaurantName: row.restaurant_name as string,
+        lastMessagePreview: preview((last?.type as string) ?? "text", (last?.body as string | null) ?? null),
+        lastMessageAt: row.last_at as string,
+        unread: Number(row.unread_count ?? 0) > 0,
+      };
+    }),
+  );
+
+  return c.json({ threads });
+});
+
 // ---------------------------------------------------------------------------
 // Restaurant-owner side — threads with every customer who's messaged.
 // ---------------------------------------------------------------------------
