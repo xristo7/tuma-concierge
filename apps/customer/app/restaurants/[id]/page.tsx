@@ -1,7 +1,7 @@
 "use client";
 
-import type { MenuCategory, MenuItem, MenuItemOption, Restaurant, RestaurantMenu, SavedLocation } from "@tuma/shared";
-import { MessageCircle, Minus, Plus, ShoppingBag, Store } from "lucide-react";
+import type { MenuCategory, MenuItem, MenuItemBadge, MenuItemOption, Restaurant, RestaurantMenu, SavedLocation } from "@tuma/shared";
+import { ArrowUpRight, MessageCircle, Minus, Plus, ShoppingBag, Store, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -53,6 +53,81 @@ function MenuItemThumb({ itemId, size = "row" }: { itemId: string; size?: "row" 
       alt=""
       className={`${dims} shrink-0 rounded-xl object-cover ${size === "modal" ? "mb-1" : ""}`}
     />
+  );
+}
+
+const BADGE_STYLES: Record<MenuItemBadge, string> = {
+  sale: "bg-red-600 text-white",
+  new: "bg-blue-600 text-white",
+  trending: "bg-purple-600 text-white",
+};
+const BADGE_LABELS: Record<MenuItemBadge, string> = { sale: "Sale", new: "New", trending: "Trending" };
+
+/** Grid-card presentation for a menu item — image on a tinted backdrop
+ * (visible around/behind a photo with transparency, or as the whole
+ * background when there's no photo yet), a badge pill top-left when the
+ * restaurant's set one, and price + "Order Now" bottom-right. */
+function FoodItemCard({ item, onOpen }: { item: MenuItem; onOpen: () => void }) {
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!item.photo_key) {
+      setPhotoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    api
+      .menuItemPhotoBlob(item.id)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPhotoUrl(objectUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [item.id, item.photo_key]);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full flex-col overflow-hidden rounded-3xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] text-left shadow-sm"
+    >
+      <div className="relative flex h-32 w-full items-center justify-center bg-green/10">
+        {item.badge && (
+          <span
+            className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${BADGE_STYLES[item.badge]}`}
+          >
+            {BADGE_LABELS[item.badge]}
+          </span>
+        )}
+        {photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <UtensilsCrossed className="h-9 w-9 text-green" strokeWidth={1.5} aria-hidden />
+        )}
+      </div>
+      <div className="flex items-end justify-between gap-2 p-3">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-bold text-ink">{item.name}</span>
+          {item.description && (
+            <span className="mt-0.5 block truncate text-xs text-ink-500">{item.description}</span>
+          )}
+        </span>
+        <span className="flex shrink-0 flex-col items-end">
+          <span className="text-sm font-bold text-ink">{formatUgx(item.price)}</span>
+          <span className="flex items-center gap-0.5 text-[11px] font-bold text-gold">
+            Order Now
+            <ArrowUpRight className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+          </span>
+        </span>
+      </div>
+    </button>
   );
 }
 
@@ -376,47 +451,37 @@ export default function RestaurantPage() {
       {menu.categories.map((cat: MenuCategory) => (
         <section key={cat.id} className="space-y-2.5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{cat.name}</h2>
-          <ul className="space-y-2">
+          <div className="grid grid-cols-2 gap-3">
             {cat.items.map((item: MenuItem) => (
-              <li key={item.id}>
-                <button
-                  onClick={() => (item.options.length > 0 ? setActiveItem(item) : addToCart(item, { unitPrice: item.price, choiceIds: [], choiceNames: [], quantity: 1 }))}
-                  className="home-card flex w-full items-center gap-3 !rounded-2xl !px-3 !py-3 text-left"
-                >
-                  {item.photo_key && <MenuItemThumb itemId={item.id} />}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-bold text-ink">{item.name}</span>
-                    {item.description && <span className="mt-0.5 block truncate text-xs text-ink-500">{item.description}</span>}
-                    <span className="mt-0.5 block text-sm font-semibold text-ink">{formatUgx(item.price)}</span>
-                  </span>
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
-                    <Plus className="h-4 w-4" strokeWidth={2.25} aria-hidden />
-                  </span>
-                </button>
-              </li>
+              <FoodItemCard
+                key={item.id}
+                item={item}
+                onOpen={() =>
+                  item.options.length > 0
+                    ? setActiveItem(item)
+                    : addToCart(item, { unitPrice: item.price, choiceIds: [], choiceNames: [], quantity: 1 })
+                }
+              />
             ))}
-          </ul>
+          </div>
         </section>
       ))}
 
       {menu.uncategorizedItems.length > 0 && (
         <section className="space-y-2.5">
-          <ul className="space-y-2">
+          <div className="grid grid-cols-2 gap-3">
             {menu.uncategorizedItems.map((item: MenuItem) => (
-              <li key={item.id}>
-                <button
-                  onClick={() => (item.options.length > 0 ? setActiveItem(item) : addToCart(item, { unitPrice: item.price, choiceIds: [], choiceNames: [], quantity: 1 }))}
-                  className="home-card flex w-full items-center gap-3 !rounded-2xl !px-3 !py-3 text-left"
-                >
-                  {item.photo_key && <MenuItemThumb itemId={item.id} />}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-bold text-ink">{item.name}</span>
-                    <span className="mt-0.5 block text-sm font-semibold text-ink">{formatUgx(item.price)}</span>
-                  </span>
-                </button>
-              </li>
+              <FoodItemCard
+                key={item.id}
+                item={item}
+                onOpen={() =>
+                  item.options.length > 0
+                    ? setActiveItem(item)
+                    : addToCart(item, { unitPrice: item.price, choiceIds: [], choiceNames: [], quantity: 1 })
+                }
+              />
             ))}
-          </ul>
+          </div>
         </section>
       )}
 

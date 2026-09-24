@@ -76,6 +76,7 @@ export type {
   MenuItemOptionChoice,
   MenuItemOption,
   MenuItem,
+  MenuItemBadge,
   MenuCategory,
   RestaurantMenu,
   RestaurantChatMessage,

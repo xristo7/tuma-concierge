@@ -496,6 +496,10 @@ export type MenuItemOption = {
   choices: MenuItemOptionChoice[];
 };
 
+/** Promotional pill shown on the customer-facing card — see
+ * apps/customer/app/restaurants/[id]/page.tsx. */
+export type MenuItemBadge = "sale" | "new" | "trending";
+
 export type MenuItem = {
   id: string;
   restaurant_id: string;
@@ -509,6 +513,7 @@ export type MenuItem = {
   available: number;
   prep_time_minutes: number | null;
   sort_order: number;
+  badge: MenuItemBadge | null;
   created_at: string;
   updated_at: string;
   options: MenuItemOption[];

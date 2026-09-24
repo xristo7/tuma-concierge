@@ -43,6 +43,7 @@ import type {
   RestaurantMenu,
   MenuCategory,
   MenuItem,
+  MenuItemBadge,
   MenuItemOption,
   MobileNumberPurpose,
   Rider,
@@ -696,6 +697,7 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
       available?: boolean;
       prepTimeMinutes?: number;
       sortOrder?: number;
+      badge?: MenuItemBadge | null;
     }) {
       return request<{ item: MenuItem }>("/v1/restaurants/me/menu/items", {
         method: "POST",
@@ -712,6 +714,7 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         available: boolean;
         prepTimeMinutes: number | null;
         sortOrder: number;
+        badge: MenuItemBadge | null;
       }>,
     ) {
       return request<{ item: MenuItem }>(`/v1/restaurants/me/menu/items/${id}`, {

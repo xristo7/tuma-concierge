@@ -173,6 +173,9 @@ const itemSchema = z.object({
   available: z.boolean().optional(),
   prepTimeMinutes: z.number().int().positive().max(240).optional(),
   sortOrder: z.number().int().optional(),
+  // Promotional pill shown on the customer-facing card — see
+  // apps/customer/app/restaurants/[id]/page.tsx. Null clears it.
+  badge: z.enum(["sale", "new", "trending"]).nullable().optional(),
 });
 
 async function assertCategoryOwnership(restaurantId: string, categoryId: string | null | undefined) {
@@ -196,8 +199,8 @@ menuRoutes.post("/restaurants/me/menu/items", requireAuth, requireRole("customer
 
   const id = newId("mit");
   await db.execute({
-    sql: `INSERT INTO menu_items (id, restaurant_id, category_id, name, description, price, available, prep_time_minutes, sort_order)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO menu_items (id, restaurant_id, category_id, name, description, price, available, prep_time_minutes, sort_order, badge)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       restaurantId,
@@ -208,6 +211,7 @@ menuRoutes.post("/restaurants/me/menu/items", requireAuth, requireRole("customer
       parsed.data.available === false ? 0 : 1,
       parsed.data.prepTimeMinutes ?? null,
       parsed.data.sortOrder ?? 0,
+      parsed.data.badge ?? null,
     ],
   });
   const res = await db.execute({ sql: "SELECT * FROM menu_items WHERE id = ?", args: [id] });
@@ -236,6 +240,7 @@ menuRoutes.patch("/restaurants/me/menu/items/:id", requireAuth, requireRole("cus
   if (parsed.data.available != null) fields.available = parsed.data.available ? 1 : 0;
   if (parsed.data.prepTimeMinutes !== undefined) fields.prep_time_minutes = parsed.data.prepTimeMinutes ?? null;
   if (parsed.data.sortOrder != null) fields.sort_order = parsed.data.sortOrder;
+  if (parsed.data.badge !== undefined) fields.badge = parsed.data.badge;
 
   const keys = Object.keys(fields);
   if (keys.length > 0) {

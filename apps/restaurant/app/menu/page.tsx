@@ -1,7 +1,7 @@
 "use client";
 
 import { ApiError } from "@tuma/shared";
-import type { MenuCategory, MenuItem, MenuItemOption, RestaurantMenu } from "@tuma/shared";
+import type { MenuCategory, MenuItem, MenuItemBadge, MenuItemOption, RestaurantMenu } from "@tuma/shared";
 import { Camera, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -61,6 +61,7 @@ function ItemEditor({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>(item?.category_id ?? categoryId ?? "");
   const [available, setAvailable] = useState(item ? !!item.available : true);
   const [prepTime, setPrepTime] = useState(item?.prep_time_minutes != null ? String(item.prep_time_minutes) : "");
+  const [badge, setBadge] = useState<MenuItemBadge | "">(item?.badge ?? "");
   const [options, setOptions] = useState<EditableOption[]>(optionsFromItem(item));
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -146,6 +147,7 @@ function ItemEditor({
         categoryId: selectedCategoryId || null,
         available,
         prepTimeMinutes: prepTime.trim() ? Math.round(Number(prepTime)) : undefined,
+        badge: badge || null,
       };
       const saved = item ? (await api.updateMenuItem(item.id, input)).item : (await api.createMenuItem(input)).item;
       const validOptions = options.filter((o) => o.name.trim() && o.choices.some((c) => c.name.trim()));
@@ -271,6 +273,30 @@ function ItemEditor({
           />
           <span className="text-sm text-ink">Available (uncheck to 86 this item)</span>
         </label>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-ink-500">Badge (optional)</label>
+          <div className="flex gap-1.5">
+            {([
+              { value: "", label: "None" },
+              { value: "sale", label: "Sale" },
+              { value: "new", label: "New" },
+              { value: "trending", label: "Trending" },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setBadge(opt.value as MenuItemBadge | "")}
+                className={`flex-1 rounded-full border px-2 py-2 text-xs font-bold ${
+                  badge === opt.value ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink-500"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-ink-500">Shows as a small pill on the item&apos;s card in the customer app.</p>
+        </div>
 
         <div className="space-y-2 border-t border-[var(--border-faint)] pt-3">
           <div className="flex items-center justify-between">
