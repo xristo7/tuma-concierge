@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { LocationPicker, emptyPoint, resolvePoint, type PointState } from "../LocationPicker";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+import { SwipeToConfirm } from "../SwipeToConfirm";
 import { OrderVoiceNoteRecorder } from "./OrderVoiceNoteRecorder";
 
 /** Great-circle distance in km — mirrors apps/api/src/lib/geo.ts, used only
@@ -65,11 +66,15 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
   }
 
   async function submit() {
+    // Thrown, not just set as an error string — this runs inside
+    // SwipeToConfirm's onConfirm, which only shows its "confirmed"
+    // checkmark once this promise resolves. Returning normally here would
+    // make it show success on a validation failure nobody actually fixed.
     const p = resolvePoint(pickup, locations);
     const d = resolvePoint(delivery, locations);
     if (!d.area && !d.address) {
       setError("Set a delivery location.");
-      return;
+      throw new Error("Missing delivery location");
     }
     setBusy(true);
     setError(null);
@@ -97,6 +102,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);
+      throw err;
     }
   }
 
@@ -175,19 +181,19 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
 
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setStep("pickup")}
-              className="min-h-12 flex-1 rounded-full border border-[var(--border-faint)] px-4 text-sm font-bold text-ink"
-            >
-              Back
-            </button>
-            <button
-              onClick={submit}
+          <div className="space-y-3 pt-2">
+            <SwipeToConfirm
+              label="Slide to dispatch parcel"
+              confirmedLabel="Parcel Dispatched!"
+              onConfirm={submit}
               disabled={busy}
-              className="min-h-12 flex-[2] rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={() => setStep("pickup")}
+              className="w-full py-2 text-center text-xs font-semibold text-ink-500 hover:text-ink transition-colors"
             >
-              {busy ? "Sending…" : "Send parcel"}
+              ← Back to pickup
             </button>
           </div>
         </div>

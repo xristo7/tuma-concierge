@@ -59,11 +59,15 @@ export function SwipeToConfirm({
     };
   }, [getMaxDrag]);
 
-  // Execute confirmation safely
+  // Runs the caller's action and only shows the confirmed/checkmark state
+  // once it actually resolves — never optimistically. `onConfirm` is
+  // expected to throw on any failure (validation included: a caller that
+  // catches its own error internally and returns normally makes this
+  // control lie about success), so every call site needs to propagate its
+  // errors here rather than swallowing them.
   const triggerConfirm = useCallback(async () => {
     if (disabled || isConfirmed || isBusy) return;
     setIsBusy(true);
-    setIsConfirmed(true);
 
     if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       try {
@@ -73,9 +77,9 @@ export function SwipeToConfirm({
 
     try {
       await onConfirm();
+      setIsConfirmed(true);
     } catch (err) {
-      // Revert if onConfirm rejected
-      setIsConfirmed(false);
+      // Snap the thumb back so it's clear the action did NOT go through.
       dragXRef.current = 0;
       setDragX(0);
       throw err;
@@ -131,7 +135,11 @@ export function SwipeToConfirm({
       if (maxDrag > 0 && currentDrag >= maxDrag * 0.7) {
         dragXRef.current = maxDrag;
         setDragX(maxDrag);
-        await triggerConfirm();
+        // triggerConfirm rethrows so the caller's own error state (which
+        // already shows the message) doesn't get double-handled here —
+        // swallow it at this boundary so it doesn't surface as an
+        // unhandled rejection.
+        await triggerConfirm().catch(() => {});
       } else {
         // Snap back to 0
         dragXRef.current = 0;
@@ -157,7 +165,7 @@ export function SwipeToConfirm({
       const maxDrag = getMaxDrag();
       dragXRef.current = maxDrag;
       setDragX(maxDrag);
-      triggerConfirm();
+      triggerConfirm().catch(() => {});
     }
   };
 

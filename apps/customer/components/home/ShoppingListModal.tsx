@@ -1,12 +1,14 @@
 "use client";
 
 import type { SavedLocation } from "@tuma/shared";
-import { List, Mic, Plus, Trash2 } from "lucide-react";
+import { Calculator, List, Mic, Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LocationPicker, emptyPoint, resolvePoint, type PointState } from "../LocationPicker";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+import { InlineMathInput } from "../InlineMathInput";
+import { SwipeToConfirm } from "../SwipeToConfirm";
 import { OrderVoiceNoteRecorder } from "./OrderVoiceNoteRecorder";
 
 type Item = { name: string; quantity: string; unitCost: string };
@@ -24,6 +26,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<"items" | "location">("items");
   const [mode, setMode] = useState<Mode>("list");
   const [items, setItems] = useState<Item[]>([{ name: "", quantity: "1", unitCost: "" }]);
+  const [calcIndex, setCalcIndex] = useState<number | null>(null);
   const [voiceTotal, setVoiceTotal] = useState("");
 
   const [locations, setLocations] = useState<SavedLocation[]>([]);
@@ -82,10 +85,14 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   }
 
   async function submit() {
+    // Thrown, not just set as an error string — this runs inside
+    // SwipeToConfirm's onConfirm, which only shows its "confirmed"
+    // checkmark once this promise resolves. Returning normally here would
+    // make it show success on a validation failure nobody actually fixed.
     const d = resolvePoint(delivery, locations);
     if (!d.area && !d.address) {
       setError("Choose a delivery location.");
-      return;
+      throw new Error("Missing delivery location");
     }
 
     setBusy(true);
@@ -121,6 +128,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
     } catch (err) {
       setError(errorMessage(err));
       setBusy(false);
+      throw err;
     }
   }
 
@@ -151,37 +159,64 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
           {mode === "list" ? (
             <div className="space-y-2">
               {items.map((item, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] p-2.5">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-xs font-bold text-ink-500">
-                    {i + 1}
-                  </span>
-                  <input
-                    value={item.name}
-                    onChange={(e) => updateItem(i, { name: e.target.value })}
-                    placeholder="Item name"
-                    className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
-                  />
-                  <input
-                    value={item.quantity}
-                    onChange={(e) => updateItem(i, { quantity: e.target.value.replace(/[^\d]/g, "") })}
-                    inputMode="numeric"
-                    placeholder="Qty"
-                    className="w-12 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-center text-sm text-ink outline-none"
-                  />
-                  <input
-                    value={item.unitCost}
-                    onChange={(e) => updateItem(i, { unitCost: e.target.value.replace(/[^\d]/g, "") })}
-                    inputMode="numeric"
-                    placeholder="Unit cost"
-                    className="w-20 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-right text-sm text-ink outline-none"
-                  />
-                  <button
-                    onClick={() => removeItem(i)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center text-ink-500/60 hover:text-red-600"
-                    aria-label="Remove item"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  </button>
+                <div key={i} className="space-y-1.5 rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] p-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--surface-muted))] text-xs font-bold text-ink-500">
+                      {i + 1}
+                    </span>
+                    <input
+                      value={item.name}
+                      onChange={(e) => updateItem(i, { name: e.target.value })}
+                      placeholder="Item name"
+                      className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
+                    />
+                    <input
+                      value={item.quantity}
+                      onChange={(e) => updateItem(i, { quantity: e.target.value.replace(/[^\d]/g, "") })}
+                      inputMode="numeric"
+                      placeholder="Qty"
+                      className="w-12 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-center text-sm text-ink outline-none"
+                    />
+                    <input
+                      value={item.unitCost}
+                      onChange={(e) => updateItem(i, { unitCost: e.target.value.replace(/[^\d]/g, "") })}
+                      inputMode="numeric"
+                      placeholder="Unit cost"
+                      className="w-20 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-right text-sm text-ink outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCalcIndex(calcIndex === i ? null : i)}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg active:scale-95 transition-all ${
+                        calcIndex === i
+                          ? "bg-gold text-ink-gold shadow-sm"
+                          : "bg-[rgb(var(--surface-muted))] text-ink-500 hover:text-ink"
+                      }`}
+                      title="Math calculator (e.g. 2500 × 4)"
+                    >
+                      <Calculator className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => removeItem(i)}
+                      className="flex h-6 w-6 shrink-0 items-center justify-center text-ink-500/60 hover:text-red-600"
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    </button>
+                  </div>
+
+                  {calcIndex === i && (
+                    <div className="pt-2 border-t border-[var(--border-faint)]">
+                      <InlineMathInput
+                        label={`Calculate cost for ${item.name || "Item " + (i + 1)}`}
+                        value={item.unitCost ? Number(item.unitCost) : undefined}
+                        onChange={(val) => {
+                          updateItem(i, { unitCost: val != null ? String(val) : "" });
+                        }}
+                        placeholder="e.g. 2500 × 4 or 3000 + 1500"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
               <button
@@ -199,19 +234,12 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
                 charge.
               </p>
               <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />
-              <div className="space-y-1">
-                <label className="text-xs font-semibold text-ink-500" htmlFor="voice-total">
-                  Total amount (UGX)
-                </label>
-                <input
-                  id="voice-total"
-                  inputMode="numeric"
-                  value={voiceTotal}
-                  onChange={(e) => setVoiceTotal(e.target.value.replace(/[^\d]/g, ""))}
-                  placeholder="e.g. 25000"
-                  className="w-full rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-3 text-lg font-bold text-ink outline-none focus:border-gold"
-                />
-              </div>
+              <InlineMathInput
+                label="Total amount (UGX)"
+                value={voiceTotal ? Number(voiceTotal) : undefined}
+                onChange={(val) => setVoiceTotal(val != null ? String(val) : "")}
+                placeholder="e.g. 25000 or 15000 + 4000 × 2"
+              />
             </div>
           )}
 
@@ -270,19 +298,19 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
 
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setStep("items")}
-              className="min-h-12 flex-1 rounded-full border border-[var(--border-faint)] px-4 text-sm font-bold text-ink"
-            >
-              Back
-            </button>
-            <button
-              onClick={submit}
+          <div className="space-y-3 pt-2">
+            <SwipeToConfirm
+              label="Slide to send shopping list"
+              confirmedLabel="Order Sent!"
+              onConfirm={submit}
               disabled={busy}
-              className="min-h-12 flex-[2] rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={() => setStep("items")}
+              className="w-full py-2 text-center text-xs font-semibold text-ink-500 hover:text-ink transition-colors"
             >
-              {busy ? "Sending…" : "Send list"}
+              ← Back to items
             </button>
           </div>
         </div>

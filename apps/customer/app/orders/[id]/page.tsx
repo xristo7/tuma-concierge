@@ -5,11 +5,13 @@ import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel } from "@tuma/shared"
 import { MapPin, MessageCircle, Star, ThumbsUp, TriangleAlert, User } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BottomDrawer } from "../../../components/BottomDrawer";
 import { FeeProposalVoicePlayer } from "../../../components/FeeProposalVoicePlayer";
 import { LiveTrackingMap } from "../../../components/LiveTrackingMap";
 import { MobileNumberPicker } from "../../../components/MobileNumberPicker";
 import { OrderTimeline } from "../../../components/OrderTimeline";
 import { RateDeliveryCard } from "../../../components/RateDeliveryCard";
+import { SwipeToConfirm } from "../../../components/SwipeToConfirm";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { api, errorMessage } from "../../../lib/api";
 import { formatDateTime, formatDuration, formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
@@ -236,6 +238,13 @@ export default function OrderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId, stage, riderId]);
 
+  // Rethrows on failure — several call sites pass these straight to
+  // SwipeToConfirm's onConfirm, which only shows its confirmed checkmark
+  // once the promise it's given actually resolves. Swallowing the error
+  // here (only setting `error` state) would let that control show a false
+  // "success" on a failed payment or handover. Fire-and-forget callers
+  // (plain onClick handlers, not awaited) must swallow it themselves with
+  // `.catch(() => {})` — the error is already surfaced via `error` state.
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
     setError(null);
@@ -244,6 +253,7 @@ export default function OrderDetailPage() {
       await load();
     } catch (err) {
       setError(errorMessage(err));
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -267,6 +277,7 @@ export default function OrderDetailPage() {
       await load();
     } catch (err) {
       setError(errorMessage(err));
+      throw err;
     } finally {
       setBusy(false);
     }
@@ -372,14 +383,14 @@ export default function OrderDetailPage() {
           <div className="flex gap-2">
             <button
               disabled={busy}
-              onClick={() => run(() => api.decideFeeProposal(orderId, pendingFeeProposal.id, true))}
+              onClick={() => run(() => api.decideFeeProposal(orderId, pendingFeeProposal.id, true)).catch(() => {})}
               className="flex-1 rounded-full bg-green px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
             >
               Accept
             </button>
             <button
               disabled={busy}
-              onClick={() => run(() => api.decideFeeProposal(orderId, pendingFeeProposal.id, false))}
+              onClick={() => run(() => api.decideFeeProposal(orderId, pendingFeeProposal.id, false)).catch(() => {})}
               className="flex-1 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
             >
               Reject
@@ -464,55 +475,49 @@ export default function OrderDetailPage() {
                 </p>
               )}
               {order.payment_rail === "escrow" ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {walletBalance != null && walletBalance >= (order.final_total ?? order.estimated_total ?? 0) && (
-                    <button
-                      type="button"
-                      onClick={() => doFund(true)}
+                    <SwipeToConfirm
+                      label={`Slide to pay from wallet (${formatUgx(walletBalance)})`}
+                      confirmedLabel="Funding Escrow…"
+                      onConfirm={() => doFund(true)}
                       disabled={busy || !online}
-                      className="min-h-12 w-full rounded-full border-2 border-gold px-4 text-base font-bold text-ink disabled:opacity-60"
-                    >
-                      Pay from wallet ({formatUgx(walletBalance)} available)
-                    </button>
+                    />
                   )}
                   {sharedWallets
                     .filter((w) => w.owner_balance != null && w.owner_balance >= (order.final_total ?? order.estimated_total ?? 0))
                     .map((w) => (
-                      <button
+                      <SwipeToConfirm
                         key={w.id}
-                        type="button"
-                        onClick={() => doFund(true, w.owner_id)}
+                        label={`Slide to pay from ${w.owner_name}'s wallet`}
+                        confirmedLabel="Funding Escrow…"
+                        onConfirm={() => doFund(true, w.owner_id)}
                         disabled={busy || !online}
-                        className="min-h-12 w-full rounded-full border-2 border-gold px-4 text-base font-bold text-ink disabled:opacity-60"
-                      >
-                        Pay from {w.owner_name}&apos;s wallet ({formatUgx(w.owner_balance ?? 0)} available)
-                      </button>
+                      />
                     ))}
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      doFund(false);
+                      doFund(false).catch(() => {});
                     }}
-                    className="space-y-2"
+                    className="space-y-2 pt-1"
                   >
                     <MobileNumberPicker purpose="payment" value={msisdn} onChange={setMsisdn} />
-                    <button
-                      type="submit"
+                    <SwipeToConfirm
+                      label={`Slide to pay via ${mobileMoneyNetworkLabel(detectedNetwork)}`}
+                      confirmedLabel="Prompting Phone…"
+                      onConfirm={() => doFund(false)}
                       disabled={busy || !online || !msisdn.trim()}
-                      className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
-                    >
-                      Pay via {mobileMoneyNetworkLabel(detectedNetwork)}
-                    </button>
+                    />
                   </form>
                 </div>
               ) : (
-                <button
-                  onClick={() => doFund()}
+                <SwipeToConfirm
+                  label="Slide to confirm (cash on delivery)"
+                  confirmedLabel="Confirmed!"
+                  onConfirm={() => doFund()}
                   disabled={busy || !online}
-                  className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
-                >
-                  Confirm — rider fronts the cash
-                </button>
+                />
               )}
             </>
           )}
@@ -562,14 +567,14 @@ export default function OrderDetailPage() {
                       <div className="mt-2 flex gap-2">
                         <button
                           disabled={busy}
-                          onClick={() => run(() => decideGroup(group, true))}
+                          onClick={() => run(() => decideGroup(group, true)).catch(() => {})}
                           className="flex-1 rounded-full bg-green px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
                         >
                           Approve
                         </button>
                         <button
                           disabled={busy}
-                          onClick={() => run(() => decideGroup(group, false))}
+                          onClick={() => run(() => decideGroup(group, false)).catch(() => {})}
                           className="flex-1 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
                         >
                           Reject
@@ -614,13 +619,14 @@ export default function OrderDetailPage() {
                 <p className="text-2xl font-bold tracking-[0.3em] text-ink">{order.pin_code}</p>
               </div>
             )}
-            <button
-              disabled={busy}
-              onClick={() => run(() => api.handoverOrder(orderId, order.pin_code as string))}
-              className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
-            >
-              {order.is_ride ? "Confirm trip complete" : `Confirm I received my ${order.type === "parcel" ? "parcel" : "order"}`}
-            </button>
+            <div className="pt-2">
+              <SwipeToConfirm
+                label={order.is_ride ? "Slide to complete trip" : `Slide to confirm received`}
+                confirmedLabel="Handover Confirmed!"
+                onConfirm={() => run(() => api.handoverOrder(orderId, order.pin_code as string))}
+                disabled={busy}
+              />
+            </div>
           </>
         )}
 
