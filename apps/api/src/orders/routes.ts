@@ -2076,15 +2076,27 @@ orderRoutes.get("/orders/:id/chat", async (c) => {
   if (order.customer_id !== user.sub && order.rider_id !== user.sub && user.role !== "admin") {
     return c.json({ error: "forbidden" }, 403);
   }
+
+  // Order progress (stage changes, fee proposals — anything already
+  // written to order_events by touchOrder/logEvent) and the order's own
+  // items, so the chat screen can show both a WhatsApp-style inline
+  // timeline and an expandable order-summary card without a second round
+  // trip. See apps/customer/components/OrderChat.tsx.
+  const [eventsRes, itemsRes] = await Promise.all([
+    db.execute({ sql: "SELECT * FROM order_events WHERE order_id = ? ORDER BY created_at ASC", args: [id] }),
+    db.execute({ sql: "SELECT * FROM list_items WHERE list_id = ?", args: [order.list_id as string] }),
+  ]);
+  const shared = { order: redactOrder(order, user), events: eventsRes.rows, items: itemsRes.rows };
+
   if (!order.rider_id) {
     const res = await db.execute({
       sql: "SELECT * FROM chat_messages WHERE order_id = ? ORDER BY created_at ASC",
       args: [id],
     });
-    return c.json({ messages: (res.rows as Row[]).map((m) => ({ ...m, read: false })) });
+    return c.json({ messages: (res.rows as Row[]).map((m) => ({ ...m, read: false })), ...shared });
   }
   const messages = await loadThreadMessages(order.customer_id as string, order.rider_id as string, user.sub);
-  return c.json({ messages });
+  return c.json({ messages, ...shared });
 });
 
 const chatSchema = z.object({ body: z.string().min(1).max(2000) });

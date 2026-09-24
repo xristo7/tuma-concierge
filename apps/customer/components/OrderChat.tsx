@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChatMessage } from "@tuma/shared";
+import type { ChatMessage, ListItem, OrderEvent, OrderRow } from "@tuma/shared";
 import { Camera, Check, CheckCheck, Clock, Mic, Pause, Phone, PhoneMissed, PhoneOff, Play, Send, Square, Trash2 } from "lucide-react";
 import { PhotoProvider, PhotoView } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
@@ -9,8 +9,10 @@ import { api } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
 import { getQueuedMessages, queueMessage, removeQueuedMessage, type QueuedMessage } from "../lib/chat-outbox";
 import { compressImage } from "../lib/image-compress";
+import { stageLabel } from "../lib/order-display";
 import { useLivePolling } from "../lib/use-live-polling";
 import { useVoiceNoteMaxSeconds } from "../lib/useVoiceNoteMaxSeconds";
+import { OrderSummaryCard } from "./OrderSummaryCard";
 
 /** WhatsApp-style call-log entry — centered, not attributed to either
  * side of the conversation, unlike every other bubble type. `mine`
@@ -29,6 +31,23 @@ function CallLogEntry({ message, mine }: { message: ChatMessage; mine: boolean }
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
         <span>{mine && message.call_status === "missed" ? "No answer" : message.body}</span>
         <span className="text-ink-500/60">· {formatTime(message.created_at)}</span>
+      </div>
+    </div>
+  );
+}
+
+/** WhatsApp-style "X changed the group name" inline notice — one per order
+ * progress step (touchOrder/logEvent, see apps/api/src/orders/routes.ts),
+ * covering both plain stage changes and anything logged with its own note
+ * (a fee proposal being sent, approved, or rejected included). Never
+ * attributed to a side of the conversation, same as CallLogEntry. */
+function StageEventEntry({ event, order }: { event: OrderEvent; order: OrderRow }) {
+  const label = event.note || stageLabel(event.stage, order.type, !!order.is_ride);
+  return (
+    <div className="flex justify-center py-1">
+      <div className="max-w-[85%] rounded-full bg-[rgb(var(--surface-muted))] px-3 py-1.5 text-center text-[12px] font-medium text-ink-500">
+        {label}
+        <span className="text-ink-500/60"> · {formatTime(event.created_at)}</span>
       </div>
     </div>
   );
@@ -177,6 +196,9 @@ type Props = {
 export function OrderChat({ orderId, variant = "embedded" }: Props) {
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [order, setOrder] = useState<OrderRow | null>(null);
+  const [events, setEvents] = useState<OrderEvent[]>([]);
+  const [items, setItems] = useState<ListItem[]>([]);
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -200,6 +222,9 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
       .getChat(orderId)
       .then((res) => {
         setMessages(res.messages);
+        setOrder(res.order);
+        setEvents(res.events);
+        setItems(res.items);
         if (res.messages.length > 0) void api.markChatRead(orderId).catch(() => {});
       })
       .catch(() => {});
@@ -377,12 +402,32 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
     }
   }
 
+  // Order progress (stage changes, fee proposals) interleaved with the
+  // real messages in chronological order — same WhatsApp-style treatment
+  // as a call-log entry, just sourced from order_events instead of a
+  // chat_messages row. Timestamps from two different tables never land in
+  // the exact same millisecond in practice, so a plain string compare is
+  // enough to keep everything in order.
+  type TimelineItem = { kind: "message"; message: ChatMessage } | { kind: "event"; event: OrderEvent };
+  const timeline: TimelineItem[] = [
+    ...messages.map((message): TimelineItem => ({ kind: "message", message })),
+    ...events.map((event): TimelineItem => ({ kind: "event", event })),
+  ].sort((a, b) => {
+    const aAt = a.kind === "message" ? a.message.created_at : a.event.created_at;
+    const bAt = b.kind === "message" ? b.message.created_at : b.event.created_at;
+    return aAt < bAt ? -1 : aAt > bAt ? 1 : 0;
+  });
+
   const bubbles = (
     <>
-      {messages.length === 0 && queued.length === 0 && (
+      {timeline.length === 0 && queued.length === 0 && (
         <p className="py-8 text-center text-xs text-ink-500">No messages yet — say hello to your rider.</p>
       )}
-      {messages.map((m) => {
+      {timeline.map((entry) => {
+        if (entry.kind === "event") {
+          return order ? <StageEventEntry key={entry.event.id} event={entry.event} order={order} /> : null;
+        }
+        const m = entry.message;
         const mine = m.sender_id === user?.id;
 
         if (m.type === "call") {
@@ -549,6 +594,7 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
     return (
       <PhotoProvider>
         <div className="flex min-h-0 flex-1 flex-col bg-cream">
+          {order && <OrderSummaryCard order={order} items={items} />}
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">{bubbles}</div>
           <div className="shrink-0 border-t border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2.5">
             {composer}

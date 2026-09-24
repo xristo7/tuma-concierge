@@ -33,6 +33,7 @@ import type {
   MatchingMode,
   NavMode,
   OrderDetail,
+  OrderEvent,
   OrderRow,
   OrderOverview,
   OrderOverviewRange,
@@ -551,7 +552,9 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
 
     // Chat
     async getChat(orderId: string) {
-      return request<{ messages: ChatMessage[] }>(`/v1/orders/${orderId}/chat`);
+      return request<{ messages: ChatMessage[]; order: OrderRow; events: OrderEvent[]; items: ListItem[] }>(
+        `/v1/orders/${orderId}/chat`,
+      );
     },
     async sendChat(orderId: string, body: string) {
       return request<{ id: string }>(`/v1/orders/${orderId}/chat`, {
