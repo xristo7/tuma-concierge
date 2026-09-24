@@ -11,18 +11,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // "/chat" itself is a normal list screen (conversations) with the usual
   // header + nav; a specific thread ("/chat/<counterpartId>" for order
   // chat, or "/restaurants/<id>/chat" for restaurant chat) takes over the
-  // header only — the bottom nav stays so people can jump straight back to
-  // the rest of the app without leaving chat first.
+  // whole screen — its own header/footer replace BrandHeader/BottomNav so
+  // the conversation gets the full viewport with nothing floating over it.
   const isChatThread = pathname.startsWith("/chat/") || /^\/restaurants\/[^/]+\/chat$/.test(pathname);
   const showHeader = !isAuthPage && !isChatThread;
-  const showNav = !isAuthPage;
+  const showNav = !isAuthPage && !isChatThread;
 
   return (
     <AuthGate>
       {showHeader && <BrandHeader />}
       <main
         className={`mx-auto max-w-lg ${showHeader ? "min-h-[calc(100dvh-3.5rem)]" : "min-h-dvh"} ${
-          showNav ? "pb-[calc(3.5rem+env(safe-area-inset-bottom))]" : ""
+          showNav ? "pb-[calc(5rem+env(safe-area-inset-bottom))]" : ""
         }`}
       >
         {children}

@@ -64,8 +64,8 @@ export default function ChatThreadPage() {
 
   return (
     <div
-      className="h-[calc(100dvh-3.5rem-env(safe-area-inset-bottom))]"
-      style={viewportHeight != null ? { height: `calc(${viewportHeight}px - 3.5rem - env(safe-area-inset-bottom))` } : undefined}
+      className="h-[calc(100dvh-env(safe-area-inset-bottom))]"
+      style={viewportHeight != null ? { height: `calc(${viewportHeight}px - env(safe-area-inset-bottom))` } : undefined}
     >
       <div className="mx-auto flex h-full max-w-lg flex-col bg-cream">
         <header className="flex shrink-0 items-center gap-3 border-b border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2.5">
