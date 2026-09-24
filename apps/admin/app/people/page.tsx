@@ -1,7 +1,7 @@
 "use client";
 
 import { hasPermission, type AdminCustomer, type AdminRestaurant, type AdminRider, type RestaurantStatus } from "@tuma/shared";
-import { ChevronRight, Filter, Search, ShieldCheck, ShieldQuestion, Store, UserPlus, Users as UsersIcon } from "lucide-react";
+import { ChevronRight, Filter, Search, ShieldCheck, ShieldQuestion, Store, Users as UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
@@ -373,19 +373,16 @@ function RestaurantsTab() {
   );
 }
 
-function SummaryStrip({ dateRange }: { dateRange: DateRange }) {
+function SummaryStrip() {
   const [riders, setRiders] = useState<AdminRider[]>([]);
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
+  const [restaurants, setRestaurants] = useState<AdminRestaurant[]>([]);
 
   useEffect(() => {
     api.adminListRiders().then((res) => setRiders(res.riders)).catch(() => {});
     api.adminListCustomers().then((res) => setCustomers(res.customers)).catch(() => {});
+    api.adminListRestaurants().then((res) => setRestaurants(res.restaurants)).catch(() => {});
   }, []);
-
-  const newCustomers = useMemo(
-    () => customers.filter((c) => withinRange(c.created_at, dateRange)).length,
-    [customers, dateRange],
-  );
 
   return (
     <div className="grid grid-cols-3 gap-2">
@@ -400,9 +397,9 @@ function SummaryStrip({ dateRange }: { dateRange: DateRange }) {
         <p className="text-[11px] text-ink-500">Customers</p>
       </div>
       <div className="home-card !py-3 text-center">
-        <UserPlus className="mx-auto h-4 w-4 text-gold" strokeWidth={1.75} aria-hidden />
-        <p className="mt-1 text-lg font-bold text-ink">{newCustomers}</p>
-        <p className="text-[11px] text-ink-500">New ({DATE_RANGE_LABEL[dateRange].toLowerCase()})</p>
+        <Store className="mx-auto h-4 w-4 text-gold" strokeWidth={1.75} aria-hidden />
+        <p className="mt-1 text-lg font-bold text-ink">{restaurants.length}</p>
+        <p className="text-[11px] text-ink-500">Restaurants</p>
       </div>
     </div>
   );
@@ -416,7 +413,7 @@ export default function UsersPage() {
     <div className="space-y-5 px-4 pb-6 pt-4">
       <h1 className="text-xl font-bold text-ink">Users</h1>
 
-      <SummaryStrip dateRange={dateRange} />
+      <SummaryStrip />
 
       {tab !== "restaurants" && <DateRangeTabs value={dateRange} onChange={setDateRange} />}
 
