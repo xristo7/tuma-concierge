@@ -147,6 +147,7 @@ app.get("/v1", (c) =>
       "GET /v1/admin/riders/:userId/id-document",
       "POST /v1/admin/riders/:userId/verify",
       "GET /v1/admin/stats",
+      "GET /v1/admin/stats/orders",
       "GET /v1/admin/integrations",
       "GET /v1/admin/customers",
       "GET /v1/admin/customers/:id",

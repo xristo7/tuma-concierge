@@ -32,6 +32,8 @@ import type {
   NavMode,
   OrderDetail,
   OrderRow,
+  OrderOverview,
+  OrderOverviewRange,
   SdpDescription,
   OrderType,
   Payment,
@@ -1167,6 +1169,9 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     },
     async adminStats() {
       return request<{ stats: AdminStats }>("/v1/admin/stats");
+    },
+    async adminOrderOverview(range: OrderOverviewRange = "all") {
+      return request<OrderOverview>(`/v1/admin/stats/orders?range=${range}`);
     },
     async adminIntegrations() {
       return request<{ integrations: IntegrationsStatus; recentFailedPayments: FailedPayment[] }>(

@@ -737,11 +737,27 @@ export type AdminCustomer = {
 export type AdminStats = {
   totalCustomers: number;
   totalRiders: number;
+  totalRestaurants: number;
   verifiedRiders: number;
   onlineRiders: number;
   ordersByStage: Record<string, number>;
   paymentsByStatus: Record<string, number>;
   settledGmv: number;
+};
+
+export type OrderOverviewRange = "today" | "week" | "month" | "all";
+
+export type OrderModuleKey = "parcel" | "shopping" | "ride" | "food";
+
+export type OrderModuleStats = { orderCount: number; revenue: number; profit: number };
+
+/** See apps/api/src/admin/routes.ts GET /admin/stats/orders — profit
+ * excludes cash (float-rail) orders' platform cut, which is deducted from
+ * the rider's wallet at Settle rather than tracked per order. */
+export type OrderOverview = {
+  range: OrderOverviewRange;
+  totals: OrderModuleStats;
+  modules: Record<OrderModuleKey, OrderModuleStats>;
 };
 
 export type IntegrationsStatus = {
