@@ -15,6 +15,7 @@ import { SwipeToConfirm } from "../../../components/SwipeToConfirm";
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { api, errorMessage } from "../../../lib/api";
 import { formatDateTime, formatDuration, formatUgx, orderTitle, stageLabel } from "../../../lib/order-display";
+import { useFreshness } from "../../../lib/use-freshness";
 import { useLivePolling } from "../../../lib/use-live-polling";
 import { useNetworkStatus } from "../../../lib/use-network-status";
 
@@ -175,6 +176,7 @@ export default function OrderDetailPage() {
   const [sharedWallets, setSharedWallets] = useState<WalletShareReceived[]>([]);
   const [cancelConfirm, setCancelConfirm] = useState<"cancel" | "delete" | null>(null);
   const online = useNetworkStatus();
+  const { markUpdated, label: staleLabel } = useFreshness();
   const detectedNetwork = useMemo(() => detectMobileMoneyNetwork(msisdn), [msisdn]);
   const matching = useRef(false);
 
@@ -218,12 +220,13 @@ export default function OrderDetailPage() {
   const load = useCallback(async () => {
     const res = await api.getOrder(orderId);
     setDetail(res);
+    markUpdated();
     const pending = res.payments.find((p) => p.status === "pending");
     if (pending) {
       api.refreshPayment(pending.id).catch(() => {});
     }
     return res;
-  }, [orderId]);
+  }, [orderId, markUpdated]);
 
   useLivePolling(() => void load().catch(() => {}), 4000, [load]);
 
@@ -376,8 +379,13 @@ export default function OrderDetailPage() {
             </div>
           )}
         </div>
-        <p className={`text-sm font-semibold ${order.stage === "Cancelled" ? "text-red-600" : "text-green"}`}>
+        <p className={`flex items-center gap-1.5 text-sm font-semibold ${order.stage === "Cancelled" ? "text-red-600" : "text-green"}`}>
           {stageLabel(order.stage, order.type, !!order.is_ride)}
+          {staleLabel && (
+            <span className="rounded-full bg-[rgb(var(--surface-muted))] px-2 py-0.5 text-[11px] font-medium text-ink-500">
+              Updated {staleLabel}
+            </span>
+          )}
         </p>
         {order.stage === "Cancelled" && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

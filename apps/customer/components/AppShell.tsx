@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { AuthGate } from "./AuthGate";
 import { BottomNav } from "./BottomNav";
 import { BrandHeader } from "./BrandHeader";
+import { OfflineBanner } from "./OfflineBanner";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -19,6 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthGate>
+      {!isAuthPage && <OfflineBanner />}
       {showHeader && <BrandHeader />}
       <main
         className={`mx-auto max-w-lg ${showHeader ? "min-h-[calc(100dvh-3.5rem)]" : "min-h-dvh"} ${
