@@ -16,7 +16,13 @@ import { getPlatformEnvironment } from "../lib/settings.js";
 import { transferBetweenOwnWallets } from "./service.js";
 
 export const walletsRoutes = new Hono();
-walletsRoutes.use("*", requireAuth, requireRole("customer"));
+// Scoped to /wallets/* rather than "*" on purpose — this router is mounted
+// on the shared /v1 prefix (see app.ts), so an unscoped "*" here leaked
+// into every route registered after it across the whole app once merged,
+// rejecting any non-customer (e.g. an admin) hitting an unrelated /v1/*
+// endpoint with "requires=customer". See apps/api/src/admin/routes.ts for
+// the same scoping discipline applied to /admin/*.
+walletsRoutes.use("/wallets/*", requireAuth, requireRole("customer"));
 
 type Row = Record<string, unknown>;
 

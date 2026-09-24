@@ -156,16 +156,19 @@ export function friendlyErrorMessage(err: unknown): string {
       return `Please check: ${parts.join("; ")}`;
     }
     if (err.status >= 500) return "Something went wrong on our end. Please try again in a moment.";
-    if (err.status === 401 || err.status === 403) return "You don't have permission to do that.";
-    if (err.status === 404) return FRIENDLY_ERROR_MESSAGES.not_found;
     // The server's own message, when it wrote one — most 4xx handlers in
     // this codebase already pass a plain-English `message` alongside the
-    // machine-readable `error` code (see json() below); only a bare code
-    // with no real message left over falls through to the generic line.
+    // machine-readable `error` code (see json() below), and a 401/403 in
+    // particular often has a specific, useful reason ("This account has
+    // been suspended", "Your role doesn't include this action") that a
+    // blanket "no permission" line would bury. Only a bare code with no
+    // real message left over falls through to a generic line.
     const serverMessage = err.message.replace(/^API \d+: /, "");
     if (serverMessage && serverMessage !== err.code && !/^[a-z0-9_]+$/.test(serverMessage)) {
       return serverMessage;
     }
+    if (err.status === 401 || err.status === 403) return "You don't have permission to do that.";
+    if (err.status === 404) return FRIENDLY_ERROR_MESSAGES.not_found;
     return "Something went wrong. Please try again.";
   }
   if (err instanceof TypeError) return FRIENDLY_ERROR_MESSAGES.network_error;
