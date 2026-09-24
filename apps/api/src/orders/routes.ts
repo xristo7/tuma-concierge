@@ -201,7 +201,7 @@ orderRoutes.get("/lists/recent", async (c) => {
           LEFT JOIN orders o ON o.id = (SELECT id FROM orders WHERE list_id = l.id ORDER BY updated_at DESC LIMIT 1)
           LEFT JOIN riders r ON r.user_id = o.rider_id
           LEFT JOIN users u ON u.id = o.rider_id
-          WHERE l.customer_id = ? AND l.environment = ? ORDER BY l.updated_at DESC LIMIT ?`,
+          WHERE l.customer_id = ? AND l.environment = ? AND l.customer_hidden = 0 ORDER BY l.updated_at DESC LIMIT ?`,
     args: [user.sub, await getPlatformEnvironment(), limit],
   });
   return c.json({
@@ -401,7 +401,7 @@ orderRoutes.get("/orders/active", async (c) => {
   const res = await db.execute({
     sql: `SELECT o.*, u.name as customer_name FROM orders o
           LEFT JOIN users u ON u.id = o.customer_id
-          WHERE o.customer_id = ? AND o.stage != 'Settle' AND o.environment = ?
+          WHERE o.customer_id = ? AND o.stage NOT IN ('Settle', 'Cancelled') AND o.environment = ?
           ORDER BY o.updated_at DESC LIMIT 1`,
     args: [user.sub, await getPlatformEnvironment()],
   });
@@ -1001,6 +1001,71 @@ orderRoutes.post("/orders/:id/cancel", async (c) => {
   await logEvent(id, nextStage, "Rider cancelled — order returned to the job pool", user.sub);
 
   return c.json({ order: await getOrder(id) });
+});
+
+// ---------------------------------------------------------------------------
+// Customer-initiated cancel/delete — only while nothing has actually
+// happened yet: no rider assigned (which also means no money has been
+// collected, since funding only ever follows a rider being matched). Once
+// a rider's attached, backing out affects someone else's day and goes
+// through support instead of a self-service button.
+// ---------------------------------------------------------------------------
+
+const CUSTOMER_CANCELLABLE_STAGES = ["Create", "Match"];
+
+function assertCustomerCancellable(order: Row) {
+  if (order.rider_id || !CUSTOMER_CANCELLABLE_STAGES.includes(order.stage as string)) {
+    throw new HttpError(409, "This order is already being processed — contact support if you need to cancel it");
+  }
+}
+
+orderRoutes.post("/orders/:id/customer-cancel", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+    assertCustomerCancellable(order);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: "cannot_cancel", message: e.message }, e.status);
+    throw e;
+  }
+
+  await touchOrder(id, { stage: "Cancelled" });
+  await db.execute({
+    sql: "UPDATE lists SET status = 'cancelled', updated_at = datetime('now') WHERE id = ?",
+    args: [order.list_id as string],
+  });
+  await logEvent(id, "Cancelled", "Cancelled by customer", user.sub);
+
+  return c.json({ order: await getOrder(id) });
+});
+
+/** Same eligibility as cancel, plus it drops off the customer's own
+ * "Lists" view — the row (and its list) stay in the database for support/
+ * admin visibility, never hard-deleted. */
+orderRoutes.post("/orders/:id/customer-delete", async (c) => {
+  const id = c.req.param("id");
+  const user = c.get("user");
+  const order = await getOrder(id);
+  if (!order) return c.json({ error: "not_found" }, 404);
+  try {
+    assertCustomer(order, user.sub);
+    assertCustomerCancellable(order);
+  } catch (e) {
+    if (e instanceof HttpError) return c.json({ error: "cannot_delete", message: e.message }, e.status);
+    throw e;
+  }
+
+  await touchOrder(id, { stage: "Cancelled" });
+  await db.execute({
+    sql: "UPDATE lists SET status = 'cancelled', customer_hidden = 1, updated_at = datetime('now') WHERE id = ?",
+    args: [order.list_id as string],
+  });
+  await logEvent(id, "Cancelled", "Deleted by customer", user.sub);
+
+  return c.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------

@@ -363,6 +363,17 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
     async cancelOrder(orderId: string) {
       return request<{ order: OrderRow }>(`/v1/orders/${orderId}/cancel`, { method: "POST" });
     },
+    /** Customer backs out of their own order — only while it's still
+     * unmatched (no rider, nothing paid). Stays in their order history as
+     * "Cancelled". */
+    async customerCancelOrder(orderId: string) {
+      return request<{ order: OrderRow }>(`/v1/orders/${orderId}/customer-cancel`, { method: "POST" });
+    },
+    /** Same eligibility as customerCancelOrder, but also drops it off the
+     * customer's own Lists view — nothing is actually erased server-side. */
+    async customerDeleteOrder(orderId: string) {
+      return request<{ ok: true }>(`/v1/orders/${orderId}/customer-delete`, { method: "POST" });
+    },
     async fundOrder(orderId: string, input: { msisdn?: string; useWallet?: boolean; walletOwnerId?: string } = {}) {
       return request<{
         order: OrderRow;

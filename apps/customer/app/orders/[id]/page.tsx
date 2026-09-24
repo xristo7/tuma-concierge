@@ -166,15 +166,43 @@ function ApplicantPicker({ orderId, onSelected }: { orderId: string; onSelected:
 export default function OrderDetailPage() {
   const params = useParams<{ id: string }>();
   const orderId = params.id;
+  const router = useRouter();
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msisdn, setMsisdn] = useState("");
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [sharedWallets, setSharedWallets] = useState<WalletShareReceived[]>([]);
+  const [cancelConfirm, setCancelConfirm] = useState<"cancel" | "delete" | null>(null);
   const online = useNetworkStatus();
   const detectedNetwork = useMemo(() => detectMobileMoneyNetwork(msisdn), [msisdn]);
   const matching = useRef(false);
+
+  async function cancelThisOrder() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.customerCancelOrder(orderId);
+      setCancelConfirm(null);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteThisOrder() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.customerDeleteOrder(orderId);
+      router.push("/orders");
+    } catch (err) {
+      setError(errorMessage(err));
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     api
@@ -317,11 +345,45 @@ export default function OrderDetailPage() {
     setDetail((prev) => (prev ? { ...prev, rating: newRating } : prev));
   }
 
+  // Nothing has happened yet — no rider assigned, which also means no
+  // money's been collected (funding only ever follows a match). Once
+  // that's no longer true, backing out affects someone else's day and
+  // goes through the API's own "cannot_cancel"/"cannot_delete" refusal
+  // (surfaced via the normal error banner) rather than a button here.
+  const canCancel = !order.rider_id && ["Create", "Match"].includes(order.stage);
+
   return (
     <div className="space-y-6 px-4 pb-24 pt-4">
       <header className="space-y-1">
-        <h1 className="text-xl font-bold text-ink">{orderTitle(order)}</h1>
-        <p className="text-sm font-semibold text-green">{stageLabel(order.stage, order.type, !!order.is_ride)}</p>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-xl font-bold text-ink">{orderTitle(order)}</h1>
+          {canCancel && (
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={() => setCancelConfirm("cancel")}
+                className="rounded-full border border-[var(--border-faint)] px-3 py-1.5 text-xs font-bold text-ink-500"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => setCancelConfirm("delete")}
+                className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+        <p className={`text-sm font-semibold ${order.stage === "Cancelled" ? "text-red-600" : "text-green"}`}>
+          {stageLabel(order.stage, order.type, !!order.is_ride)}
+        </p>
+        {order.stage === "Cancelled" && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            This order was cancelled — no rider was ever assigned and nothing was charged.
+          </p>
+        )}
         {order.type === "parcel" && order.pickup_area && (
           <p className="flex items-center gap-1.5 text-sm text-ink-500">
             <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
@@ -643,6 +705,37 @@ export default function OrderDetailPage() {
         )}
       </section>
       )}
+
+      <BottomDrawer
+        isOpen={cancelConfirm !== null}
+        onClose={() => setCancelConfirm(null)}
+        title={cancelConfirm === "delete" ? "Delete this order?" : "Cancel this order?"}
+      >
+        <p className="text-sm text-ink-500">
+          {cancelConfirm === "delete"
+            ? "This removes it from your orders list. No rider was assigned and nothing was charged, so there's nothing to refund."
+            : "No rider has been assigned yet, so nothing will be charged. You can still see it in your order history afterward."}
+        </p>
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setCancelConfirm(null)}
+            disabled={busy}
+            className="min-h-11 flex-1 rounded-full border border-[var(--border-faint)] px-4 text-sm font-bold text-ink disabled:opacity-60"
+          >
+            Never mind
+          </button>
+          <button
+            type="button"
+            onClick={cancelConfirm === "delete" ? deleteThisOrder : cancelThisOrder}
+            disabled={busy}
+            className="min-h-11 flex-1 rounded-full bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-60"
+          >
+            {busy ? "Working…" : cancelConfirm === "delete" ? "Delete order" : "Cancel order"}
+          </button>
+        </div>
+      </BottomDrawer>
     </div>
   );
 }
