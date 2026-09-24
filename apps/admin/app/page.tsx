@@ -66,11 +66,11 @@ function OrdersByModule() {
               key={v}
               type="button"
               onClick={() => setView(v)}
-              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize ${
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                 view === v ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
               }`}
             >
-              {v}
+              {v === "revenue" ? "Revenue" : "Income"}
             </button>
           ))}
         </div>
@@ -101,7 +101,7 @@ function OrdersByModule() {
               <p className="text-xl font-bold text-ink">{overview.totals.orderCount}</p>
             </div>
             <div>
-              <p className="text-xs text-ink-500">{view === "revenue" ? "Order value" : "Platform profit"}</p>
+              <p className="text-xs text-ink-500">{view === "revenue" ? "Order value" : "Platform income"}</p>
               <p className="text-xl font-bold text-ink">{formatUgx(overview.totals[view])}</p>
             </div>
           </div>
@@ -129,7 +129,8 @@ function OrdersByModule() {
           {view === "profit" && (
             <p className="text-[11px] text-ink-500">
               Cash orders&apos; platform cut is deducted from the rider&apos;s wallet at settle rather than tracked
-              per order, so it isn&apos;t reflected in profit here yet.
+              per order, so it isn&apos;t reflected in income here yet. This is gross income, not pure profit —
+              it doesn&apos;t yet account for costs like payment processing or payouts.
             </p>
           )}
         </>
