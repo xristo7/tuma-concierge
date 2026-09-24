@@ -84,6 +84,26 @@ const STRINGS: Record<string, { en: string; lg: string }> = {
   accept: { en: "Accept", lg: "Kkiriza" },
   reject: { en: "Reject", lg: "Gaana" },
   view: { en: "View", lg: "Laba" },
+
+  // Orders list
+  orders_title: { en: "Orders", lg: "Ebiragiddwa" },
+  orders_new: { en: "New", lg: "Ekipya" },
+  orders_no_lists: { en: "No lists yet. Tap “New” to send your first shopping list.", lg: "Tewali lukalala. Nyiga “Ekipya” osindike olukalala lwo olusooka." },
+  orders_lists_heading: { en: "Lists", lg: "Enkalala" },
+
+  // Chat list
+  chat_title: { en: "Chat", lg: "Emboozi" },
+  chat_no_conversations: { en: "You have no conversations yet.", lg: "Tolina mboozi n'emu." },
+  chat_send_list: { en: "Send a shopping list", lg: "Sindika olukalala lw'okugula" },
+  chat_filter_all: { en: "All", lg: "Byonna" },
+  chat_filter_riders: { en: "Riders", lg: "Abatambuze" },
+  chat_filter_restaurants: { en: "Restaurants", lg: "Amaduuka g'Emmere" },
+  chat_kind_rider: { en: "Rider", lg: "Omutambuze" },
+  chat_kind_restaurant: { en: "Restaurant", lg: "Eduuka ly'Emmere" },
+  loading: { en: "Loading…", lg: "Kaloze…" },
+
+  // Account
+  account_matching_heading: { en: "How should riders be matched?", lg: "Abatambuze bandigerekebwa batya?" },
 };
 
 export type TranslationKey = keyof typeof STRINGS;

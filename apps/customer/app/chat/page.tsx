@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ShoppingListModal } from "../../components/home/ShoppingListModal";
 import { api } from "../../lib/api";
+import { useTranslate } from "../../lib/i18n";
 
 type Kind = "rider" | "restaurant";
 type FilterKind = "all" | Kind;
@@ -68,6 +69,7 @@ function RestaurantAvatar() {
 }
 
 export default function ChatListPage() {
+  const tr = useTranslate();
   const [riderThreads, setRiderThreads] = useState<ChatThread[] | null>(null);
   const [restaurantThreads, setRestaurantThreads] = useState<CustomerRestaurantChatThread[] | null>(null);
   const [filter, setFilter] = useState<FilterKind>("all");
@@ -129,16 +131,16 @@ export default function ChatListPage() {
   const filtered = filter === "all" ? threads : threads.filter((t) => t.kind === filter);
 
   if (!loaded) {
-    return <div className="p-4 text-sm text-ink-500">Loading…</div>;
+    return <div className="p-4 text-sm text-ink-500">{tr("loading")}</div>;
   }
 
   if (threads.length === 0) {
     return (
       <div className="flex min-h-[70dvh] flex-col items-center justify-center space-y-3 p-4 text-center">
-        <h1 className="text-xl font-bold text-ink">Chat</h1>
-        <p className="text-sm text-ink-500">You have no conversations yet.</p>
+        <h1 className="text-xl font-bold text-ink">{tr("chat_title")}</h1>
+        <p className="text-sm text-ink-500">{tr("chat_no_conversations")}</p>
         <button type="button" onClick={() => setShowNewList(true)} className="text-sm font-semibold text-gold">
-          Send a shopping list
+          {tr("chat_send_list")}
         </button>
         {showNewList && <ShoppingListModal onClose={() => setShowNewList(false)} />}
       </div>
@@ -147,7 +149,7 @@ export default function ChatListPage() {
 
   return (
     <div className="space-y-3 px-4 pb-6 pt-4">
-      <h1 className="text-xl font-bold text-ink">Chat</h1>
+      <h1 className="text-xl font-bold text-ink">{tr("chat_title")}</h1>
 
       {showFilters && (
         <div className="flex gap-2">
@@ -156,11 +158,11 @@ export default function ChatListPage() {
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold capitalize ${
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                 filter === f ? "bg-ink text-white" : "bg-[rgb(var(--surface-muted))] text-ink-500"
               }`}
             >
-              {f === "all" ? "All" : f === "rider" ? "Riders" : "Restaurants"}
+              {f === "all" ? tr("chat_filter_all") : f === "rider" ? tr("chat_filter_riders") : tr("chat_filter_restaurants")}
             </button>
           ))}
         </div>
@@ -174,7 +176,7 @@ export default function ChatListPage() {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[15px] font-bold text-ink">{t.name}</span>
                 <span className="block text-[11px] font-medium text-ink-500/80">
-                  {t.kind === "rider" ? "Rider" : "Restaurant"}
+                  {t.kind === "rider" ? tr("chat_kind_rider") : tr("chat_kind_restaurant")}
                 </span>
                 <span className={`block truncate text-xs ${t.unread ? "font-semibold text-ink" : "text-ink-500"}`}>
                   {t.preview}
