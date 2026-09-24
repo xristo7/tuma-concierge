@@ -1,6 +1,10 @@
+"use client";
+
 import { ArrowRight, MapPin, Package } from "lucide-react";
+import { useTranslate } from "../../lib/i18n";
 
 export function ParcelCard({ onClick }: { onClick: () => void }) {
+  const t = useTranslate();
   return (
     <button
       onClick={onClick}
@@ -18,8 +22,8 @@ export function ParcelCard({ onClick }: { onClick: () => void }) {
       </span>
 
       <span className="relative">
-        <span className="block text-lg font-bold leading-tight text-white">Parcel Delivery</span>
-        <span className="block text-sm text-white/75">Send or receive a package</span>
+        <span className="block text-lg font-bold leading-tight text-white">{t("parcel_title")}</span>
+        <span className="block text-sm text-white/75">{t("parcel_subtitle")}</span>
       </span>
 
       <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gold text-ink-gold shadow-md">

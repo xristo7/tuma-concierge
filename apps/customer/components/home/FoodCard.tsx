@@ -1,7 +1,11 @@
+"use client";
+
 import { ArrowRight, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
+import { useTranslate } from "../../lib/i18n";
 
 export function FoodCard() {
+  const t = useTranslate();
   return (
     <Link
       href="/restaurants"
@@ -19,8 +23,8 @@ export function FoodCard() {
       </span>
 
       <span className="relative">
-        <span className="block text-lg font-bold leading-tight text-white">Order Food</span>
-        <span className="block text-sm text-white/70">Browse restaurants near you</span>
+        <span className="block text-lg font-bold leading-tight text-white">{t("food_title")}</span>
+        <span className="block text-sm text-white/70">{t("food_subtitle")}</span>
       </span>
 
       <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gold text-ink-gold shadow-md">

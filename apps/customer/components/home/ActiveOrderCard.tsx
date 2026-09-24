@@ -5,10 +5,12 @@ import { MapPin } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { useTranslate } from "../../lib/i18n";
 import { orderTitle, stageLabel, stageProgressPct } from "../../lib/order-display";
 
 export function ActiveOrderCard() {
   const [order, setOrder] = useState<OrderRow | null | undefined>(undefined);
+  const t = useTranslate();
 
   useEffect(() => {
     let cancelled = false;
@@ -37,12 +39,12 @@ export function ActiveOrderCard() {
   return (
     <section className="space-y-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-bold text-ink">Active order</h2>
+        <h2 className="text-base font-bold text-ink">{t("active_order_title")}</h2>
         <Link
           href={`/orders/${order.id}`}
           className="text-sm font-medium text-ink-500 hover:text-ink"
         >
-          Track
+          {t("active_order_track")}
         </Link>
       </div>
 
@@ -60,12 +62,10 @@ export function ActiveOrderCard() {
                   needsPayment ? "bg-gold/15 text-gold" : "bg-green/15 text-green"
                 }`}
               >
-                {needsPayment ? "Payment needed" : stageLabel(order.stage)}
+                {needsPayment ? t("active_order_payment_needed") : stageLabel(order.stage)}
               </span>
             </div>
-            {needsPayment && (
-              <p className="text-sm font-medium text-gold">A rider is ready — tap to pay and send your order.</p>
-            )}
+            {needsPayment && <p className="text-sm font-medium text-gold">{t("active_order_ready_pay")}</p>}
             <div className="flex items-center gap-3">
               <div
                 className="h-2 flex-1 overflow-hidden rounded-full bg-cream"
@@ -84,7 +84,9 @@ export function ActiveOrderCard() {
             {order.destination_area && (
               <p className="flex items-center gap-1.5 text-sm text-ink-500">
                 <MapPin className="h-3.5 w-3.5 shrink-0 text-green" strokeWidth={2.25} aria-hidden />
-                <span>Heading to {order.destination_area}</span>
+                <span>
+                  {t("active_order_heading_to")} {order.destination_area}
+                </span>
               </p>
             )}
           </div>

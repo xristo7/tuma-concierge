@@ -1,6 +1,10 @@
+"use client";
+
 import { ArrowRight, ShoppingBag, StickyNote } from "lucide-react";
+import { useTranslate } from "../../lib/i18n";
 
 export function ShoppingListCard({ onClick }: { onClick: () => void }) {
+  const t = useTranslate();
   return (
     <button
       onClick={onClick}
@@ -18,8 +22,8 @@ export function ShoppingListCard({ onClick }: { onClick: () => void }) {
       </span>
 
       <span className="relative">
-        <span className="block text-lg font-bold leading-tight text-white">Shopping List</span>
-        <span className="block text-sm text-white/70">Items, groceries, errands</span>
+        <span className="block text-lg font-bold leading-tight text-white">{t("shopping_title")}</span>
+        <span className="block text-sm text-white/70">{t("shopping_subtitle")}</span>
       </span>
 
       <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-gold text-ink-gold shadow-md">

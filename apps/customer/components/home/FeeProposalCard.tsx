@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { isFeeProposalSeen, markFeeProposalSeen } from "../../lib/fee-proposal-seen";
+import { useTranslate } from "../../lib/i18n";
 import { formatUgx } from "../../lib/order-display";
 
 /**
@@ -16,6 +17,7 @@ import { formatUgx } from "../../lib/order-display";
  * lib/fee-proposal-seen.
  */
 export function FeeProposalCard() {
+  const t = useTranslate();
   const [order, setOrder] = useState<OrderRow | null>(null);
   const [proposal, setProposal] = useState<FeeProposal | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,8 +57,10 @@ export function FeeProposalCard() {
   return (
     <section className="home-card space-y-2.5 !border-l-4 !border-l-gold">
       <p className="text-sm text-ink">
-        Your rider suggests a new delivery fee: <strong>{formatUgx(proposal.proposed_total - currentItemsTotal)}</strong>{" "}
-        <span className="text-ink-500">(was {formatUgx(order.delivery_fee ?? 0)})</span>
+        {t("fee_proposal_suggests")} <strong>{formatUgx(proposal.proposed_total - currentItemsTotal)}</strong>{" "}
+        <span className="text-ink-500">
+          ({t("fee_proposal_was")} {formatUgx(order.delivery_fee ?? 0)})
+        </span>
       </p>
       <div className="flex gap-2">
         <button
@@ -65,7 +69,7 @@ export function FeeProposalCard() {
           onClick={() => decide(true)}
           className="flex-1 rounded-full bg-green px-3 py-2 text-xs font-bold text-white disabled:opacity-60"
         >
-          Accept
+          {t("accept")}
         </button>
         <button
           type="button"
@@ -73,14 +77,14 @@ export function FeeProposalCard() {
           onClick={() => decide(false)}
           className="flex-1 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink disabled:opacity-60"
         >
-          Reject
+          {t("reject")}
         </button>
         <Link
           href={`/orders/${order.id}`}
           onClick={() => markFeeProposalSeen(proposal.id)}
           className="flex items-center px-2 text-xs font-semibold text-ink-500"
         >
-          View
+          {t("view")}
         </Link>
       </div>
     </section>

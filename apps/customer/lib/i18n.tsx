@@ -30,6 +30,60 @@ const STRINGS: Record<string, { en: string; lg: string }> = {
   log_out: { en: "Log out", lg: "Fuluma" },
   change_location: { en: "Change location", lg: "Kyusa ekifo" },
   locating: { en: "Locating…", lg: "Nnoonya ekifo…" },
+
+  // Home — greeting
+  greeting_morning: { en: "Morning", lg: "Wasuze otya" },
+  greeting_afternoon: { en: "Afternoon", lg: "Osiibye otya" },
+  greeting_evening: { en: "Evening", lg: "Osasuse otya" },
+  greeting_subtitle: { en: "Ready to shop? Send the list — we handle the rest.", lg: "Oteekateeka okugula? Tuwe olukalala — ebisigadde tubikola." },
+  greeting_verified: { en: "Webale. Verified riders near you.", lg: "Webale. Abatambuze abakakasiddwa bali kumpi naawe." },
+
+  // Home — trust banner
+  trust_title: { en: "Fast. Reliable. Trusted.", lg: "Yangu. Yesigika. Yesigamiddwa." },
+  trust_subtitle: { en: "Verified riders in your area.", lg: "Abatambuze abakakasiddwa mu kitundu kyo." },
+
+  // Home — order type cards
+  ride_title: { en: "Book a Ride", lg: "Tereka Ekigendererwa" },
+  ride_subtitle: { en: "Get picked up, go anywhere", lg: "Tolekebwa, ogende wonna" },
+  food_title: { en: "Order Food", lg: "Laga Emmere" },
+  food_subtitle: { en: "Browse restaurants near you", lg: "Laba amaduuka g'emmere agali kumpi naawe" },
+  shopping_title: { en: "Shopping List", lg: "Olukalala lw'Okugula" },
+  shopping_subtitle: { en: "Items, groceries, errands", lg: "Ebintu, emmere, n'ebirala" },
+  parcel_title: { en: "Parcel Delivery", lg: "Okutwala Ebintu" },
+  parcel_subtitle: { en: "Send or receive a package", lg: "Sindika oba ofune ekipakedde" },
+
+  // Home — active order
+  active_order_title: { en: "Active order", lg: "Ekiragiddwa ekikola" },
+  active_order_track: { en: "Track", lg: "Goberera" },
+  active_order_payment_needed: { en: "Payment needed", lg: "Wetaagisa okusasula" },
+  active_order_ready_pay: { en: "A rider is ready — tap to pay and send your order.", lg: "Omutambuze mwetegefu — nyiga osasule otume ekiragiddwa kyo." },
+  active_order_heading_to: { en: "Heading to", lg: "Alaga e" },
+
+  // Home — recent lists
+  recent_lists_title: { en: "Recent lists", lg: "Enkalala ez'omulembe" },
+  see_all: { en: "See all", lg: "Laba byonna" },
+  items_count: { en: "items", lg: "ebintu" },
+
+  // Home — wallet card
+  wallet_escrow_title: { en: "Personal MoMo Escrow", lg: "Ensimbi zo ez'oku Layini" },
+  wallet_protected: { en: "Protected", lg: "Ekuumiddwa" },
+  wallet_top_up: { en: "Top up", lg: "Teekamu Ssente" },
+  wallet_cap: { en: "Cap", lg: "Ekkomo" },
+  wallet_verified: { en: "Verified", lg: "Ekakasiddwa" },
+  wallet_details: { en: "Details", lg: "Ebisingawo" },
+  wallet_family_pool: { en: "Family Pool", lg: "Ensawo y'Amaka" },
+  wallet_active: { en: "Active", lg: "Ekola" },
+  wallet_available_for_orders: { en: "Available for orders", lg: "Eyesigika ku biragiddwa" },
+  wallet_manage: { en: "Manage", lg: "Ddaala" },
+  wallet_staff_family_access: { en: "Staff & Family Access", lg: "Okuyingira kw'Abakozi n'Amaka" },
+  wallet_settings: { en: "Settings", lg: "Entegeka" },
+
+  // Home — fee proposal
+  fee_proposal_suggests: { en: "Your rider suggests a new delivery fee:", lg: "Omutambuze wo awadde omuwendo omupya ogw'okutwala:" },
+  fee_proposal_was: { en: "was", lg: "gwali" },
+  accept: { en: "Accept", lg: "Kkiriza" },
+  reject: { en: "Reject", lg: "Gaana" },
+  view: { en: "View", lg: "Laba" },
 };
 
 export type TranslationKey = keyof typeof STRINGS;

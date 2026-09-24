@@ -5,6 +5,7 @@ import { ChevronRight, Clock, ShoppingBag } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { useTranslate } from "../../lib/i18n";
 
 function statusClasses(status: string) {
   if (status === "delivered") return "bg-green/15 text-green";
@@ -51,6 +52,7 @@ function RiderAvatar({ riderId }: { riderId: string }) {
 export function RecentLists() {
   const [lists, setLists] = useState<ListSummary[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const t = useTranslate();
 
   useEffect(() => {
     let cancelled = false;
@@ -75,9 +77,9 @@ export function RecentLists() {
   return (
     <section className="space-y-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-bold text-ink">Recent lists</h2>
+        <h2 className="text-base font-bold text-ink">{t("recent_lists_title")}</h2>
         <Link href="/orders" className="text-sm font-medium text-ink-500 hover:text-ink">
-          See all
+          {t("see_all")}
         </Link>
       </div>
 
@@ -99,7 +101,7 @@ export function RecentLists() {
                 <span className="block truncate text-[15px] font-bold text-ink">{listDisplayTitle(list)}</span>
                 <span className="mt-0.5 flex items-center gap-1 text-xs text-ink-500">
                   <Clock className="h-3 w-3" strokeWidth={2} aria-hidden />
-                  {list.itemCount} items
+                  {list.itemCount} {t("items_count")}
                 </span>
               </span>
               <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize ${statusClasses(list.status)}`}>
