@@ -1,0 +1,99 @@
+import { hasPermission } from "@tuma/shared";
+import {
+  Banknote,
+  Compass,
+  CreditCard,
+  FlaskConical,
+  Mic,
+  Map as MapIcon,
+  Phone,
+  Route,
+  Settings as SettingsIcon,
+  Wallet as WalletIcon,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+export type SettingsLink = {
+  href: string;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+  show?: (role: Parameters<typeof hasPermission>[0]) => boolean;
+};
+
+export const SETTINGS_LINKS: SettingsLink[] = [
+  {
+    href: "/settings/delivery",
+    label: "Delivery pricing",
+    description: "Rate per km, minimum fees, shopping and ride fares.",
+    icon: SettingsIcon,
+  },
+  {
+    href: "/settings/matching",
+    label: "Rider matching",
+    description: "Service range, matching modes, assignment timing.",
+    icon: Route,
+  },
+  {
+    href: "/settings/voice",
+    label: "Voice recordings",
+    description: "Max recording length across the app.",
+    icon: Mic,
+  },
+  {
+    href: "/settings/payments",
+    label: "Payments",
+    description: "Aggregators, demo mode, API credentials.",
+    icon: CreditCard,
+    show: (role) => hasPermission(role, "payments.manage"),
+  },
+  {
+    href: "/settings/calls",
+    label: "Calls",
+    description: "Voice call provider and credentials.",
+    icon: Phone,
+    show: (role) => hasPermission(role, "payments.manage"),
+  },
+  {
+    href: "/settings/maps",
+    label: "Maps",
+    description: "Maps provider and API credentials.",
+    icon: MapIcon,
+    show: (role) => hasPermission(role, "payments.manage"),
+  },
+  {
+    href: "/settings/navigation",
+    label: "Navigation mode",
+    description: "How riders get turn-by-turn directions.",
+    icon: Compass,
+    show: (role) => hasPermission(role, "payments.manage"),
+  },
+  {
+    href: "/settings/customer-wallet",
+    label: "Customer wallet limits",
+    description: "Unverified/verified balance caps, max top-up.",
+    icon: WalletIcon,
+    show: (role) => hasPermission(role, "payments.manage"),
+  },
+  {
+    href: "/settings/rider-wallet",
+    label: "Rider wallet minimum balance",
+    description: "Reserve every rider withdrawal must leave behind.",
+    icon: WalletIcon,
+    show: (role) => hasPermission(role, "payments.manage"),
+  },
+  {
+    href: "/settings/monetization",
+    label: "Monetization",
+    description: "Commission, service fee, processing fee, cash orders, subscription.",
+    icon: Banknote,
+    show: (role) => hasPermission(role, "payments.manage"),
+  },
+  {
+    href: "/settings/platform",
+    label: "Platform state",
+    description: "Live vs. sandbox — affects every customer and rider.",
+    icon: FlaskConical,
+    show: (role) => hasPermission(role, "payments.manage"),
+  },
+];
