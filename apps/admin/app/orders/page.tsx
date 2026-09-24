@@ -153,7 +153,7 @@ export default function OrdersPage() {
         />
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
       {orders.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No orders match.</p>}
 
       <ul className="space-y-2.5">

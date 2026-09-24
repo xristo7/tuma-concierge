@@ -70,8 +70,15 @@
     --color-navy: 90 130 196;
     --color-navy-400: 120 155 214;
     --color-navy-700: 150 180 224;
-    --surface-card: 22 48 88;
-    --surface-muted: 40 76 122;
+    /* Swapped relative to their light-mode brightness order on purpose:
+       a light-mode card (white) is brighter than a light-mode muted chip
+       (226ish gray), so a selected segmented-control pill (card bg) pops
+       against its track (muted bg). Keeping the same raw values in dark
+       mode made --surface-card darker than --surface-muted, inverting
+       that relationship and making a "selected" pill look sunken instead
+       of raised. */
+    --surface-card: 40 76 122;
+    --surface-muted: 22 48 88;
     --surface-input: 33 63 106;
     --border-faint: rgba(247, 243, 238, 0.1);
   }
@@ -93,8 +100,8 @@
   --color-navy: 90 130 196;
   --color-navy-400: 120 155 214;
   --color-navy-700: 150 180 224;
-  --surface-card: 22 48 88;
-  --surface-muted: 40 76 122;
+  --surface-card: 40 76 122;
+  --surface-muted: 22 48 88;
   --surface-input: 33 63 106;
   --border-faint: rgba(247, 243, 238, 0.1);
 }

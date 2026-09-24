@@ -32,7 +32,7 @@ export default function PlatformStateSettingsPage() {
 
   return (
     <SettingsPageShell title="Platform state" loading={loading}>
-      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
       <PlatformEnvironmentToggle current={platformEnvironment} onChanged={setPlatformEnvironment} />
     </SettingsPageShell>
   );
@@ -98,7 +98,7 @@ function PlatformEnvironmentToggle({
         active. Sandbox activity can never send or receive real money, even if live payment credentials are
         configured.
       </p>
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
       {confirming ? (
         <div className="space-y-2 rounded-xl border border-gold/40 bg-gold/10 p-3">
           <p className="text-sm font-semibold text-ink">

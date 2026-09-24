@@ -112,7 +112,7 @@ function MapsCredentialFieldsForm({
               {field.helpText && <p className="text-xs text-ink-500">{field.helpText}</p>}
             </div>
           ))}
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
           {saved && <p className="text-xs font-medium text-green">Saved.</p>}
           <button
             type="button"
@@ -162,7 +162,7 @@ export function MapsSettingsPanel() {
   }
 
   if (!settings) {
-    return error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null;
+    return error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null;
   }
 
   return (
@@ -178,7 +178,7 @@ export function MapsSettingsPanel() {
         available — Streetmaps needs nothing and is always available as a fallback.
       </p>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
 
       <div className="space-y-2.5">
         {MAPS_PROVIDER_ORDER.map((provider) => {

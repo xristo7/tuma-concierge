@@ -171,7 +171,7 @@ function RidersTab({ dateRange }: { dateRange: DateRange }) {
         />
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
       {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No riders here.</p>}
 
       <div className="space-y-5">
@@ -239,7 +239,7 @@ function CustomersTab({ dateRange }: { dateRange: DateRange }) {
       </div>
       <p className="text-xs font-semibold text-ink-500">{filtered.length} customer{filtered.length === 1 ? "" : "s"}</p>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
       {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No customers found.</p>}
 
       <div className="space-y-5">
@@ -317,7 +317,7 @@ function RestaurantsTab() {
         />
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
       {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No restaurants here.</p>}
 
       <ul className="space-y-2.5">

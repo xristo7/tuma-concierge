@@ -46,7 +46,7 @@ export function NavModeSettingsPanel() {
   }
 
   if (navMode === null) {
-    return error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null;
+    return error ? <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p> : null;
   }
 
   return (
@@ -61,7 +61,7 @@ export function NavModeSettingsPanel() {
         Where the rider app&apos;s &quot;Start Navigation&quot; button sends riders when heading to a pickup or drop-off.
       </p>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
 
       <div className="space-y-2.5">
         {(["external", "in_app"] as const).map((mode) => {

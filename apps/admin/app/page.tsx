@@ -91,7 +91,7 @@ function OrdersByModule() {
         ))}
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
 
       {overview && (
         <>
@@ -161,7 +161,7 @@ export default function OverviewPage() {
   }, [load]);
 
   if (error) {
-    return <p className="m-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>;
+    return <p className="m-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>;
   }
   if (!stats || !integrations) {
     return <div className="p-4 text-sm text-ink-500">Loading…</div>;

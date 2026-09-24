@@ -92,7 +92,7 @@ export default function RiderDetailPage() {
         </span>
       </header>
 
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
 
       <section className="home-card space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Contact</h2>
