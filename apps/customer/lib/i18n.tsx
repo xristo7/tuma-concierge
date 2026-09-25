@@ -43,13 +43,13 @@ const STRINGS: Record<string, { en: string; lg: string }> = {
   trust_subtitle: { en: "Verified riders in your area.", lg: "Abatambuze abakakasiddwa mu kitundu kyo." },
 
   // Home — order type cards
-  ride_title: { en: "Book a Ride", lg: "Tereka Ekigendererwa" },
+  ride_title: { en: "Book a Ride", lg: "Tumya Boda Ekutwaale" },
   ride_subtitle: { en: "Get picked up, go anywhere", lg: "Tolekebwa, ogende wonna" },
-  food_title: { en: "Order Food", lg: "Laga Emmere" },
+  food_title: { en: "Order Food", lg: "Tumya Emmere" },
   food_subtitle: { en: "Browse restaurants near you", lg: "Laba amaduuka g'emmere agali kumpi naawe" },
-  shopping_title: { en: "Shopping List", lg: "Olukalala lw'Okugula" },
+  shopping_title: { en: "Shopping List", lg: "Tumya Ebintu" },
   shopping_subtitle: { en: "Items, groceries, errands", lg: "Ebintu, emmere, n'ebirala" },
-  parcel_title: { en: "Parcel Delivery", lg: "Okutwala Ebintu" },
+  parcel_title: { en: "Parcel Delivery", lg: "Weleza Ekintu oba Omugugu" },
   parcel_subtitle: { en: "Send or receive a package", lg: "Sindika oba ofune ekipakedde" },
 
   // Home — active order
