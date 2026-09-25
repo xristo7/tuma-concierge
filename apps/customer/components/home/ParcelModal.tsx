@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { LocationPicker, emptyPoint, resolvePoint, type PointState } from "../LocationPicker";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+import { useTranslate } from "../../lib/i18n";
 import { SwipeToConfirm } from "../SwipeToConfirm";
 import { OrderVoiceNoteRecorder } from "./OrderVoiceNoteRecorder";
 
@@ -23,6 +24,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 export function ParcelModal({ onClose }: { onClose: () => void }) {
+  const t = useTranslate();
   const router = useRouter();
   const [step, setStep] = useState<"pickup" | "delivery">("pickup");
   const [pickup, setPickup] = useState<PointState>(emptyPoint);
@@ -58,7 +60,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
   function next() {
     const p = resolvePoint(pickup, locations);
     if (!p.area && !p.address) {
-      setError("Set a pickup location.");
+      setError(t("parcel_set_pickup"));
       return;
     }
     setError(null);
@@ -73,7 +75,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
     const p = resolvePoint(pickup, locations);
     const d = resolvePoint(delivery, locations);
     if (!d.area && !d.address) {
-      setError("Set a delivery location.");
+      setError(t("parcel_set_delivery"));
       throw new Error("Missing delivery location");
     }
     setBusy(true);
@@ -107,11 +109,11 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title={step === "pickup" ? "Parcel · Pickup" : "Parcel · Delivery"} onClose={onClose}>
+    <Modal title={step === "pickup" ? t("parcel_pickup_step") : t("parcel_delivery_step")} onClose={onClose}>
       <div className="mb-4 flex items-center gap-2 text-xs font-semibold text-ink-500">
-        <span className={step === "pickup" ? "text-ink" : ""}>1. Pickup</span>
+        <span className={step === "pickup" ? "text-ink" : ""}>{t("parcel_step1")}</span>
         <span className="h-px flex-1 bg-[var(--border-faint)]" />
-        <span className={step === "delivery" ? "text-ink" : ""}>2. Delivery</span>
+        <span className={step === "delivery" ? "text-ink" : ""}>{t("parcel_step2")}</span>
       </div>
 
       {step === "pickup" ? (
@@ -119,7 +121,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="What's the parcel? (optional)"
+            placeholder={t("parcel_whats_it")}
             className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
           />
           <LocationPicker point={pickup} setPoint={setPickup} locations={locations} />
@@ -130,7 +132,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
             onClick={next}
             className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)]"
           >
-            Next: delivery
+            {t("parcel_next_delivery")}
           </button>
         </div>
       ) : (
@@ -141,7 +143,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
             <div className="flex items-center gap-2 rounded-xl border border-gold bg-gold/10 p-3">
               <Route className="h-4 w-4 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
               <p className="text-sm text-ink">
-                <span className="font-bold">UGX {liveEstimate.toLocaleString("en-UG")}</span> estimated ·{" "}
+                <span className="font-bold">UGX {liveEstimate.toLocaleString("en-UG")}</span> {t("parcel_estimated")} ·{" "}
                 {distanceKm!.toFixed(1)} km
               </p>
             </div>
@@ -150,7 +152,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
               value={estimatedTotal}
               onChange={(e) => setEstimatedTotal(e.target.value.replace(/[^\d]/g, ""))}
               inputMode="numeric"
-              placeholder="Estimated delivery fee (UGX, optional)"
+              placeholder={t("parcel_estimated_fee")}
               className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
             />
           )}
@@ -158,24 +160,22 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
           <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("restaurant_payment")}</p>
             <div className="flex gap-2">
               {(["escrow", "float"] as const).map((rail) => (
                 <button
                   key={rail}
                   onClick={() => setPaymentRail(rail)}
-                  className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-semibold capitalize ${
+                  className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-semibold ${
                     paymentRail === rail ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink-500"
                   }`}
                 >
-                  {rail === "float" ? "Cash" : "Escrow"}
+                  {rail === "float" ? t("restaurant_cash") : t("restaurant_escrow")}
                 </button>
               ))}
             </div>
             <p className="text-xs text-ink-500">
-              {paymentRail === "float"
-                ? "You pay the rider directly, in person."
-                : "You pay upfront — held safely until delivery is confirmed."}
+              {paymentRail === "float" ? t("restaurant_pay_rider_direct") : t("restaurant_pay_upfront")}
             </p>
           </div>
 
@@ -183,8 +183,8 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-3 pt-2">
             <SwipeToConfirm
-              label="Slide to dispatch parcel"
-              confirmedLabel="Parcel Dispatched!"
+              label={t("parcel_slide_dispatch")}
+              confirmedLabel={t("parcel_dispatched")}
               onConfirm={submit}
               disabled={busy}
             />
@@ -193,7 +193,7 @@ export function ParcelModal({ onClose }: { onClose: () => void }) {
               onClick={() => setStep("pickup")}
               className="w-full py-2 text-center text-xs font-semibold text-ink-500 hover:text-ink transition-colors"
             >
-              ← Back to pickup
+              {t("parcel_back_to_pickup")}
             </button>
           </div>
         </div>

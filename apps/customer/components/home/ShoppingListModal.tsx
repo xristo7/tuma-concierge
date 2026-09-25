@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { LocationPicker, emptyPoint, resolvePoint, type PointState } from "../LocationPicker";
 import { Modal } from "../Modal";
 import { api, errorMessage } from "../../lib/api";
+import { useTranslate } from "../../lib/i18n";
 import { InlineMathInput } from "../InlineMathInput";
 import { SwipeToConfirm } from "../SwipeToConfirm";
 import { OrderVoiceNoteRecorder } from "./OrderVoiceNoteRecorder";
@@ -22,6 +23,7 @@ function currency(n: number) {
 }
 
 export function ShoppingListModal({ onClose }: { onClose: () => void }) {
+  const t = useTranslate();
   const router = useRouter();
   const [step, setStep] = useState<"items" | "location">("items");
   const [mode, setMode] = useState<Mode>("list");
@@ -67,16 +69,16 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
     if (mode === "list") {
       const clean = items.filter((it) => it.name.trim().length > 0);
       if (clean.length === 0) {
-        setError("Add at least one item.");
+        setError(t("list_add_at_least_one"));
         return;
       }
     } else {
       if (!voiceNote) {
-        setError("Record a voice note describing what you need.");
+        setError(t("list_record_voice"));
         return;
       }
       if (!voiceTotal || Number(voiceTotal) <= 0) {
-        setError("Enter the total amount.");
+        setError(t("list_enter_total"));
         return;
       }
     }
@@ -91,7 +93,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
     // make it show success on a validation failure nobody actually fixed.
     const d = resolvePoint(delivery, locations);
     if (!d.area && !d.address) {
-      setError("Choose a delivery location.");
+      setError(t("restaurant_choose_delivery_location"));
       throw new Error("Missing delivery location");
     }
 
@@ -133,7 +135,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title={step === "items" ? "Shopping List" : "Delivery location"} onClose={onClose}>
+    <Modal title={step === "items" ? t("list_title") : t("list_delivery_location")} onClose={onClose}>
       {step === "items" ? (
         <div className="space-y-4">
           <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
@@ -151,7 +153,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
                 ) : (
                   <Mic className="h-4 w-4" strokeWidth={2} aria-hidden />
                 )}
-                {m === "list" ? "Write list" : "Voice note"}
+                {m === "list" ? t("list_write_list") : t("list_voice_note")}
               </button>
             ))}
           </div>
@@ -167,21 +169,21 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
                     <input
                       value={item.name}
                       onChange={(e) => updateItem(i, { name: e.target.value })}
-                      placeholder="Item name"
+                      placeholder={t("list_item_name")}
                       className="min-w-0 flex-1 border-none bg-transparent text-sm outline-none"
                     />
                     <input
                       value={item.quantity}
                       onChange={(e) => updateItem(i, { quantity: e.target.value.replace(/[^\d]/g, "") })}
                       inputMode="numeric"
-                      placeholder="Qty"
+                      placeholder={t("list_qty")}
                       className="w-12 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-center text-sm text-ink outline-none"
                     />
                     <input
                       value={item.unitCost}
                       onChange={(e) => updateItem(i, { unitCost: e.target.value.replace(/[^\d]/g, "") })}
                       inputMode="numeric"
-                      placeholder="Unit cost"
+                      placeholder={t("list_unit_cost")}
                       className="w-20 shrink-0 rounded-lg border border-[var(--border-faint)] bg-transparent px-1.5 py-1 text-right text-sm text-ink outline-none"
                     />
                     <button
@@ -224,18 +226,15 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
                 className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border-faint)] py-2.5 text-sm font-semibold text-ink-500"
               >
                 <Plus className="h-4 w-4" strokeWidth={2} aria-hidden />
-                Add item
+                {t("list_add_item")}
               </button>
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-xs text-ink-500">
-                Record what you need — your rider will listen to it. Then enter the total so we know how much to
-                charge.
-              </p>
+              <p className="text-xs text-ink-500">{t("list_record_desc")}</p>
               <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />
               <InlineMathInput
-                label="Total amount (UGX)"
+                label={t("list_total_amount")}
                 value={voiceTotal ? Number(voiceTotal) : undefined}
                 onChange={(val) => setVoiceTotal(val != null ? String(val) : "")}
                 placeholder="e.g. 25000 or 15000 + 4000 × 2"
@@ -245,15 +244,15 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-1.5 rounded-xl bg-[rgb(var(--surface-muted))] px-4 py-3">
             <div className="flex items-center justify-between text-sm text-ink-500">
-              <span>Items total</span>
+              <span>{t("list_items_total")}</span>
               <span>{currency(itemsTotal)}</span>
             </div>
             <div className="flex items-center justify-between text-sm text-ink-500">
-              <span>Delivery fee</span>
+              <span>{t("list_delivery_fee")}</span>
               <span>{currency(deliveryFee)}</span>
             </div>
             <div className="flex items-center justify-between border-t border-[var(--border-faint)] pt-1.5">
-              <span className="text-sm font-semibold text-ink">You&apos;ll pay</span>
+              <span className="text-sm font-semibold text-ink">{t("list_youll_pay")}</span>
               <span className="text-base font-bold text-ink">{currency(total)}</span>
             </div>
           </div>
@@ -264,7 +263,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
             onClick={goToLocation}
             className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)]"
           >
-            Next: delivery location
+            {t("list_next_delivery")}
           </button>
         </div>
       ) : (
@@ -275,24 +274,22 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
           {mode === "list" && <OrderVoiceNoteRecorder blob={voiceNote} onChange={setVoiceNote} />}
 
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("restaurant_payment")}</p>
             <div className="flex gap-2">
               {(["escrow", "float"] as const).map((rail) => (
                 <button
                   key={rail}
                   onClick={() => setPaymentRail(rail)}
-                  className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-semibold capitalize ${
+                  className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-semibold ${
                     paymentRail === rail ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink-500"
                   }`}
                 >
-                  {rail === "float" ? "Cash" : "Escrow"}
+                  {rail === "float" ? t("restaurant_cash") : t("restaurant_escrow")}
                 </button>
               ))}
             </div>
             <p className="text-xs text-ink-500">
-              {paymentRail === "float"
-                ? "You pay the rider directly, in person."
-                : "You pay upfront — held safely until delivery is confirmed."}
+              {paymentRail === "float" ? t("restaurant_pay_rider_direct") : t("restaurant_pay_upfront")}
             </p>
           </div>
 
@@ -300,8 +297,8 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
 
           <div className="space-y-3 pt-2">
             <SwipeToConfirm
-              label="Slide to send shopping list"
-              confirmedLabel="Order Sent!"
+              label={t("list_slide_to_send")}
+              confirmedLabel={t("list_order_sent")}
               onConfirm={submit}
               disabled={busy}
             />
@@ -310,7 +307,7 @@ export function ShoppingListModal({ onClose }: { onClose: () => void }) {
               onClick={() => setStep("items")}
               className="w-full py-2 text-center text-xs font-semibold text-ink-500 hover:text-ink transition-colors"
             >
-              ← Back to items
+              {t("list_back_to_items")}
             </button>
           </div>
         </div>
