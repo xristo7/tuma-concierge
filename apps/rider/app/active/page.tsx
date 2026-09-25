@@ -5,9 +5,11 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
+import { useTranslate } from "../../lib/i18n";
 import { jobTitle, stageLabel } from "../../lib/order-display";
 
 export default function ActivePage() {
+  const t = useTranslate();
   const [orders, setOrders] = useState<OrderRow[] | null>(null);
 
   useEffect(() => {
@@ -17,12 +19,12 @@ export default function ActivePage() {
       .catch(() => setOrders([]));
   }, []);
 
-  if (orders === null) return <div className="p-4 text-sm text-ink-500">Loading…</div>;
+  if (orders === null) return <div className="p-4 text-sm text-ink-500">{t("active_loading")}</div>;
 
   return (
     <div className="space-y-4 px-4 pb-6 pt-4">
-      <h1 className="text-xl font-bold text-ink">Active</h1>
-      {orders.length === 0 && <p className="py-10 text-center text-sm text-ink-500">No active jobs right now.</p>}
+      <h1 className="text-xl font-bold text-ink">{t("active_title")}</h1>
+      {orders.length === 0 && <p className="py-10 text-center text-sm text-ink-500">{t("active_none")}</p>}
       <ul className="space-y-2.5">
         {orders.map((order) => (
           <li key={order.id}>
