@@ -20,6 +20,7 @@ import { BottomDrawer } from "../../components/BottomDrawer";
 import { MobileNumberPicker } from "../../components/MobileNumberPicker";
 import { SwipeToConfirm } from "../../components/SwipeToConfirm";
 import { api, errorMessage } from "../../lib/api";
+import { useTranslate } from "../../lib/i18n";
 import { useNetworkStatus } from "../../lib/use-network-status";
 import { formatDateTime, formatUgx } from "../../lib/order-display";
 
@@ -55,6 +56,7 @@ const SHARE_STATUS_LABELS: Record<string, string> = {
 const SUGGESTED_WALLET_NAMES_FALLBACK = ["Family Expenses", "Office Supplies", "Personal Savings", "Travel Fund"];
 
 export default function WalletPage() {
+  const t = useTranslate();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [wallet, setWallet] = useState<CustomerWallet | null>(null);
@@ -403,14 +405,14 @@ export default function WalletPage() {
   }
 
   if (!wallet) {
-    return <div className="p-4 text-sm text-ink-500">Loading wallet…</div>;
+    return <div className="p-4 text-sm text-ink-500">{t("wallet_loading")}</div>;
   }
 
   const pctUsed = wallet.cap > 0 ? Math.min(100, Math.round((wallet.balance / wallet.cap) * 100)) : 0;
 
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
-      <h1 className="text-xl font-bold text-ink">Wallet</h1>
+      <h1 className="text-xl font-bold text-ink">{t("wallet_title")}</h1>
 
       {/* Wallet switcher — up to 5 total (the original + up to 4 named ones) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
@@ -433,7 +435,7 @@ export default function WalletPage() {
             className="flex shrink-0 items-center gap-1 rounded-full border border-dashed border-[var(--border-faint)] px-3 py-1.5 text-xs font-bold text-ink-500"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
-            Add wallet
+            {t("wallet_add")}
           </button>
         )}
       </div>
@@ -442,7 +444,7 @@ export default function WalletPage() {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-              {selectedWallet?.name ?? "Main Wallet"}
+              {selectedWallet?.name ?? t("wallet_main")}
             </p>
             {renamingId === selectedWalletId ? (
               <div className="mt-1 flex items-center gap-2">
@@ -459,10 +461,10 @@ export default function WalletPage() {
                   disabled={walletBusy}
                   className="shrink-0 text-xs font-bold text-gold"
                 >
-                  Save
+                  {t("wallet_save")}
                 </button>
                 <button type="button" onClick={() => setRenamingId(null)} className="shrink-0 text-xs font-semibold text-ink-500">
-                  Cancel
+                  {t("cancel")}
                 </button>
               </div>
             ) : (
@@ -518,24 +520,24 @@ export default function WalletPage() {
           className="flex min-h-10 w-full items-center justify-center gap-1.5 rounded-full border border-[var(--border-faint)] text-sm font-bold text-ink disabled:opacity-50"
         >
           <ArrowLeftRight className="h-4 w-4" strokeWidth={2} aria-hidden />
-          Move funds between wallets
+          {t("wallet_move_funds")}
         </button>
       </section>
 
       {selectedWalletId === "primary" && (
       <section className="home-card space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Top up</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{t("wallet_top_up_heading")}</h2>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
         {pendingTopupId ? (
           <div className="flex items-center gap-3 py-2">
             <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-            <p className="text-sm text-ink-500">Confirming your top-up…</p>
+            <p className="text-sm text-ink-500">{t("wallet_confirming_topup")}</p>
           </div>
         ) : (
           <form onSubmit={submitTopup} className="space-y-2">
             {!online && (
               <p className="rounded-lg bg-gold/10 px-3 py-2 text-xs font-semibold text-ink-500">
-                You&apos;re offline — topping up needs a connection.
+                {t("wallet_offline_topup")}
               </p>
             )}
             <input
@@ -552,7 +554,7 @@ export default function WalletPage() {
               disabled={busy || !online || !msisdn.trim()}
               className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
             >
-              {busy ? "Starting…" : "Top up"}
+              {busy ? t("wallet_starting") : t("wallet_top_up_heading")}
             </button>
           </form>
         )}
@@ -563,8 +565,8 @@ export default function WalletPage() {
       <section className="home-card space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wide text-ink">Send & Transfer</h2>
-            <p className="text-xs text-ink-500">Quick peer transfers and shared wallet allowances</p>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-ink">{t("wallet_send_transfer_heading")}</h2>
+            <p className="text-xs text-ink-500">{t("wallet_send_transfer_subtitle")}</p>
           </div>
           {!showSend && (
             <button
@@ -577,7 +579,7 @@ export default function WalletPage() {
               className="flex items-center gap-1.5 rounded-full bg-gold px-3.5 py-1.5 text-xs font-bold text-ink-gold shadow-sm disabled:opacity-50 active:scale-95 transition-transform"
             >
               <Send className="h-3.5 w-3.5 stroke-[2.2]" aria-hidden />
-              Send
+              {t("send")}
             </button>
           )}
         </div>
@@ -597,7 +599,7 @@ export default function WalletPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-dashed border-gold/60 bg-gold/10 text-gold group-hover:scale-105 transition-transform">
                 <Plus className="h-5 w-5 stroke-[2.5]" />
               </div>
-              <span className="text-[11px] font-semibold text-ink-500 truncate max-w-[56px]">New</span>
+              <span className="text-[11px] font-semibold text-ink-500 truncate max-w-[56px]">{t("wallet_new_recipient")}</span>
             </button>
 
             {/* Frequent / Shared contact avatars */}
@@ -643,7 +645,7 @@ export default function WalletPage() {
                     : "text-ink-500 hover:text-ink"
                 }`}
               >
-                {cat === "all" ? "All Contacts" : cat === "shared" ? "Shared Wallets" : "Recent P2P"}
+                {cat === "all" ? t("wallet_contacts_all") : cat === "shared" ? t("wallet_contacts_shared") : t("wallet_contacts_recent")}
               </button>
             ))}
           </div>
@@ -680,8 +682,8 @@ export default function WalletPage() {
 
             <div className="space-y-2 pt-1">
               <SwipeToConfirm
-                label="Slide to transfer funds"
-                confirmedLabel="Transferring…"
+                label={t("wallet_slide_to_transfer")}
+                confirmedLabel={t("wallet_transferring")}
                 onConfirm={executeTransfer}
                 disabled={sendBusy || !online || !sendRecipient.trim() || !sendAmount}
               />
@@ -693,7 +695,7 @@ export default function WalletPage() {
                 }}
                 className="w-full py-1.5 text-center text-xs font-semibold text-ink-500 hover:text-ink"
               >
-                Cancel
+                {t("cancel")}
               </button>
             </div>
           </div>
@@ -705,7 +707,7 @@ export default function WalletPage() {
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-ink-500" strokeWidth={2} aria-hidden />
           <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">
-            Share &ldquo;{selectedWallet?.name ?? "Main Wallet"}&rdquo;
+            {t("wallet_share_heading")} &ldquo;{selectedWallet?.name ?? t("wallet_main")}&rdquo;
           </h2>
         </div>
 
@@ -726,7 +728,7 @@ export default function WalletPage() {
                       disabled={respondingId === r.id}
                       className="min-h-9 flex-1 rounded-full border border-[var(--border-faint)] text-xs font-bold text-ink disabled:opacity-60"
                     >
-                      Decline
+                      {t("decline")}
                     </button>
                     <button
                       type="button"
@@ -734,7 +736,7 @@ export default function WalletPage() {
                       disabled={respondingId === r.id}
                       className="min-h-9 flex-1 rounded-full bg-gold text-xs font-bold text-ink-gold disabled:opacity-60"
                     >
-                      Accept
+                      {t("accept")}
                     </button>
                   </div>
                 </div>
@@ -744,7 +746,7 @@ export default function WalletPage() {
 
         {shares && shares.received.filter((r) => r.status === "active").length > 0 && (
           <div className="space-y-1.5">
-            <p className="text-xs font-semibold text-ink-500">Shared with you</p>
+            <p className="text-xs font-semibold text-ink-500">{t("wallet_shared_with_you")}</p>
             {shares.received
               .filter((r) => r.status === "active")
               .map((r) => (
@@ -754,7 +756,7 @@ export default function WalletPage() {
                       {r.owner_name} · {r.wallet_name}
                     </span>
                     <span className="block text-xs text-ink-500">
-                      {r.owner_balance != null ? `${formatUgx(r.owner_balance)} available` : "Active"}
+                      {r.owner_balance != null ? `${formatUgx(r.owner_balance)} available` : t("wallet_active")}
                     </span>
                   </span>
                   <button
@@ -763,7 +765,7 @@ export default function WalletPage() {
                     disabled={respondingId === r.id}
                     className="shrink-0 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-1.5 text-xs font-bold text-ink disabled:opacity-60"
                   >
-                    Stop
+                    {t("wallet_stop")}
                   </button>
                 </div>
               ))}
@@ -772,7 +774,7 @@ export default function WalletPage() {
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-ink-500">People you&apos;ve shared with</p>
+            <p className="text-xs font-semibold text-ink-500">{t("wallet_shared_with_others")}</p>
             {!showShareInvite && (
               <button
                 type="button"
@@ -780,12 +782,12 @@ export default function WalletPage() {
                 disabled={!online}
                 className="text-xs font-bold text-gold disabled:opacity-50"
               >
-                + Share your wallet
+                + {t("wallet_share_yours")}
               </button>
             )}
           </div>
           {shares && shares.granted.length === 0 && !showShareInvite && (
-            <p className="text-xs text-ink-500">You haven&apos;t shared your wallet with anyone.</p>
+            <p className="text-xs text-ink-500">{t("wallet_not_shared_anyone")}</p>
           )}
           {shares?.granted.map((g) => (
             <div key={g.id} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border-faint)] p-3">
@@ -802,7 +804,7 @@ export default function WalletPage() {
                   disabled={respondingId === g.id}
                   className="shrink-0 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-1.5 text-xs font-bold text-ink disabled:opacity-60"
                 >
-                  Revoke
+                  {t("wallet_revoke")}
                 </button>
               )}
             </div>
@@ -826,14 +828,14 @@ export default function WalletPage() {
                   }}
                   className="min-h-10 flex-1 rounded-full border border-[var(--border-faint)] text-xs font-bold text-ink"
                 >
-                  Cancel
+                  {t("cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={shareBusy || !online}
                   className="min-h-10 flex-[2] rounded-full bg-gold text-xs font-bold text-ink-gold disabled:opacity-60"
                 >
-                  {shareBusy ? "Inviting…" : "Send invite"}
+                  {shareBusy ? t("wallet_inviting") : t("wallet_send_invite")}
                 </button>
               </div>
             </form>
@@ -843,7 +845,7 @@ export default function WalletPage() {
 
       <section className="home-card space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Usage report</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{t("wallet_usage_report")}</h2>
           <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
             {(["week", "month", "all"] as const).map((p) => (
               <button
@@ -862,26 +864,26 @@ export default function WalletPage() {
         {report ? (
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="rounded-xl bg-green/10 px-2 py-2.5">
-              <p className="text-xs text-ink-500">In</p>
+              <p className="text-xs text-ink-500">{t("wallet_in")}</p>
               <p className="text-sm font-bold text-green">{formatUgx(report.totalIn)}</p>
             </div>
             <div className="rounded-xl bg-[rgb(var(--surface-muted))] px-2 py-2.5">
-              <p className="text-xs text-ink-500">Out</p>
+              <p className="text-xs text-ink-500">{t("wallet_out")}</p>
               <p className="text-sm font-bold text-ink">{formatUgx(report.totalOut)}</p>
             </div>
             <div className="rounded-xl bg-gold/10 px-2 py-2.5">
-              <p className="text-xs text-ink-500">Net</p>
+              <p className="text-xs text-ink-500">{t("wallet_net")}</p>
               <p className="text-sm font-bold text-ink">{formatUgx(report.net)}</p>
             </div>
           </div>
         ) : (
-          <p className="text-xs text-ink-500">No activity in this period.</p>
+          <p className="text-xs text-ink-500">{t("wallet_no_activity")}</p>
         )}
       </section>
 
       <section className="space-y-2.5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Activity</h2>
-        {activityLedger.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No wallet activity yet.</p>}
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{t("wallet_activity_heading")}</h2>
+        {activityLedger.length === 0 && <p className="py-6 text-center text-sm text-ink-500">{t("wallet_no_activity_yet")}</p>}
         <ul className="space-y-2">
           {activityLedger.map((entry) => {
             const Icon = LEDGER_ICONS[entry.type] ?? WalletIcon;
@@ -922,15 +924,15 @@ export default function WalletPage() {
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/20 mb-5 shadow-lg">
             <Check className="h-10 w-10 text-white stroke-[3.5]" />
           </div>
-          <h3 className="text-2xl font-black tracking-tight text-white mb-2">Transfer Confirmed!</h3>
+          <h3 className="text-2xl font-black tracking-tight text-white mb-2">{t("wallet_transfer_confirmed")}</h3>
           <p className="text-base font-semibold text-white/95 text-center max-w-xs mb-8">{sendSuccess}</p>
           <span className="rounded-full bg-white/25 px-5 py-2 text-xs font-extrabold uppercase tracking-wider text-white shadow-sm">
-            Tap anywhere to close
+            {t("wallet_tap_to_close")}
           </span>
         </div>
       )}
 
-      <BottomDrawer isOpen={showCreateWallet} onClose={() => setShowCreateWallet(false)} title="New wallet">
+      <BottomDrawer isOpen={showCreateWallet} onClose={() => setShowCreateWallet(false)} title={t("wallet_new_wallet_title")}>
         <form onSubmit={submitCreateWallet} className="space-y-3">
           <div className="flex flex-wrap gap-1.5">
             {suggestedNames.map((name) => (
@@ -950,7 +952,7 @@ export default function WalletPage() {
             required
             value={newWalletName}
             onChange={(e) => setNewWalletName(e.target.value.slice(0, 40))}
-            placeholder="Or type your own name"
+            placeholder={t("wallet_type_own_name")}
             className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
           />
           {walletError && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{walletError}</p>}
@@ -959,15 +961,15 @@ export default function WalletPage() {
             disabled={walletBusy || !newWalletName.trim()}
             className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
           >
-            {walletBusy ? "Creating…" : "Create wallet"}
+            {walletBusy ? t("wallet_creating") : t("wallet_create_wallet")}
           </button>
         </form>
       </BottomDrawer>
 
-      <BottomDrawer isOpen={showMoveFunds} onClose={() => setShowMoveFunds(false)} title="Move funds">
+      <BottomDrawer isOpen={showMoveFunds} onClose={() => setShowMoveFunds(false)} title={t("wallet_move_funds_title")}>
         <form onSubmit={submitMoveFunds} className="space-y-3">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-ink-500">From</label>
+            <label className="text-xs font-semibold text-ink-500">{t("wallet_from")}</label>
             <select
               value={moveFrom}
               onChange={(e) => setMoveFrom(e.target.value)}
@@ -981,13 +983,13 @@ export default function WalletPage() {
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-ink-500">To</label>
+            <label className="text-xs font-semibold text-ink-500">{t("wallet_to")}</label>
             <select
               value={moveTo}
               onChange={(e) => setMoveTo(e.target.value)}
               className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
             >
-              <option value="">Choose a wallet</option>
+              <option value="">{t("wallet_choose_wallet")}</option>
               {wallets
                 .filter((w) => w.id !== moveFrom)
                 .map((w) => (
@@ -1011,7 +1013,7 @@ export default function WalletPage() {
             disabled={moveBusy || !moveTo || !moveAmount}
             className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
           >
-            {moveBusy ? "Moving…" : "Move funds"}
+            {moveBusy ? t("wallet_moving") : t("wallet_move_funds")}
           </button>
         </form>
       </BottomDrawer>
