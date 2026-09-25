@@ -4,14 +4,16 @@ import type { OrderRow, SavedMobileNumber, Wallet } from "@tuma/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { formatUgx } from "../../lib/order-display";
+import { useTranslate, type TranslationKey } from "../../lib/i18n";
 
-const WITHDRAWAL_STATUS_LABEL: Record<Wallet["withdrawals"][number]["status"], string> = {
-  pending: "Processing",
-  successful: "Paid out",
-  failed: "Failed — refunded",
+const WITHDRAWAL_STATUS_KEYS: Record<Wallet["withdrawals"][number]["status"], TranslationKey> = {
+  pending: "wallet_withdrawal_processing",
+  successful: "wallet_withdrawal_paid",
+  failed: "wallet_withdrawal_failed",
 };
 
 export default function WalletPage() {
+  const t = useTranslate();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [reserve, setReserve] = useState<{ enabled: boolean; amount: number }>({ enabled: false, amount: 0 });
@@ -131,22 +133,23 @@ export default function WalletPage() {
 
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
-      <h1 className="text-xl font-bold text-ink">Wallet</h1>
+      <h1 className="text-xl font-bold text-ink">{t("wallet_title")}</h1>
 
       {wallet && wallet.depositRequired && wallet.depositShortfall > 0 && (
         <section className="home-card space-y-3 !border-l-4 !border-l-red-500">
           <div>
-            <p className="text-sm font-bold text-red-600">Top up to keep taking jobs</p>
+            <p className="text-sm font-bold text-red-600">{t("wallet_topup_title")}</p>
             <p className="mt-1 text-xs text-ink-500">
-              A cash order&apos;s platform fee came out of your required deposit. You&apos;re short{" "}
-              {formatUgx(wallet.depositShortfall)} of the {formatUgx(wallet.requiredDeposit)} minimum — top up to
-              claim or apply for new jobs again.
+              {t("wallet_topup_note", {
+                shortfall: formatUgx(wallet.depositShortfall),
+                required: formatUgx(wallet.requiredDeposit),
+              })}
             </p>
           </div>
           {pendingTopupId ? (
             <div className="flex items-center gap-3 py-1">
               <span className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-gold border-t-transparent" />
-              <p className="text-sm text-ink-500">Confirming your top-up…</p>
+              <p className="text-sm text-ink-500">{t("wallet_topup_confirming")}</p>
             </div>
           ) : (
             <form onSubmit={submitTopup} className="space-y-2">
@@ -155,7 +158,7 @@ export default function WalletPage() {
                 required
                 value={topupMsisdn}
                 onChange={(e) => setTopupMsisdn(e.target.value)}
-                placeholder="Mobile money number, e.g. 0772345678"
+                placeholder={t("wallet_topup_placeholder")}
                 className="w-full rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-[15px] outline-none focus:border-gold"
               />
               <button
@@ -163,7 +166,7 @@ export default function WalletPage() {
                 disabled={topupBusy}
                 className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
               >
-                {topupBusy ? "Starting…" : `Top up ${formatUgx(wallet.depositShortfall)}`}
+                {topupBusy ? t("wallet_topup_starting") : t("wallet_topup_button", { amount: formatUgx(wallet.depositShortfall) })}
               </button>
             </form>
           )}
@@ -172,21 +175,17 @@ export default function WalletPage() {
 
       <section className="home-card space-y-3 text-center">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Wallet balance</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("wallet_balance")}</p>
           <p className={`text-2xl font-bold ${wallet && wallet.balance < 0 ? "text-red-600" : "text-ink"}`}>
             {wallet ? formatUgx(wallet.balance) : "—"}
           </p>
-          <p className="text-xs text-ink-500">Escrow payouts land here — cash jobs pay you directly, on the spot.</p>
+          <p className="text-xs text-ink-500">{t("wallet_balance_note")}</p>
           {wallet && wallet.balance < 0 && (
-            <p className="mt-1 text-xs text-ink-500">
-              A negative balance is a cash-order platform fee — it&apos;ll be covered automatically by your next
-              digital job&apos;s payout.
-            </p>
+            <p className="mt-1 text-xs text-ink-500">{t("wallet_balance_negative_note")}</p>
           )}
           {reserve.enabled && (
             <p className="mt-1 text-xs text-ink-500">
-              A minimum of {formatUgx(reserveAmount)} always stays in your wallet — up to {formatUgx(maxWithdrawable)}{" "}
-              is available to withdraw right now.
+              {t("wallet_reserve_note", { reserve: formatUgx(reserveAmount), available: formatUgx(maxWithdrawable) })}
             </p>
           )}
         </div>
@@ -194,7 +193,7 @@ export default function WalletPage() {
 
         {withdrawalNumbers.length >= 2 && (
           <div className="space-y-1.5 text-left">
-            <label className="text-xs font-semibold text-ink-500">Withdraw to</label>
+            <label className="text-xs font-semibold text-ink-500">{t("wallet_withdraw_to")}</label>
             <div className="flex gap-2">
               {withdrawalNumbers.map((n) => (
                 <button
@@ -215,7 +214,7 @@ export default function WalletPage() {
 
         <div className="space-y-2 text-left">
           <label className="text-xs font-semibold text-ink-500" htmlFor="withdrawAmount">
-            Amount to withdraw (UGX) — leave blank to withdraw the full available amount
+            {t("wallet_amount_label")}
           </label>
           <input
             id="withdrawAmount"
@@ -234,22 +233,22 @@ export default function WalletPage() {
             disabled={busy || hasPendingWithdrawal || !canWithdrawCustom}
             className="min-h-11 flex-1 rounded-full border border-gold px-4 text-sm font-bold text-gold disabled:opacity-50"
           >
-            {busy ? "Sending…" : "Withdraw amount"}
+            {busy ? t("wallet_sending") : t("wallet_withdraw_amount")}
           </button>
           <button
             onClick={() => withdraw(undefined)}
             disabled={busy || hasPendingWithdrawal || maxWithdrawable <= 0 || needsNumberChoice}
             className="min-h-11 flex-1 rounded-full bg-gold px-4 text-sm font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-50"
           >
-            {busy ? "Sending…" : "Withdraw all"}
+            {busy ? t("wallet_sending") : t("wallet_withdraw_all")}
           </button>
         </div>
-        {needsNumberChoice && <p className="text-xs text-red-600">Choose which number to withdraw to.</p>}
+        {needsNumberChoice && <p className="text-xs text-red-600">{t("wallet_choose_number")}</p>}
       </section>
 
       {wallet && wallet.withdrawals.length > 0 && (
         <section className="space-y-2.5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Withdrawals</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{t("wallet_withdrawals_header")}</h2>
           <ul className="space-y-2">
             {wallet.withdrawals.map((w) => (
               <li key={w.id} className="home-card flex items-center justify-between !rounded-2xl !px-3 !py-3">
@@ -266,7 +265,7 @@ export default function WalletPage() {
                         : "bg-[rgb(var(--surface-muted))] text-ink-500"
                   }`}
                 >
-                  {WITHDRAWAL_STATUS_LABEL[w.status]}
+                  {t(WITHDRAWAL_STATUS_KEYS[w.status])}
                 </span>
               </li>
             ))}
@@ -276,13 +275,13 @@ export default function WalletPage() {
 
       <section className="space-y-2.5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">
-          Job history · {formatUgx(settledTotal)} lifetime
+          {t("wallet_job_history", { total: formatUgx(settledTotal) })}
         </h2>
-        {orders.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No completed jobs yet.</p>}
+        {orders.length === 0 && <p className="py-6 text-center text-sm text-ink-500">{t("wallet_no_completed_jobs")}</p>}
         <ul className="space-y-2">
           {orders.map((order) => (
             <li key={order.id} className="home-card flex items-center justify-between !rounded-2xl !px-3 !py-3">
-              <span className="text-sm text-ink">{order.destination_area ?? `Job #${order.id.slice(-6)}`}</span>
+              <span className="text-sm text-ink">{order.destination_area ?? t("wallet_job_fallback", { id: order.id.slice(-6) })}</span>
               <span className="text-sm font-semibold text-green">
                 {formatUgx(order.final_total ?? order.estimated_total)}
               </span>

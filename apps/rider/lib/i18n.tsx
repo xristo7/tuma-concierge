@@ -119,6 +119,40 @@ const STRINGS: Record<string, { en: string; lg: string }> = {
   cadence_daily: { en: "day", lg: "lunaku" },
   cadence_weekly: { en: "week", lg: "wiiki" },
   cadence_monthly: { en: "month", lg: "mwezi" },
+  // Wallet
+  wallet_title: { en: "Wallet", lg: "Ensawo" },
+  wallet_withdrawal_processing: { en: "Processing", lg: "Ekolebwa" },
+  wallet_withdrawal_paid: { en: "Paid out", lg: "Kisasuliddwa" },
+  wallet_withdrawal_failed: { en: "Failed — refunded", lg: "Kigaanye — kizzeddwa" },
+  wallet_topup_title: { en: "Top up to keep taking jobs", lg: "Teekamu ssente okusigala nga okwata emirimu" },
+  wallet_topup_note: {
+    en: "A cash order's platform fee came out of your required deposit. You're short {shortfall} of the {required} minimum — top up to claim or apply for new jobs again.",
+    lg: "Omusolo gw'ekyakozesebwa ku odaala ey'ssente ez'omukono gwaggiddwa mu ssente zo ez'obutebenkevu. Obulinako {shortfall} ku {required} ez'obutasingako — teekamu ssente okusobola okukwata oba okusaba emirimu emipya nate.",
+  },
+  wallet_topup_confirming: { en: "Confirming your top-up…", lg: "Tukakasa okuteekamu ssente zo…" },
+  wallet_topup_placeholder: { en: "Mobile money number, e.g. 0772345678", lg: "Ennamba y'ssente ku ssimu, gamba nga 0772345678" },
+  wallet_topup_starting: { en: "Starting…", lg: "Tutandika…" },
+  wallet_topup_button: { en: "Top up {amount}", lg: "Teekamu {amount}" },
+  wallet_balance: { en: "Wallet balance", lg: "Ssente ezisigaddewo mu nsawo" },
+  wallet_balance_note: { en: "Escrow payouts land here — cash jobs pay you directly, on the spot.", lg: "Ssente ez'okusasulwa mu escrow zituuka wano — emirimu egy'ssente ez'omukono gukusasula butereevu, ekifo n'ekiseera." },
+  wallet_balance_negative_note: {
+    en: "A negative balance is a cash-order platform fee — it'll be covered automatically by your next digital job's payout.",
+    lg: "Ssente ez'obutasingako mu bbalansi lye musolo gw'ekyakozesebwa ku odaala ey'ssente ez'omukono — zijja kusasulwa buteredde okuva ku kusasulwa kw'omulimu gwo oguddako ogw'ssimu.",
+  },
+  wallet_reserve_note: {
+    en: "A minimum of {reserve} always stays in your wallet — up to {available} is available to withdraw right now.",
+    lg: "Obutasingako bwa {reserve} bubeera mu nsawo yo bulijjo — okutuusa {available} kisoboka okuggyibwa kati.",
+  },
+  wallet_withdraw_to: { en: "Withdraw to", lg: "Ggyayo ku" },
+  wallet_amount_label: { en: "Amount to withdraw (UGX) — leave blank to withdraw the full available amount", lg: "Omuwendo okuggyayo (UGX) — leka ekifo we kimu okuggyayo ssente zonna eziriwo" },
+  wallet_withdraw_amount: { en: "Withdraw amount", lg: "Ggyayo omuwendo" },
+  wallet_withdraw_all: { en: "Withdraw all", lg: "Ggyayo zonna" },
+  wallet_sending: { en: "Sending…", lg: "Tuweereza…" },
+  wallet_choose_number: { en: "Choose which number to withdraw to.", lg: "Londa ennamba y'okuggyayoko." },
+  wallet_withdrawals_header: { en: "Withdrawals", lg: "Okuggyayo" },
+  wallet_job_history: { en: "Job history · {total} lifetime", lg: "Ebyafaayo by'emirimu · {total} byonna" },
+  wallet_no_completed_jobs: { en: "No completed jobs yet.", lg: "Tewali mulimu gumaliddwa." },
+  wallet_job_fallback: { en: "Job #{id}", lg: "Omulimu #{id}" },
 };
 
 export type TranslationKey = keyof typeof STRINGS;
