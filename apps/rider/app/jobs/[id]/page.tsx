@@ -11,12 +11,14 @@ import { FeeProposalVoicePlayer } from "../../../components/FeeProposalVoicePlay
 import { VoiceNotePlayer } from "../../../components/VoiceNotePlayer";
 import { VoiceReasonRecorder } from "../../../components/VoiceReasonRecorder";
 import { api, errorMessage } from "../../../lib/api";
+import { useTranslate } from "../../../lib/i18n";
 import { formatUgx, jobTitle, stageLabel } from "../../../lib/order-display";
 import { useLivePolling } from "../../../lib/use-live-polling";
 
 type PendingEdit = { originalName: string; substituteName: string; priceDelta: number };
 
 export default function JobDetailPage() {
+  const t = useTranslate();
   const params = useParams<{ id: string }>();
   const orderId = params.id;
   const router = useRouter();
@@ -65,7 +67,7 @@ export default function JobDetailPage() {
   }
 
   if (!detail) {
-    return <div className="p-4 text-sm text-ink-500">Loading job…</div>;
+    return <div className="p-4 text-sm text-ink-500">{t("job_loading")}</div>;
   }
 
   const { order, items, substitutions, feeProposals } = detail;
@@ -178,14 +180,14 @@ export default function JobDetailPage() {
         {order.type === "parcel" && order.pickup_area && (
           <p className="flex items-center gap-1.5 text-sm text-ink-500">
             <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
-            Pickup: {order.pickup_area}
+            {t("job_pickup", { area: order.pickup_area })}
             {order.pickup_address ? ` · ${order.pickup_address}` : ""}
           </p>
         )}
         {order.destination_area && (
           <p className="flex items-center gap-1.5 text-sm text-ink-500">
             <MapPin className="h-3.5 w-3.5 text-ink-500" strokeWidth={2} aria-hidden />
-            {order.type === "parcel" ? "Deliver to: " : ""}
+            {order.type === "parcel" ? t("job_deliver_to") : ""}
             {order.destination_area}
             {order.destination_address ? ` · ${order.destination_address}` : ""}
           </p>
@@ -198,7 +200,7 @@ export default function JobDetailPage() {
 
       {order.type === "shopping" ? (
         <section className="home-card space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Shopping list</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{t("job_shopping_list")}</h2>
           <ul className="space-y-1.5">
             {items.map((item) => {
               const edit = pendingEdits[item.id];
@@ -210,7 +212,7 @@ export default function JobDetailPage() {
                       <span className={`block ${edit ? "text-ink-500 line-through" : ""}`}>
                         {item.quantity}× {item.name}
                         {item.unit_price != null && (
-                          <span className="text-ink-500"> · Est. {formatUgx(item.unit_price)} each</span>
+                          <span className="text-ink-500"> · {t("job_est_each", { amount: formatUgx(item.unit_price) })}</span>
                         )}
                       </span>
                       {item.note && <span className="block text-xs text-ink-500">{item.note}</span>}
@@ -224,7 +226,7 @@ export default function JobDetailPage() {
                             onClick={() => removeEdit(item.id)}
                             className="text-ink-500 underline"
                           >
-                            Undo
+                            {t("job_undo")}
                           </button>
                         </span>
                       )}
@@ -256,20 +258,20 @@ export default function JobDetailPage() {
                         onClick={() => markUnavailable(item)}
                         className="w-full rounded-lg bg-[rgb(var(--surface-card))] py-1.5 text-xs font-bold text-ink"
                       >
-                        Not available — remove from list
+                        {t("job_not_available_remove")}
                       </button>
                       <div className="grid grid-cols-2 gap-1.5">
                         <input
                           value={draftSubstitute}
                           onChange={(e) => setDraftSubstitute(e.target.value)}
-                          placeholder="Replace with…"
+                          placeholder={t("job_replace_with")}
                           className="w-full rounded-lg border border-[var(--border-faint)] px-2 py-1.5 text-xs outline-none focus:border-gold"
                         />
                         <input
                           value={draftPriceDelta}
                           onChange={(e) => setDraftPriceDelta(e.target.value.replace(/[^-\d]/g, ""))}
                           inputMode="numeric"
-                          placeholder="Price change"
+                          placeholder={t("job_price_change")}
                           className="w-full rounded-lg border border-[var(--border-faint)] px-2 py-1.5 text-xs outline-none focus:border-gold"
                         />
                       </div>
@@ -279,7 +281,7 @@ export default function JobDetailPage() {
                         onClick={() => saveDraft(item)}
                         className="w-full rounded-lg bg-gold py-1.5 text-xs font-bold text-ink-gold disabled:opacity-50"
                       >
-                        Save change
+                        {t("job_save_change")}
                       </button>
                     </div>
                   )}
@@ -289,20 +291,23 @@ export default function JobDetailPage() {
           </ul>
           <div className="space-y-1 border-t border-[var(--border-faint)] pt-2 text-sm font-semibold">
             <div className="flex justify-between">
-              <span>Items total</span>
+              <span>{t("job_items_total")}</span>
               <span>{formatUgx((order.final_total ?? order.estimated_total ?? 0) - (order.delivery_fee ?? 0))}</span>
             </div>
             <div className="flex justify-between text-ink-500">
-              <span>Delivery fee</span>
+              <span>{t("job_delivery_fee")}</span>
               <span>{formatUgx(order.delivery_fee ?? 0)}</span>
             </div>
           </div>
           {pendingCount > 0 && (
             <div className="flex items-center justify-between gap-3 rounded-xl border border-gold bg-gold/10 p-3">
               <p className="text-xs font-semibold text-ink">
-                {pendingCount} change{pendingCount > 1 ? "s" : ""} ·{" "}
-                {pendingNetDelta >= 0 ? "+" : ""}
-                {formatUgx(pendingNetDelta)}
+                {t("job_changes_count", {
+                  count: pendingCount,
+                  plural: pendingCount > 1 ? "s" : "",
+                  sign: pendingNetDelta >= 0 ? "+" : "",
+                  amount: formatUgx(pendingNetDelta),
+                })}
               </p>
               <button
                 type="button"
@@ -310,26 +315,26 @@ export default function JobDetailPage() {
                 onClick={sendBatch}
                 className="shrink-0 rounded-full bg-gold px-4 py-2 text-xs font-bold text-ink-gold disabled:opacity-60"
               >
-                Send for approval
+                {t("job_send_for_approval")}
               </button>
             </div>
           )}
         </section>
       ) : (
         <section className="home-card flex justify-between text-sm font-semibold">
-          <span>Delivery fee</span>
+          <span>{t("job_delivery_fee")}</span>
           <span>{formatUgx(order.delivery_fee ?? order.final_total ?? order.estimated_total)}</span>
         </section>
       )}
 
       {canProposeFee && (
         <section className="home-card space-y-2">
-          <h2 className="text-sm font-semibold text-ink">Delivery fee</h2>
+          <h2 className="text-sm font-semibold text-ink">{t("job_delivery_fee")}</h2>
           {latestFeeProposal && (
             <div className="rounded-xl bg-[rgb(var(--surface-muted))] p-3 text-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-ink">
-                  You suggested a delivery fee of {formatUgx(latestFeeProposal.proposed_total - currentItemsTotal)}
+                  {t("job_you_suggested_fee", { amount: formatUgx(latestFeeProposal.proposed_total - currentItemsTotal) })}
                   {latestFeeProposal.reason ? ` — ${latestFeeProposal.reason}` : ""}
                 </span>
                 <span
@@ -341,7 +346,7 @@ export default function JobDetailPage() {
                         : "bg-white text-ink-500"
                   }`}
                 >
-                  {latestFeeProposal.status === "pending" ? "Waiting" : latestFeeProposal.status}
+                  {latestFeeProposal.status === "pending" ? t("job_waiting") : latestFeeProposal.status}
                 </span>
               </div>
               {latestFeeProposal.reason_voice_key && (
@@ -359,14 +364,14 @@ export default function JobDetailPage() {
                 }}
                 className="text-sm font-bold text-gold"
               >
-                Suggest a different delivery fee
+                {t("job_suggest_different_fee")}
               </button>
             )
           ) : (
             <div className="space-y-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-ink-500" htmlFor="new-delivery-fee">
-                  New delivery fee (UGX) — items cost isn&apos;t affected
+                  {t("job_new_delivery_fee_label")}
                 </label>
                 <input
                   id="new-delivery-fee"
@@ -376,24 +381,24 @@ export default function JobDetailPage() {
                   placeholder="e.g. 8000"
                   className="w-full rounded-lg border-2 border-gold/40 px-2.5 py-2.5 text-base font-bold text-ink outline-none focus:border-gold"
                 />
-                <p className="text-xs text-ink-500">Currently {formatUgx(order.delivery_fee ?? 0)}.</p>
+                <p className="text-xs text-ink-500">{t("job_currently", { amount: formatUgx(order.delivery_fee ?? 0) })}</p>
               </div>
 
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-ink-500" htmlFor="fee-reason">
-                  Reason (optional, typed)
+                  {t("job_reason_optional")}
                 </label>
                 <input
                   id="fee-reason"
                   value={feeReason}
                   onChange={(e) => setFeeReason(e.target.value)}
-                  placeholder="Type a reason in English…"
+                  placeholder={t("job_type_reason_placeholder")}
                   className="w-full rounded-lg border border-[var(--border-faint)] px-2.5 py-2 text-sm outline-none focus:border-gold"
                 />
               </div>
 
               <div className="space-y-1 rounded-lg border border-dashed border-[var(--border-faint)] p-2.5">
-                <p className="text-xs font-semibold text-ink-500">Or record a voice reason (any language)</p>
+                <p className="text-xs font-semibold text-ink-500">{t("job_or_record_voice_reason")}</p>
                 <VoiceReasonRecorder blob={feeVoiceNote} onChange={setFeeVoiceNote} />
               </div>
 
@@ -406,7 +411,7 @@ export default function JobDetailPage() {
                   }}
                   className="flex-1 rounded-lg border border-[var(--border-faint)] py-1.5 text-xs font-bold text-ink"
                 >
-                  Cancel
+                  {t("job_cancel")}
                 </button>
                 <button
                   type="button"
@@ -414,7 +419,7 @@ export default function JobDetailPage() {
                   onClick={sendFeeProposal}
                   className="flex-[2] rounded-lg bg-gold py-1.5 text-xs font-bold text-ink-gold disabled:opacity-50"
                 >
-                  Send to customer
+                  {t("job_send_to_customer")}
                 </button>
               </div>
             </div>
@@ -424,13 +429,11 @@ export default function JobDetailPage() {
 
       <section className="home-card space-y-3">
         {["Create", "Match", "Fund"].includes(order.stage) && (
-          <p className="text-sm text-ink-500">Waiting on the customer to fund this order.</p>
+          <p className="text-sm text-ink-500">{t("job_waiting_on_customer_fund")}</p>
         )}
 
         {canPropose && pendingCount === 0 && (
-          <p className="text-sm text-ink-500">
-            Tap the pencil next to an item above if something&apos;s unavailable or costs more.
-          </p>
+          <p className="text-sm text-ink-500">{t("job_tap_pencil_hint")}</p>
         )}
 
         {substitutions.length > 0 && (
@@ -468,7 +471,7 @@ export default function JobDetailPage() {
               value={etaMinutes}
               onChange={(e) => setEtaMinutes(e.target.value.replace(/[^\d]/g, ""))}
               inputMode="numeric"
-              placeholder="ETA (min)"
+              placeholder={t("job_eta_placeholder")}
               className="w-24 rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-sm outline-none focus:border-gold"
             />
             <button
@@ -476,7 +479,7 @@ export default function JobDetailPage() {
               disabled={busy}
               className="min-h-11 flex-1 rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
             >
-              Start delivery
+              {t("job_start_delivery")}
             </button>
           </form>
         )}
@@ -485,8 +488,8 @@ export default function JobDetailPage() {
           <>
             <p className="text-sm text-ink-500">
               {order.is_ride
-                ? `Heading to pick up your passenger${order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Navigate there, then confirm once you've arrived.`
-                : `On the way${order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}. Navigate to the customer, then confirm once you've arrived.`}
+                ? t("job_heading_pickup_passenger", { eta: order.eta_minutes ? ` — ~${order.eta_minutes} min` : "" })
+                : t("job_on_the_way", { eta: order.eta_minutes ? ` — ~${order.eta_minutes} min` : "" })}
             </p>
             <DeliveryNavigation
               orderId={orderId}
@@ -499,11 +502,11 @@ export default function JobDetailPage() {
                   if (!order.is_ride) router.push("/active");
                 })
               }
-              confirmButtonLabel={order.is_ride ? "Confirm Pickup" : "Confirm Delivery"}
+              confirmButtonLabel={order.is_ride ? t("job_confirm_pickup") : t("job_confirm_delivery")}
               confirmModalDescription={
                 order.is_ride
-                  ? "Confirms you've reached your passenger. They'll be notified you're here."
-                  : "Confirms you've reached the customer and marks this job as arrived. They'll be notified to confirm handover on their end."
+                  ? t("job_confirm_pickup_desc")
+                  : t("job_confirm_delivery_desc")
               }
             />
           </>
@@ -511,7 +514,7 @@ export default function JobDetailPage() {
 
         {order.stage === "Arrived" && order.is_ride && (
           <>
-            <p className="text-sm text-ink-500">Your passenger&apos;s been notified you&apos;re here.</p>
+            <p className="text-sm text-ink-500">{t("job_passenger_notified")}</p>
             <button
               disabled={busy}
               onClick={() =>
@@ -521,43 +524,39 @@ export default function JobDetailPage() {
               }
               className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
             >
-              Confirm passenger picked up
+              {t("job_confirm_passenger_picked_up")}
             </button>
           </>
         )}
 
         {order.stage === "Arrived" && !order.is_ride && (
-          <p className="text-sm text-ink-500">
-            The customer&apos;s been notified you&apos;re here. Ask them to confirm handover in their app.
-          </p>
+          <p className="text-sm text-ink-500">{t("job_customer_notified_handover")}</p>
         )}
 
         {order.stage === "PickedUp" && (
           <>
-            <p className="text-sm text-ink-500">
-              Heading to the destination. The trip completes once your passenger confirms in their app.
-            </p>
+            <p className="text-sm text-ink-500">{t("job_heading_destination")}</p>
             <DeliveryNavigation
               orderId={orderId}
               destinationLat={order.destination_lat}
               destinationLng={order.destination_lng}
               busy={busy}
               onConfirmDelivery={() => router.push("/active")}
-              confirmButtonLabel="Trip Complete"
-              confirmModalDescription="Marks the trip as finished on your end. The passenger still needs to confirm in their own app to release payment."
+              confirmButtonLabel={t("job_trip_complete")}
+              confirmModalDescription={t("job_trip_complete_desc")}
             />
           </>
         )}
 
         {order.stage === "Handover" && (
           <>
-            <p className="text-sm text-ink-500">Handover confirmed. Collect your payout.</p>
+            <p className="text-sm text-ink-500">{t("job_handover_confirmed")}</p>
             <button
               disabled={busy}
               onClick={() => run(() => api.settleOrder(orderId))}
               className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
             >
-              Settle & get paid
+              {t("job_settle_get_paid")}
             </button>
           </>
         )}
@@ -565,29 +564,30 @@ export default function JobDetailPage() {
         {order.stage === "Settle" && (
           <div className="space-y-3 text-center">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">You earned</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("job_you_earned")}</p>
               <p className="text-3xl font-extrabold text-green">
                 {formatUgx(order.delivery_fee ?? order.final_total ?? order.estimated_total)}
               </p>
               {order.type === "shopping" && order.payment_rail === "escrow" && order.delivery_fee != null && (
                 <p className="mt-1 text-xs text-ink-500">
-                  Plus{" "}
-                  {formatUgx((order.final_total ?? order.estimated_total ?? 0) - order.delivery_fee)} reimbursed
-                  for items — {formatUgx(order.final_total ?? order.estimated_total)} total settled to your
-                  wallet.
+                  {t("job_plus_reimbursed", {
+                    reimbursed: formatUgx((order.final_total ?? order.estimated_total ?? 0) - order.delivery_fee),
+                    total: formatUgx(order.final_total ?? order.estimated_total ?? 0),
+                  })}
                 </p>
               )}
             </div>
             {walletBalance != null && (
               <p className="text-sm text-ink-500">
-                Wallet balance: <span className="text-base font-bold text-ink">{formatUgx(walletBalance)}</span>
+                {t("job_wallet_balance_label")}
+                <span className="text-base font-bold text-ink">{formatUgx(walletBalance)}</span>
               </p>
             )}
             <Link
               href="/"
               className="inline-flex min-h-11 w-full items-center justify-center rounded-full bg-gold px-6 text-sm font-bold text-ink-gold"
             >
-              Back to Jobs
+              {t("job_back_to_jobs")}
             </Link>
           </div>
         )}
@@ -601,20 +601,18 @@ export default function JobDetailPage() {
               onClick={() => setConfirmCancel(true)}
               className="w-full text-center text-sm font-bold text-red-600"
             >
-              Cancel this job
+              {t("job_cancel_this_job")}
             </button>
           ) : (
             <div className="space-y-2 text-center">
-              <p className="text-sm text-ink-500">
-                This job goes back to the pool for another rider. You won&apos;t be offered it again.
-              </p>
+              <p className="text-sm text-ink-500">{t("job_cancel_note")}</p>
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setConfirmCancel(false)}
                   className="flex-1 rounded-full border border-[var(--border-faint)] py-2 text-sm font-bold text-ink"
                 >
-                  Keep job
+                  {t("job_keep_job")}
                 </button>
                 <button
                   type="button"
@@ -622,7 +620,7 @@ export default function JobDetailPage() {
                   onClick={cancelJob}
                   className="flex-1 rounded-full bg-red-600 py-2 text-sm font-bold text-white disabled:opacity-60"
                 >
-                  Yes, cancel
+                  {t("job_yes_cancel")}
                 </button>
               </div>
             </div>
@@ -636,7 +634,7 @@ export default function JobDetailPage() {
           className="home-card flex items-center gap-2 !rounded-2xl !py-3 text-sm font-bold text-ink"
         >
           <MessageCircle className="h-4 w-4 text-gold" strokeWidth={2} aria-hidden />
-          Open full-screen chat
+          {t("job_open_fullscreen_chat")}
         </Link>
       )}
     </div>
