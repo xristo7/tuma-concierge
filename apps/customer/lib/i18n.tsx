@@ -154,6 +154,11 @@ const STRINGS: Record<string, { en: string; lg: string }> = {
   wallet_to: { en: "To", lg: "Okutuuka" },
   wallet_choose_wallet: { en: "Choose a wallet", lg: "Londa ensawo" },
   wallet_moving: { en: "Moving…", lg: "Tusengeka…" },
+
+  // Restaurants
+  restaurants_title: { en: "Restaurants", lg: "Amaduuka g'Emmere" },
+  restaurants_none_yet: { en: "No restaurants available yet — check back soon.", lg: "Tewali duuka lya mmere kaakano — komawo mangu." },
+  restaurant_closed: { en: "Closed", lg: "Zigaddwa" },
 };
 
 export type TranslationKey = keyof typeof STRINGS;

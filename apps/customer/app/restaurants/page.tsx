@@ -5,8 +5,10 @@ import { ChevronRight, Store } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
+import { useTranslate } from "../../lib/i18n";
 
 export default function RestaurantsPage() {
+  const t = useTranslate();
   const [restaurants, setRestaurants] = useState<Restaurant[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,14 +21,14 @@ export default function RestaurantsPage() {
 
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
-      <h1 className="text-xl font-bold text-ink">Restaurants</h1>
+      <h1 className="text-xl font-bold text-ink">{t("restaurants_title")}</h1>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       {restaurants === null ? (
-        <p className="py-10 text-center text-sm text-ink-500">Loading…</p>
+        <p className="py-10 text-center text-sm text-ink-500">{t("loading")}</p>
       ) : restaurants.length === 0 ? (
-        <p className="py-10 text-center text-sm text-ink-500">No restaurants available yet — check back soon.</p>
+        <p className="py-10 text-center text-sm text-ink-500">{t("restaurants_none_yet")}</p>
       ) : (
         <ul className="space-y-2.5">
           {restaurants.map((r) => (
@@ -40,7 +42,7 @@ export default function RestaurantsPage() {
                     <span className="truncate text-[15px] font-bold text-ink">{r.name}</span>
                     {!r.is_open && (
                       <span className="shrink-0 rounded-full bg-[rgb(var(--surface-muted))] px-2 py-0.5 text-[10px] font-semibold text-ink-500">
-                        Closed
+                        {t("restaurant_closed")}
                       </span>
                     )}
                   </span>
