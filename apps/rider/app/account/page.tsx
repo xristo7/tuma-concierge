@@ -17,6 +17,7 @@ import { MobileNumberManager } from "../../components/MobileNumberManager";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 import { compressImage } from "../../lib/image-compress";
+import { useTranslate } from "../../lib/i18n";
 import { useLivePolling } from "../../lib/use-live-polling";
 
 const LocationMapPicker = dynamic(
@@ -57,6 +58,7 @@ function Field({
 }
 
 export default function AccountPage() {
+  const t = useTranslate();
   const { user, rider: authRider, refreshRider, logout } = useAuth();
   const [rider, setRider] = useState<Rider | null>(authRider);
 
@@ -233,7 +235,7 @@ export default function AccountPage() {
 
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
-      <h1 className="text-xl font-bold text-ink">Account</h1>
+      <h1 className="text-xl font-bold text-ink">{t("account_title")}</h1>
 
       <section className="home-card flex items-center gap-3">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
@@ -249,7 +251,7 @@ export default function AccountPage() {
               rider.verified ? "bg-green/15 text-green" : "bg-[rgb(var(--surface-muted))] text-ink-500"
             }`}
           >
-            {rider.verified ? "Verified" : "Pending"}
+            {rider.verified ? t("acc_verified") : t("acc_pending")}
           </span>
         )}
       </section>
@@ -264,33 +266,27 @@ export default function AccountPage() {
 
       {complete && rider && !rider.verified && (
         <div className="home-card flex items-center gap-3 !border-l-4 !border-l-gold">
-          <p className="text-sm text-ink-500">
-            Your profile is complete and waiting on an admin to verify it. You&apos;ll be able to see and claim
-            jobs as soon as you&apos;re approved — no need to do anything else here.
-          </p>
+          <p className="text-sm text-ink-500">{t("acc_profile_waiting")}</p>
         </div>
       )}
 
       {!complete && (
         <div className="home-card flex items-center gap-3 !border-l-4 !border-l-gold">
-          <p className="text-sm text-ink-500">
-            Complete your profile below — an admin can only review and approve you once every required field
-            (marked *) is filled in.
-          </p>
+          <p className="text-sm text-ink-500">{t("acc_profile_incomplete")}</p>
         </div>
       )}
 
       <form onSubmit={onSubmit} className="space-y-5">
         <section className="home-card space-y-3">
-          <h2 className="text-sm font-semibold text-ink">Personal details</h2>
+          <h2 className="text-sm font-semibold text-ink">{t("acc_personal_details")}</h2>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="First name" value={firstName} onChange={setFirstName} placeholder="Juma" required />
-            <Field label="Last name" value={lastName} onChange={setLastName} placeholder="Okello" required />
+            <Field label={t("acc_first_name")} value={firstName} onChange={setFirstName} placeholder="Juma" required />
+            <Field label={t("acc_last_name")} value={lastName} onChange={setLastName} placeholder="Okello" required />
           </div>
-          <Field label="Email (optional)" value={email} onChange={setEmail} placeholder="you@example.com" type="email" />
+          <Field label={t("acc_email_optional")} value={email} onChange={setEmail} placeholder="you@example.com" type="email" />
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-ink-500">Phone</label>
+              <label className="text-xs font-semibold text-ink-500">{t("acc_phone")}</label>
               <input
                 disabled
                 value={user?.phone ?? ""}
@@ -298,7 +294,7 @@ export default function AccountPage() {
               />
             </div>
             <Field
-              label="Alt. phone (optional)"
+              label={t("acc_alt_phone")}
               value={altPhone}
               onChange={setAltPhone}
               placeholder="+256700000000"
@@ -307,9 +303,9 @@ export default function AccountPage() {
         </section>
 
         <section className="home-card space-y-3">
-          <h2 className="text-sm font-semibold text-ink">Vehicle</h2>
+          <h2 className="text-sm font-semibold text-ink">{t("acc_vehicle")}</h2>
           <Field
-            label="Motorcycle registration number"
+            label={t("acc_moto_reg")}
             value={vehicleInfo}
             onChange={setVehicleInfo}
             placeholder="UBG 123X"
@@ -318,10 +314,10 @@ export default function AccountPage() {
         </section>
 
         <section className="home-card space-y-3">
-          <h2 className="text-sm font-semibold text-ink">Locations</h2>
+          <h2 className="text-sm font-semibold text-ink">{t("acc_locations")}</h2>
           <div className="space-y-1">
             <label className="text-xs font-semibold text-ink-500">
-              Stage location <span className="text-red-500">*</span>
+              {t("acc_stage_location")} <span className="text-red-500">*</span>
             </label>
             <button
               type="button"
@@ -329,25 +325,25 @@ export default function AccountPage() {
               className="flex w-full items-center gap-2 rounded-xl border border-[var(--border-faint)] px-3 py-2.5 text-left text-[15px] text-ink"
             >
               <MapPin className="h-4 w-4 shrink-0 text-gold" strokeWidth={2} aria-hidden />
-              <span className="truncate">{stageAddress || "Set your stage location on the map"}</span>
+              <span className="truncate">{stageAddress || t("acc_set_stage_map")}</span>
             </button>
           </div>
-          <Field label="Home address" value={homeAddress} onChange={setHomeAddress} placeholder="Ntinda, Kampala" required />
+          <Field label={t("acc_home_address")} value={homeAddress} onChange={setHomeAddress} placeholder="Ntinda, Kampala" required />
         </section>
 
         <section className="home-card space-y-3">
-          <h2 className="text-sm font-semibold text-ink">Stage details</h2>
-          <Field label="Stage name" value={stageName} onChange={setStageName} placeholder="Ntinda Trading Center Stage" required />
+          <h2 className="text-sm font-semibold text-ink">{t("acc_stage_details")}</h2>
+          <Field label={t("acc_stage_name")} value={stageName} onChange={setStageName} placeholder="Ntinda Trading Center Stage" required />
           <div className="grid grid-cols-2 gap-3">
             <Field
-              label="Stage chairman name"
+              label={t("acc_stage_chairman_name")}
               value={stageChairmanName}
               onChange={setStageChairmanName}
               placeholder="Chairman's full name"
               required
             />
             <Field
-              label="Stage chairman contact"
+              label={t("acc_stage_chairman_contact")}
               value={stageChairmanContact}
               onChange={setStageChairmanContact}
               placeholder="+256700000000"
@@ -356,14 +352,14 @@ export default function AccountPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field
-              label="Emergency contact name"
+              label={t("acc_emergency_name")}
               value={emergencyContactName}
               onChange={setEmergencyContactName}
               placeholder="Next of kin"
               required
             />
             <Field
-              label="Emergency contact phone"
+              label={t("acc_emergency_phone")}
               value={emergencyContactPhone}
               onChange={setEmergencyContactPhone}
               placeholder="+256700000000"
@@ -373,48 +369,45 @@ export default function AccountPage() {
         </section>
 
         <section className="home-card space-y-3">
-          <h2 className="text-sm font-semibold text-ink">Payout</h2>
-          <p className="text-xs text-ink-500">Save up to 2 numbers your wallet withdrawals can go to.</p>
+          <h2 className="text-sm font-semibold text-ink">{t("acc_payout")}</h2>
+          <p className="text-xs text-ink-500">{t("acc_save_numbers")}</p>
           <MobileNumberManager purpose="withdrawal" />
           <details className="text-xs text-ink-500">
-            <summary className="cursor-pointer font-semibold">Legacy single number (optional)</summary>
+            <summary className="cursor-pointer font-semibold">{t("acc_legacy_number")}</summary>
             <div className="mt-2 space-y-1">
               <Field
-                label="Mobile money number"
+                label={t("acc_momo_number")}
                 value={momoMsisdn}
                 onChange={setMomoMsisdn}
                 placeholder="0772345678"
               />
               {detectedNetwork && (
-                <p className="px-1 text-xs font-semibold text-ink-500">{mobileMoneyNetworkLabel(detectedNetwork)} detected</p>
+                <p className="px-1 text-xs font-semibold text-ink-500">
+                  {mobileMoneyNetworkLabel(detectedNetwork)} {t("acc_network_detected")}
+                </p>
               )}
-              <p className="px-1 text-xs text-ink-500">
-                Only used as a fallback if you haven&apos;t saved any numbers above.
-              </p>
+              <p className="px-1 text-xs text-ink-500">{t("acc_fallback_note")}</p>
             </div>
           </details>
         </section>
 
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        {saved && <p className="text-sm font-medium text-green">Saved.</p>}
+        {saved && <p className="text-sm font-medium text-green">{t("acc_saved")}</p>}
 
         <button
           type="submit"
           disabled={busy}
           className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
         >
-          {busy ? "Saving…" : "Save profile"}
+          {busy ? t("acc_saving") : t("acc_save_profile")}
         </button>
       </form>
 
       <section className="home-card space-y-3">
         <h2 className="text-sm font-semibold text-ink">
-          Profile photo <span className="text-red-500">*</span>
+          {t("acc_profile_photo")} <span className="text-red-500">*</span>
         </h2>
-        <p className="text-xs text-ink-500">
-          A clear photo of your face — this is what customers see once you take their order, so they know
-          who&apos;s arriving.
-        </p>
+        <p className="text-xs text-ink-500">{t("acc_photo_note")}</p>
         <div className="flex items-center gap-3">
           {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -449,18 +442,16 @@ export default function AccountPage() {
             ) : (
               <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />
             )}
-            {uploadingPhoto ? "Uploading…" : rider?.profile_photo_key ? "Uploaded — tap to replace" : "Add profile photo"}
+            {uploadingPhoto ? t("acc_uploading") : rider?.profile_photo_key ? t("acc_uploaded_replace") : t("acc_add_photo")}
           </button>
         </div>
       </section>
 
       <section className="home-card space-y-3">
         <h2 className="text-sm font-semibold text-ink">
-          National ID <span className="text-red-500">*</span>
+          {t("acc_national_id")} <span className="text-red-500">*</span>
         </h2>
-        <p className="text-xs text-ink-500">
-          Used only to verify your identity. It is never shown publicly or shared outside admin review.
-        </p>
+        <p className="text-xs text-ink-500">{t("acc_id_note")}</p>
         <input
           ref={fileInputRef}
           type="file"
@@ -482,7 +473,7 @@ export default function AccountPage() {
           ) : (
             <Upload className="h-4 w-4" strokeWidth={2} aria-hidden />
           )}
-          {uploadingId ? "Uploading…" : rider?.national_id_key ? "Uploaded — tap to replace" : "Attach ID snapshot/scan"}
+          {uploadingId ? t("acc_uploading") : rider?.national_id_key ? t("acc_uploaded_replace") : t("acc_attach_id")}
         </button>
       </section>
 
@@ -491,7 +482,7 @@ export default function AccountPage() {
         className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-[var(--border-faint)] px-4 text-sm font-bold text-ink"
       >
         <LogOut className="h-4 w-4" strokeWidth={2} aria-hidden />
-        Log out
+        {t("log_out")}
       </button>
 
       <CloseAccountCard onClosed={logout} />
@@ -512,7 +503,11 @@ export default function AccountPage() {
   );
 }
 
-const CADENCE_LABEL: Record<string, string> = { daily: "day", weekly: "week", monthly: "month" };
+const CADENCE_KEYS: Record<string, "cadence_daily" | "cadence_weekly" | "cadence_monthly"> = {
+  daily: "cadence_daily",
+  weekly: "cadence_weekly",
+  monthly: "cadence_monthly",
+};
 
 /**
  * Self-contained: fetches its own subscription state and renders nothing
@@ -521,6 +516,7 @@ const CADENCE_LABEL: Record<string, string> = { daily: "day", weekly: "week", mo
  * sandbox/mock mobile money has no webhook to push a result back.
  */
 function SubscriptionCard() {
+  const t = useTranslate();
   const [subscription, setSubscription] = useState<RiderSubscriptionView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -583,8 +579,17 @@ function SubscriptionCard() {
         <CheckCircle2 className="h-5 w-5 shrink-0 text-green" strokeWidth={1.75} aria-hidden />
         <p className="text-sm text-ink-500">
           {subscription.mode === "once"
-            ? "Your one-time subscription is paid — active for good."
-            : `Subscription active${subscription.paidThrough ? ` through ${new Date(subscription.paidThrough).toLocaleDateString()}` : ""}. Renews automatically at ${subscription.amount.toLocaleString()} UGX/${CADENCE_LABEL[subscription.cadence]}.`}
+            ? t("acc_sub_paid_once")
+            : subscription.paidThrough
+              ? t("acc_sub_active_through", {
+                  date: new Date(subscription.paidThrough).toLocaleDateString(),
+                  amount: subscription.amount.toLocaleString(),
+                  cadence: t(CADENCE_KEYS[subscription.cadence]),
+                })
+              : t("acc_sub_active", {
+                  amount: subscription.amount.toLocaleString(),
+                  cadence: t(CADENCE_KEYS[subscription.cadence]),
+                })}
         </p>
       </section>
     );
@@ -594,12 +599,15 @@ function SubscriptionCard() {
   return (
     <section className="home-card space-y-2.5 !border-l-4 !border-l-gold">
       <p className="text-sm font-semibold text-ink">
-        {subscription.status === "past_due" ? "Subscription payment failed" : "Activate your subscription"}
+        {subscription.status === "past_due" ? t("acc_sub_failed") : t("acc_sub_activate")}
       </p>
       <p className="text-sm text-ink-500">
         {subscription.mode === "once"
-          ? `Pay a one-time ${subscription.amount.toLocaleString()} UGX fee to start claiming and applying for jobs — no renewals, ever.`
-          : `Pay ${subscription.amount.toLocaleString()} UGX/${CADENCE_LABEL[subscription.cadence]} to start claiming and applying for jobs. Charged to your mobile money number on file.`}
+          ? t("acc_sub_pay_once", { amount: subscription.amount.toLocaleString() })
+          : t("acc_sub_pay_recurring", {
+              amount: subscription.amount.toLocaleString(),
+              cadence: t(CADENCE_KEYS[subscription.cadence]),
+            })}
       </p>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <button
@@ -607,7 +615,7 @@ function SubscriptionCard() {
         disabled={busy || isPending}
         className="min-h-11 w-full rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
       >
-        {isPending ? "Confirming…" : busy ? "Sending…" : `Pay ${subscription.amount.toLocaleString()} UGX`}
+        {isPending ? t("acc_sub_confirming") : busy ? t("acc_sub_sending") : t("acc_sub_pay", { amount: subscription.amount.toLocaleString() })}
       </button>
     </section>
   );
@@ -620,6 +628,7 @@ function SubscriptionCard() {
  * irreversible from here (only support/admin can reopen a closed account).
  */
 function CloseAccountCard({ onClosed }: { onClosed: () => void }) {
+  const t = useTranslate();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -643,19 +652,15 @@ function CloseAccountCard({ onClosed }: { onClosed: () => void }) {
         className="flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-red-200 px-4 text-sm font-bold text-red-600"
       >
         <TriangleAlert className="h-4 w-4" strokeWidth={2} aria-hidden />
-        Close my account
+        {t("acc_close_account")}
       </button>
     );
   }
 
   return (
     <section className="home-card space-y-2.5 !border-l-4 !border-l-red-400">
-      <p className="text-sm font-semibold text-ink">Close your account?</p>
-      <p className="text-sm text-ink-500">
-        Your entire wallet balance — including any minimum reserve — is paid out to your mobile money number on
-        file, then your account is locked. You&apos;ll need to contact support to reopen it. This can&apos;t be
-        undone from here, and only works if you don&apos;t have a job in progress.
-      </p>
+      <p className="text-sm font-semibold text-ink">{t("acc_close_confirm_title")}</p>
+      <p className="text-sm text-ink-500">{t("acc_close_confirm_note")}</p>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <div className="flex gap-2">
         <button
@@ -663,14 +668,14 @@ function CloseAccountCard({ onClosed }: { onClosed: () => void }) {
           disabled={busy}
           className="min-h-9 flex-1 rounded-full bg-red-600 px-4 text-xs font-bold text-white disabled:opacity-60"
         >
-          {busy ? "Closing…" : "Yes, close my account"}
+          {busy ? t("acc_closing") : t("acc_yes_close")}
         </button>
         <button
           onClick={() => setConfirming(false)}
           disabled={busy}
           className="min-h-9 flex-1 rounded-full border border-[var(--border-faint)] px-4 text-xs font-bold text-ink disabled:opacity-60"
         >
-          Cancel
+          {t("acc_cancel")}
         </button>
       </div>
     </section>
