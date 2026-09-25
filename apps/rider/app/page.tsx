@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { JobPreviewModal } from "../components/JobPreviewModal";
 import { api, errorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth-context";
+import { useTranslate } from "../lib/i18n";
 import {
   formatUgx,
   JOB_CATEGORY_LABELS,
@@ -22,15 +23,19 @@ import { useNetworkStatus } from "../lib/use-network-status";
 
 type SortOrder = "distance" | "price_high" | "price_low" | "newest" | "oldest";
 
-const SORT_LABELS: Record<SortOrder, string> = {
-  distance: "Nearest first",
-  price_high: "Price: high to low",
-  price_low: "Price: low to high",
-  newest: "Newest first",
-  oldest: "Oldest first",
+const SORT_KEYS: Record<
+  SortOrder,
+  "home_sort_nearest" | "home_sort_price_high" | "home_sort_price_low" | "home_sort_newest" | "home_sort_oldest"
+> = {
+  distance: "home_sort_nearest",
+  price_high: "home_sort_price_high",
+  price_low: "home_sort_price_low",
+  newest: "home_sort_newest",
+  oldest: "home_sort_oldest",
 };
 
 export default function JobsHomePage() {
+  const t = useTranslate();
   const { user } = useAuth();
   const router = useRouter();
   const [rider, setRider] = useState<Rider | null>(null);
@@ -141,7 +146,7 @@ export default function JobsHomePage() {
   }, [availableJobs, categoryFilter, sortOrder]);
 
   if (!ready) {
-    return <div className="p-4 text-sm text-ink-500">Loading…</div>;
+    return <div className="p-4 text-sm text-ink-500">{t("loading")}</div>;
   }
 
   const activeOrders = orders.filter((o) => o.stage !== "Settle");
@@ -149,7 +154,10 @@ export default function JobsHomePage() {
   return (
     <div className="space-y-5 px-4 pb-6 pt-4">
       <header className="flex items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-ink">Hi{user?.name ? `, ${user.name}` : ""}</h1>
+        <h1 className="text-xl font-bold text-ink">
+          {t("home_hi")}
+          {user?.name ? `, ${user.name}` : ""}
+        </h1>
         <button
           disabled={busy || !online}
           onClick={toggleOnline}
@@ -157,14 +165,14 @@ export default function JobsHomePage() {
             rider?.is_online ? "bg-green text-white" : "bg-[rgb(var(--surface-muted))] text-ink"
           }`}
         >
-          {rider?.is_online ? "Online" : "Offline"}
+          {rider?.is_online ? t("home_online") : t("home_offline")}
         </button>
       </header>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <section className="space-y-2.5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Available jobs</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{t("home_available_jobs")}</h2>
 
         {rider?.is_online && availableJobs.length > 0 && (
           <div className="space-y-2">
@@ -179,7 +187,9 @@ export default function JobsHomePage() {
                       : "border-[var(--border-faint)] text-ink-500"
                   }`}
                 >
-                  {cat === "all" ? `All (${availableJobs.length})` : `${JOB_CATEGORY_LABELS[cat]} (${categoryCounts[cat]})`}
+                  {cat === "all"
+                    ? `${t("home_all")} (${availableJobs.length})`
+                    : `${JOB_CATEGORY_LABELS[cat]} (${categoryCounts[cat]})`}
                 </button>
               ))}
             </div>
@@ -188,9 +198,9 @@ export default function JobsHomePage() {
               onChange={(e) => setSortOrder(e.target.value as SortOrder)}
               className="w-full rounded-xl border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-gold"
             >
-              {(Object.keys(SORT_LABELS) as SortOrder[]).map((key) => (
+              {(Object.keys(SORT_KEYS) as SortOrder[]).map((key) => (
                 <option key={key} value={key}>
-                  Sort: {SORT_LABELS[key]}
+                  {t("home_sort")}: {t(SORT_KEYS[key])}
                 </option>
               ))}
             </select>
@@ -198,13 +208,15 @@ export default function JobsHomePage() {
         )}
 
         {!rider?.is_online && (
-          <p className="py-4 text-center text-sm text-ink-500">Go online to see nearby orders.</p>
+          <p className="py-4 text-center text-sm text-ink-500">{t("home_go_online")}</p>
         )}
         {rider?.is_online && availableJobs.length === 0 && (
-          <p className="py-4 text-center text-sm text-ink-500">No open orders near you right now.</p>
+          <p className="py-4 text-center text-sm text-ink-500">{t("home_no_jobs")}</p>
         )}
         {rider?.is_online && availableJobs.length > 0 && visibleJobs.length === 0 && (
-          <p className="py-4 text-center text-sm text-ink-500">No {JOB_CATEGORY_LABELS[categoryFilter as JobCategory]?.toLowerCase() ?? ""} jobs right now.</p>
+          <p className="py-4 text-center text-sm text-ink-500">
+            {t("home_no_category_jobs", { category: JOB_CATEGORY_LABELS[categoryFilter as JobCategory]?.toLowerCase() ?? "" })}
+          </p>
         )}
         <ul className="space-y-2.5">
           {visibleJobs.map((job) => (
@@ -219,7 +231,7 @@ export default function JobsHomePage() {
                   </span>
                   <span className="mt-0.5 flex items-center gap-1 text-xs text-ink-500">
                     <MapPin className="h-3 w-3 shrink-0" strokeWidth={2} aria-hidden />
-                    {job.distanceKm != null ? `${job.distanceKm} km away` : "Distance unknown"}
+                    {job.distanceKm != null ? `${job.distanceKm} ${t("home_km_away")}` : t("home_distance_unknown")}
                   </span>
                 </span>
                 <span className="shrink-0 text-right">
@@ -227,16 +239,14 @@ export default function JobsHomePage() {
                     {formatUgx(job.final_total ?? job.estimated_total)}
                   </span>
                   <span className="block text-xs text-ink-500">
-                    {formatUgx(job.delivery_fee ?? job.final_total ?? job.estimated_total)} delivery
+                    {formatUgx(job.delivery_fee ?? job.final_total ?? job.estimated_total)} {t("home_delivery")}
                   </span>
                 </span>
               </div>
               {job.outOfServiceRange && (
                 <div className="flex items-start gap-1.5 rounded-lg bg-gold/10 px-2.5 py-1.5">
                   <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-gold" strokeWidth={2.25} aria-hidden />
-                  <p className="text-xs text-ink-500">
-                    Outside the normal service area — you can propose a higher fee once you take it.
-                  </p>
+                  <p className="text-xs text-ink-500">{t("home_out_of_range")}</p>
                 </div>
               )}
               <div className="flex gap-2">
@@ -245,7 +255,7 @@ export default function JobsHomePage() {
                   onClick={() => setPreviewJobItem(job)}
                   className="min-h-10 flex-1 rounded-full border border-[var(--border-faint)] px-4 text-sm font-bold text-ink"
                 >
-                  Preview
+                  {t("home_preview")}
                 </button>
                 {job.matching_mode === "first_to_claim" ? (
                   <button
@@ -253,7 +263,7 @@ export default function JobsHomePage() {
                     disabled={claimingId === job.id || !online}
                     className="min-h-10 flex-[2] rounded-full bg-gold px-4 text-sm font-bold text-ink-gold disabled:opacity-60"
                   >
-                    {claimingId === job.id ? "Claiming…" : !online ? "Offline" : "Claim job"}
+                    {claimingId === job.id ? t("home_claiming") : !online ? t("home_offline_btn") : t("home_claim_job")}
                   </button>
                 ) : (
                   <button
@@ -263,7 +273,13 @@ export default function JobsHomePage() {
                       job.applied ? "bg-[rgb(var(--surface-muted))] text-ink-500" : "bg-gold text-ink-gold"
                     }`}
                   >
-                    {claimingId === job.id ? "Applying…" : job.applied ? "Applied ✓" : !online ? "Offline" : "Apply"}
+                    {claimingId === job.id
+                      ? t("home_applying")
+                      : job.applied
+                        ? t("home_applied")
+                        : !online
+                          ? t("home_offline_btn")
+                          : t("home_apply")}
                   </button>
                 )}
               </div>
@@ -273,9 +289,9 @@ export default function JobsHomePage() {
       </section>
 
       <section className="space-y-2.5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Your jobs</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{t("home_your_jobs")}</h2>
         {activeOrders.length === 0 && (
-          <p className="py-6 text-center text-sm text-ink-500">No active jobs yet — claim one above.</p>
+          <p className="py-6 text-center text-sm text-ink-500">{t("home_no_active_jobs")}</p>
         )}
         <ul className="space-y-2.5">
           {activeOrders.map((order) => (
