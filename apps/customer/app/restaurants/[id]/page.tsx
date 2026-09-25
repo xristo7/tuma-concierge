@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LocationPicker, emptyPoint, resolvePoint, type PointState } from "../../../components/LocationPicker";
 import { Modal } from "../../../components/Modal";
 import { api, errorMessage } from "../../../lib/api";
+import { useTranslate } from "../../../lib/i18n";
 import { formatUgx } from "../../../lib/order-display";
 
 /** Matches the server's own haversine — see apps/api/src/lib/geo.ts. Used
@@ -61,13 +62,18 @@ const BADGE_STYLES: Record<MenuItemBadge, string> = {
   new: "bg-blue-600 text-white",
   trending: "bg-purple-600 text-white",
 };
-const BADGE_LABELS: Record<MenuItemBadge, string> = { sale: "Sale", new: "New", trending: "Trending" };
+const BADGE_KEYS: Record<MenuItemBadge, "restaurant_badge_sale" | "restaurant_badge_new" | "restaurant_badge_trending"> = {
+  sale: "restaurant_badge_sale",
+  new: "restaurant_badge_new",
+  trending: "restaurant_badge_trending",
+};
 
 /** Grid-card presentation for a menu item — image on a tinted backdrop
  * (visible around/behind a photo with transparency, or as the whole
  * background when there's no photo yet), a badge pill top-left when the
  * restaurant's set one, and price + "Order Now" bottom-right. */
 function FoodItemCard({ item, onOpen }: { item: MenuItem; onOpen: () => void }) {
+  const t = useTranslate();
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -102,7 +108,7 @@ function FoodItemCard({ item, onOpen }: { item: MenuItem; onOpen: () => void }) 
           <span
             className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${BADGE_STYLES[item.badge]}`}
           >
-            {BADGE_LABELS[item.badge]}
+            {t(BADGE_KEYS[item.badge])}
           </span>
         )}
         {photoUrl ? (
@@ -122,7 +128,7 @@ function FoodItemCard({ item, onOpen }: { item: MenuItem; onOpen: () => void }) 
         <span className="flex shrink-0 flex-col items-end">
           <span className="text-sm font-bold text-ink">{formatUgx(item.price)}</span>
           <span className="flex items-center gap-0.5 text-[11px] font-bold text-gold">
-            Order Now
+            {t("restaurant_order_now")}
             <ArrowUpRight className="h-3 w-3" strokeWidth={2.5} aria-hidden />
           </span>
         </span>
@@ -151,6 +157,7 @@ function ItemDetailModal({
   onClose: () => void;
   onAdd: (line: { unitPrice: number; choiceIds: string[]; choiceNames: string[]; quantity: number }) => void;
 }) {
+  const t = useTranslate();
   const [selected, setSelected] = useState<Record<string, string[]>>({});
   const [quantity, setQuantity] = useState(1);
 
@@ -180,14 +187,14 @@ function ItemDetailModal({
           className="inline-flex items-center gap-1.5 text-xs font-bold text-gold"
         >
           <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
-          Ask about this item
+          {t("restaurant_ask_about_item")}
         </Link>
 
         {item.options.map((option) => (
           <div key={option.id} className="space-y-1.5">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-              {option.name}
-              {option.required ? " (required)" : " (optional)"}
+              {option.name}{" "}
+              {option.required ? t("restaurant_required") : t("restaurant_optional")}
             </p>
             <div className="space-y-1.5">
               {option.choices.map((choice) => {
@@ -211,7 +218,7 @@ function ItemDetailModal({
         ))}
 
         <div className="flex items-center justify-between rounded-xl bg-[rgb(var(--surface-muted))] px-3 py-2">
-          <span className="text-sm font-semibold text-ink">Quantity</span>
+          <span className="text-sm font-semibold text-ink">{t("restaurant_quantity")}</span>
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -244,7 +251,9 @@ function ItemDetailModal({
           }
           className="min-h-12 w-full rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
         >
-          {missingRequired.length > 0 ? `Choose ${missingRequired[0].name}` : `Add ${quantity} · ${formatUgx(unitPrice * quantity)}`}
+          {missingRequired.length > 0
+            ? `${t("restaurant_choose")} ${missingRequired[0].name}`
+            : `${t("restaurant_add")} ${quantity} · ${formatUgx(unitPrice * quantity)}`}
         </button>
       </div>
     </Modal>
@@ -252,6 +261,7 @@ function ItemDetailModal({
 }
 
 export default function RestaurantPage() {
+  const t = useTranslate();
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -329,7 +339,7 @@ export default function RestaurantPage() {
   async function checkout() {
     const d = resolvePoint(delivery, locations);
     if (!d.area && !d.address) {
-      setError("Choose a delivery location.");
+      setError(t("restaurant_choose_delivery_location"));
       return;
     }
     setBusy(true);
@@ -354,47 +364,47 @@ export default function RestaurantPage() {
     return <p className="px-4 py-10 text-center text-sm text-red-700">{error}</p>;
   }
   if (!restaurant || !menu) {
-    return <p className="px-4 py-10 text-center text-sm text-ink-500">Loading…</p>;
+    return <p className="px-4 py-10 text-center text-sm text-ink-500">{t("loading")}</p>;
   }
 
   if (step === "checkout") {
     return (
       <div className="space-y-5 px-4 pb-28 pt-4">
-        <h1 className="text-xl font-bold text-ink">Delivery details</h1>
+        <h1 className="text-xl font-bold text-ink">{t("restaurant_delivery_details")}</h1>
 
         <LocationPicker point={delivery} setPoint={setDelivery} locations={locations} />
 
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Payment</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">{t("restaurant_payment")}</p>
           <div className="flex gap-2">
             {(["escrow", "float"] as const).map((rail) => (
               <button
                 key={rail}
                 onClick={() => setPaymentRail(rail)}
-                className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-semibold capitalize ${
+                className={`flex-1 rounded-xl border px-3 py-2.5 text-sm font-semibold ${
                   paymentRail === rail ? "border-gold bg-gold/10 text-ink" : "border-[var(--border-faint)] text-ink-500"
                 }`}
               >
-                {rail === "float" ? "Cash" : "Escrow"}
+                {rail === "float" ? t("restaurant_cash") : t("restaurant_escrow")}
               </button>
             ))}
           </div>
           <p className="text-xs text-ink-500">
-            {paymentRail === "float" ? "You pay the rider directly, in person." : "You pay upfront — held safely until delivery is confirmed."}
+            {paymentRail === "float" ? t("restaurant_pay_rider_direct") : t("restaurant_pay_upfront")}
           </p>
         </div>
 
         <div className="space-y-1.5 rounded-xl bg-[rgb(var(--surface-muted))] px-4 py-3">
           <div className="flex items-center justify-between text-sm text-ink-500">
-            <span>Items total</span>
+            <span>{t("restaurant_items_total")}</span>
             <span>{formatUgx(itemsTotal)}</span>
           </div>
           <div className="flex items-center justify-between text-sm text-ink-500">
-            <span>Delivery fee</span>
-            <span>{estimatedDeliveryFee != null ? `~${formatUgx(estimatedDeliveryFee)}` : "Loading…"}</span>
+            <span>{t("restaurant_delivery_fee")}</span>
+            <span>{estimatedDeliveryFee != null ? `~${formatUgx(estimatedDeliveryFee)}` : t("loading")}</span>
           </div>
           <div className="flex items-center justify-between border-t border-[var(--border-faint)] pt-1.5 text-sm font-bold text-ink">
-            <span>Estimated total</span>
+            <span>{t("restaurant_estimated_total")}</span>
             <span>{formatUgx(itemsTotal + (estimatedDeliveryFee ?? 0))}</span>
           </div>
         </div>
@@ -406,14 +416,14 @@ export default function RestaurantPage() {
             onClick={() => setStep("menu")}
             className="min-h-12 flex-1 rounded-full border border-[var(--border-faint)] px-4 text-sm font-bold text-ink"
           >
-            Back to menu
+            {t("restaurant_back_to_menu")}
           </button>
           <button
             onClick={checkout}
             disabled={busy}
             className="min-h-12 flex-[2] rounded-full bg-gold px-4 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] disabled:opacity-60"
           >
-            {busy ? "Placing order…" : "Place order"}
+            {busy ? t("restaurant_placing_order") : t("restaurant_place_order")}
           </button>
         </div>
       </div>
@@ -434,7 +444,7 @@ export default function RestaurantPage() {
         </span>
         {!restaurant.is_open && (
           <span className="shrink-0 rounded-full bg-[rgb(var(--surface-muted))] px-2 py-0.5 text-xs font-semibold text-ink-500">
-            Closed
+            {t("restaurant_closed")}
           </span>
         )}
         <Link
@@ -442,7 +452,7 @@ export default function RestaurantPage() {
           className="flex shrink-0 items-center gap-1.5 rounded-full bg-[rgb(var(--surface-muted))] px-3 py-2 text-xs font-bold text-ink"
         >
           <MessageCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-          Chat
+          {t("restaurant_chat")}
         </Link>
       </section>
 
@@ -486,7 +496,7 @@ export default function RestaurantPage() {
       )}
 
       {menu.categories.length === 0 && menu.uncategorizedItems.length === 0 && (
-        <p className="py-10 text-center text-sm text-ink-500">This restaurant hasn&apos;t added any menu items yet.</p>
+        <p className="py-10 text-center text-sm text-ink-500">{t("restaurant_no_menu_yet")}</p>
       )}
 
       {activeItem && (
@@ -515,7 +525,7 @@ export default function RestaurantPage() {
 
       {cart.length > 0 && step === "menu" && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">Your cart</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-500">{t("restaurant_your_cart")}</h2>
           <ul className="space-y-2">
             {cart.map((l) => (
               <li key={l.key} className="home-card flex items-center justify-between !rounded-2xl !px-3 !py-3">
@@ -526,7 +536,7 @@ export default function RestaurantPage() {
                   <span className="block text-xs text-ink-500">{formatUgx(l.unitPrice * l.quantity)}</span>
                 </span>
                 <button onClick={() => removeLine(l.key)} className="shrink-0 text-xs font-semibold text-red-500">
-                  Remove
+                  {t("restaurant_remove")}
                 </button>
               </li>
             ))}
