@@ -10,6 +10,7 @@ import { useAuth } from "../lib/auth-context";
 import { getQueuedMessages, queueMessage, removeQueuedMessage, type QueuedMessage } from "../lib/chat-outbox";
 import { compressImage } from "../lib/image-compress";
 import { useLivePolling } from "../lib/use-live-polling";
+import { useTranslate } from "../lib/i18n";
 import { useVoiceNoteMaxSeconds } from "../lib/useVoiceNoteMaxSeconds";
 
 /** WhatsApp-style call-log entry — centered, not attributed to either
@@ -17,6 +18,7 @@ import { useVoiceNoteMaxSeconds } from "../lib/useVoiceNoteMaxSeconds";
  * reflects who placed the call (the message's sender_id), which only
  * changes the icon's direction, not the layout. */
 function CallLogEntry({ message, mine }: { message: ChatMessage; mine: boolean }) {
+  const t = useTranslate();
   const missedOrDeclined = message.call_status === "missed" || message.call_status === "declined";
   const Icon = message.call_status === "missed" ? PhoneMissed : message.call_status === "declined" ? PhoneOff : Phone;
   return (
@@ -27,7 +29,7 @@ function CallLogEntry({ message, mine }: { message: ChatMessage; mine: boolean }
         }`}
       >
         <Icon className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
-        <span>{mine && message.call_status === "missed" ? "No answer" : message.body}</span>
+        <span>{mine && message.call_status === "missed" ? t("chat_no_answer") : message.body}</span>
         <span className="text-ink-500/60">· {formatTime(message.created_at)}</span>
       </div>
     </div>
@@ -85,6 +87,7 @@ function ImageBubble({ messageId }: { messageId: string }) {
  * fetches the audio); `justPlayed` flips the color immediately for
  * whoever's pressing play right now, without waiting for the next poll. */
 function VoiceBubble({ messageId, mine, playedAt }: { messageId: string; mine: boolean; playedAt: string | null }) {
+  const t = useTranslate();
   const [status, setStatus] = useState<"idle" | "loading" | "playing">("idle");
   const [error, setError] = useState(false);
   const [justPlayed, setJustPlayed] = useState(false);
@@ -147,7 +150,7 @@ function VoiceBubble({ messageId, mine, playedAt }: { messageId: string; mine: b
         )}
       </span>
       <span className={`text-[13px] ${mine ? "" : played ? "text-ink-500" : "font-semibold text-ink"}`}>
-        {status === "loading" ? "Loading…" : error ? "Couldn't play — tap to retry" : "Voice message"}
+        {status === "loading" ? t("chat_voice_loading") : error ? t("chat_voice_error") : t("chat_voice_message")}
       </span>
     </button>
   );
@@ -175,6 +178,7 @@ type Props = {
 };
 
 export function OrderChat({ orderId, variant = "embedded" }: Props) {
+  const t = useTranslate();
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
@@ -481,7 +485,7 @@ export function OrderChat({ orderId, variant = "embedded" }: Props) {
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Message…"
+                placeholder={t("chat_message_placeholder")}
                 className="w-full rounded-full border border-[var(--border-faint)] bg-[rgb(var(--surface-input))] py-3.5 pl-4 pr-4 text-sm text-ink outline-none placeholder:text-ink-500 focus:border-gold"
               />
             )}

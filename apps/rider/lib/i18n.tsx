@@ -153,6 +153,17 @@ const STRINGS: Record<string, { en: string; lg: string }> = {
   wallet_job_history: { en: "Job history · {total} lifetime", lg: "Ebyafaayo by'emirimu · {total} byonna" },
   wallet_no_completed_jobs: { en: "No completed jobs yet.", lg: "Tewali mulimu gumaliddwa." },
   wallet_job_fallback: { en: "Job #{id}", lg: "Omulimu #{id}" },
+  // Chat
+  chat_title: { en: "Chat", lg: "Emboozi" },
+  chat_loading: { en: "Loading…", lg: "Tulinda…" },
+  chat_empty: { en: "No conversations yet — they'll show up here once you take a job.", lg: "Tewali mboozi nabwo — zijja kulabika wano bw'okwata omulimu." },
+  chat_load_error: { en: "Couldn't load this conversation.", lg: "Tetusobodde kuleeta emboozi eno." },
+  chat_back_to_chats: { en: "Back to chats", lg: "Ddayo ku mboozi" },
+  chat_no_answer: { en: "No answer", lg: "Tewali kuddamu" },
+  chat_voice_loading: { en: "Loading…", lg: "Tulinda…" },
+  chat_voice_error: { en: "Couldn't play — tap to retry", lg: "Tetusobodde kukuba — nyiga oddemu" },
+  chat_voice_message: { en: "Voice message", lg: "Obubaka bw'eddoboozi" },
+  chat_message_placeholder: { en: "Message…", lg: "Obubaka…" },
 };
 
 export type TranslationKey = keyof typeof STRINGS;

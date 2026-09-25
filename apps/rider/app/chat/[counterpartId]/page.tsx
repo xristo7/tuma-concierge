@@ -8,9 +8,11 @@ import { useEffect, useState } from "react";
 import { OrderChat } from "../../../components/OrderChat";
 import { api } from "../../../lib/api";
 import { useCalls } from "../../../lib/calls-context";
+import { useTranslate } from "../../../lib/i18n";
 import { useViewportHeight } from "../../../lib/use-viewport-height";
 
 export default function ChatThreadPage() {
+  const t = useTranslate();
   const params = useParams<{ counterpartId: string }>();
   const counterpartId = params.counterpartId;
   const router = useRouter();
@@ -48,15 +50,15 @@ export default function ChatThreadPage() {
   }, [counterpartId, thread?.counterpartHasPhoto]);
 
   if (thread === undefined) {
-    return <div className="flex min-h-dvh items-center justify-center bg-cream text-sm text-ink-500">Loading…</div>;
+    return <div className="flex min-h-dvh items-center justify-center bg-cream text-sm text-ink-500">{t("chat_loading")}</div>;
   }
 
   if (!thread) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-cream p-4 text-center">
-        <p className="text-sm text-ink-500">Couldn&apos;t load this conversation.</p>
+        <p className="text-sm text-ink-500">{t("chat_load_error")}</p>
         <button type="button" onClick={() => router.push("/chat")} className="text-sm font-semibold text-gold">
-          Back to chats
+          {t("chat_back_to_chats")}
         </button>
       </div>
     );
