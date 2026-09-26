@@ -62,6 +62,7 @@ export type OrderRow = {
   stage: string;
   type: OrderType;
   payment_rail: "escrow" | "float" | null;
+  funds_model: "legacy_rider_payout" | "merchant_allocations_v1";
   currency: string;
   estimated_total: number | null;
   final_total: number | null;
@@ -204,6 +205,11 @@ export type DeliverySettings = {
   /** Demo/sandbox mode — every payment runs through the mock adapters
    * regardless of saved credentials. See PaymentProviderInfo/IntegrationsStatus. */
   paymentsDemoMode: boolean;
+  /** Dark-launch switch for the merchant allocation flow. Live enablement is
+   * additionally gated by an active regulated-custody approval server-side. */
+  merchantPaymentsEnabled: boolean;
+  merchantLiveCustodyApproved: boolean;
+  merchantWithdrawalsFrozen: boolean;
   walletUnverifiedCap: number;
   walletVerifiedCap: number;
   walletMaxTopup: number;
@@ -477,8 +483,214 @@ export type Restaurant = {
    * no schedule — is_open is a pure manual toggle. */
   open_time: string | null;
   close_time: string | null;
+  /** Shared financial identity introduced by the merchant ledger. */
+  merchant_id: string | null;
+  outlet_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type MerchantBalance = {
+  held: number;
+  available: number;
+  settling: number;
+  updated_at?: string;
+};
+
+export type Merchant = {
+  id: string;
+  legal_name: string;
+  display_name: string;
+  business_kind: "business" | "personal_seller";
+  status: "pending_approval" | "provisional" | "active" | "suspended" | "rejected";
+  trust_tier: "new" | "standard" | "trusted" | "restricted";
+  registration_number: string | null;
+  tax_id: string | null;
+  environment: PlatformEnvironment;
+  member_role?: "owner" | "finance" | "manager" | "cashier";
+  kyc_status?: "pending" | "in_review" | "approved" | "rejected" | "expired";
+  has_owner_id_document?: number;
+  has_business_document?: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminMerchant = Merchant & {
+  kyc_status: string | null;
+  has_owner_id_document: number;
+  has_business_document: number;
+  outlet_count: number;
+  held: number | null;
+  available: number | null;
+  settling: number | null;
+};
+
+export type MerchantCategory = {
+  id: string;
+  slug: string;
+  name: string;
+};
+
+export type MerchantOutlet = {
+  id: string;
+  merchant_id: string;
+  category_id: string;
+  category_name?: string;
+  category_slug?: string;
+  name: string;
+  code: string;
+  phone: string | null;
+  address: string | null;
+  lat: number | null;
+  lng: number | null;
+  status: "active" | "suspended" | "closed";
+  created_at: string;
+  updated_at: string;
+};
+
+export type MerchantMember = {
+  user_id: string;
+  role: "owner" | "finance" | "manager" | "cashier";
+  status: "invited" | "active" | "revoked";
+  outlet_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  created_at: string;
+};
+
+export type MerchantTransaction = {
+  id: string;
+  kind: string;
+  reference_type: string | null;
+  reference_id: string | null;
+  description: string | null;
+  created_at: string;
+  amount: number;
+  purpose: string;
+  currency: string;
+  environment: PlatformEnvironment;
+};
+
+export type MerchantPaymentSummary = {
+  id: string;
+  order_id: string;
+  outlet_id: string;
+  outlet_name: string;
+  amount: number;
+  status: MerchantPayment["status"];
+  confirmation_mode: MerchantPayment["confirmation_mode"];
+  risk_state: MerchantPayment["risk_state"];
+  receipt_reference: string | null;
+  rider_id: string;
+  rider_name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MerchantDispute = {
+  id: string;
+  order_id: string;
+  merchant_payment_id: string;
+  opened_by: string;
+  amount: number | null;
+  reason: string;
+  status: "open" | "under_review" | "resolved_merchant" | "resolved_customer" | "cancelled";
+  created_at: string;
+  updated_at: string;
+};
+
+export type MerchantSettlementAccount = {
+  id: string;
+  type: "momo" | "bank";
+  provider: string;
+  account_name: string | null;
+  network_or_bank: string | null;
+  status: "pending_verification" | "verified" | "disabled";
+  is_primary: number;
+  verified_at: string | null;
+  cooling_until: string | null;
+  masked_account_ref: string;
+};
+
+export type MerchantSettlement = {
+  id: string;
+  amount: number;
+  fee: number;
+  total_debit?: number;
+  mode?: "instant" | "scheduled";
+  status: "reserved" | "submitted" | "pending" | "unknown" | "successful" | "failed" | "reversed" | "cancelled";
+  provider?: string | null;
+  provider_ref?: string | null;
+  failure_code?: string | null;
+};
+
+export type MerchantPayment = {
+  id: string;
+  order_id: string;
+  merchant_id: string;
+  outlet_id: string;
+  amount: number;
+  status: "awaiting_confirmation" | "available" | "held" | "settlement_pending" | "paid" | "declined" | "expired" | "reversed" | "disputed" | "failed";
+  confirmation_mode: "dual_confirm" | "merchant_request" | "rider_only";
+  rider_id: string;
+  rider_confirmed_at: string | null;
+  merchant_confirmed_at: string | null;
+  risk_state: "pending" | "passed" | "step_up" | "held" | "rejected";
+  environment: PlatformEnvironment;
+  outlet_name?: string;
+  display_name?: string;
+  created_at: string;
+};
+
+export type MerchantCustodyApproval = {
+  id: string;
+  custody_provider: string;
+  payout_provider: string;
+  environment: "live";
+  currency: "UGX";
+  safeguarding_reference: string;
+  status: "active" | "expired" | "revoked";
+  effective_at: string;
+  expires_at: string | null;
+  created_at: string;
+};
+
+export type AdminMerchantSettlementAccount = MerchantSettlementAccount & {
+  merchant_id: string;
+  display_name: string;
+  created_at: string;
+};
+
+export type MerchantReconciliationRow = {
+  merchant_id: string;
+  display_name: string;
+  environment: PlatformEnvironment;
+  held: number;
+  available: number;
+  settling: number;
+  ledger_held: number;
+  ledger_available: number;
+  ledger_settling: number;
+  reconciled: boolean;
+};
+
+export type MerchantProviderOperation = {
+  id: string;
+  operation_type: "collection" | "disbursement";
+  business_type: string;
+  business_id: string;
+  provider: string;
+  provider_ref: string | null;
+  amount: number;
+  currency: string;
+  environment: PlatformEnvironment;
+  status: "submitted" | "pending" | "unknown";
+  attempt_count: number;
+  last_checked_at: string | null;
+  next_check_at: string | null;
+  failure_code: string | null;
+  created_at: string;
 };
 
 /** Shape returned by the admin restaurant directory: a `Restaurant` row joined with its owner's account. */
@@ -790,8 +1002,8 @@ export type IntegrationsStatus = {
      * credentials — see apps/api/src/payments/service.ts resolveProvider(). */
     demoMode: boolean;
     providers: PaymentProviderInfo[];
-    collection: { provider: string; live: boolean };
-    disbursement: { provider: string; live: boolean };
+    collection: { provider: string | null; live: boolean; error: string | null };
+    disbursement: { provider: string | null; live: boolean; error: string | null };
     networks: string[];
   };
   storage: { configured: boolean };

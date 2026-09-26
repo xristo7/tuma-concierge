@@ -2,6 +2,7 @@ import app from "./app.js";
 import { setAiBinding, type AiBinding } from "./ai/binding.js";
 import { setD1Binding, type D1Database } from "./db/client.js";
 import { renewSubscriptions } from "./riders/subscription.js";
+import { sweepProviderOperations } from "./payments/reconciliation.js";
 import { setR2Binding, type R2Bucket } from "./storage/r2.js";
 
 /** Minimal local stand-in so we don't need @cloudflare/workers-types (which
@@ -29,17 +30,22 @@ export default {
     bindEnv(env);
     return app.fetch(request, env as never, ctx as never);
   },
-  /** Cloudflare Cron Trigger — see wrangler.jsonc's `triggers.crons`
-   * (daily). Sweeps every recurring rider subscriber whose paid-through
-   * date has passed and attempts to renew them; a one-time lifetime
-   * subscriber's paid_through is a sentinel far in the future, so they're
-   * never picked up here. See ./riders/subscription.ts. */
-  async scheduled(_event: unknown, env: WorkerEnv, ctx: CfExecutionContext): Promise<void> {
+  /** Cloudflare Cron Trigger. The two-minute heartbeat reconciles provider
+   * operations whose callbacks were delayed or dropped. The daily trigger
+   * additionally renews recurring rider subscriptions. */
+  async scheduled(event: { cron?: string }, env: WorkerEnv, ctx: CfExecutionContext): Promise<void> {
     bindEnv(env);
     ctx.waitUntil(
-      renewSubscriptions()
-        .then((result) => console.log("Subscription renewal sweep:", JSON.stringify(result)))
-        .catch((err) => console.error("Subscription renewal sweep failed:", err)),
+      sweepProviderOperations()
+        .then((result) => console.log("Provider reconciliation sweep:", JSON.stringify(result)))
+        .catch((err) => console.error("Provider reconciliation sweep failed:", err)),
     );
+    if (event.cron === "0 3 * * *") {
+      ctx.waitUntil(
+        renewSubscriptions()
+          .then((result) => console.log("Subscription renewal sweep:", JSON.stringify(result)))
+          .catch((err) => console.error("Subscription renewal sweep failed:", err)),
+      );
+    }
   },
 };

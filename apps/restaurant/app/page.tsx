@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Store, UtensilsCrossed } from "lucide-react";
+import { ChevronRight, ShieldCheck, Store, UtensilsCrossed, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -67,6 +67,28 @@ export default function HomePage() {
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-bold text-ink">Manage menu</span>
           <span className="block text-xs text-ink-500">Categories, items, prices, and options</span>
+        </span>
+        <ChevronRight className="h-5 w-5 shrink-0 text-ink-500/60" strokeWidth={1.75} aria-hidden />
+      </Link>
+
+      <Link href="/wallet" className="home-card flex items-center gap-3 !rounded-2xl">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+          <WalletCards className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-bold text-ink">Merchant balance</span>
+          <span className="block text-xs text-ink-500">Sales, held funds, and Mobile Money settlement</span>
+        </span>
+        <ChevronRight className="h-5 w-5 shrink-0 text-ink-500/60" strokeWidth={1.75} aria-hidden />
+      </Link>
+
+      <Link href="/payments" className="home-card flex items-center gap-3 !rounded-2xl">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
+          <ShieldCheck className="h-5 w-5" strokeWidth={1.75} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-bold text-ink">Confirm rider payment</span>
+          <span className="block text-xs text-ink-500">Check the exact amount before accepting a goods handover</span>
         </span>
         <ChevronRight className="h-5 w-5 shrink-0 text-ink-500/60" strokeWidth={1.75} aria-hidden />
       </Link>

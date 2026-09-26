@@ -3,16 +3,15 @@
  * funding, rider payouts, wallet top-ups) goes through. Which real
  * aggregator actually handles a given call is resolved from the
  * admin-configurable settings.payments_active_providers list (see
- * ../lib/settings.ts), falling back through providers in priority order to
- * whichever one actually has working credentials, and finally to a mock if
- * none do — so this always works in local dev with zero configuration, and
- * an admin can add/switch/remove a live aggregator with no redeploy.
+ * ../lib/settings.ts). Live mode fails closed when no configured provider
+ * supports the requested capability; mocks are reachable only through demo
+ * mode or an explicitly sandbox-scoped transaction.
  */
 
 import { detectMobileMoneyNetwork, mobileMoneyNetworkLabel, type MobileMoneyNetwork } from "@tuma/shared";
 import { getActiveProviders, getPaymentsDemoMode, type PaymentProviderIdentity } from "../lib/settings.js";
 import { credentialFieldStatus } from "./credentials.js";
-import type { GatewayResult, PaymentGatewayAdapter } from "./gateway.js";
+import { PaymentProviderError, type GatewayResult, type PaymentGatewayAdapter } from "./gateway.js";
 import { flutterwaveAdapter } from "./flutterwave/wire.js";
 import { mockFlutterwaveAdapter } from "./flutterwave/mock.js";
 import { yoAdapter } from "./yo/wire.js";
@@ -76,27 +75,47 @@ export async function resolveProvider(
 ): Promise<PaymentsProvider> {
   const active = await getActiveProviders();
   const demoMode = (await getPaymentsDemoMode()) || !!options?.forceMock;
-  if (!demoMode) {
-    for (const identity of active) {
-      const adapter = ADAPTERS[identity];
-      if (!(await adapter.isConfigured())) continue;
-      if (capability === "disbursement" && !adapter.supportsDisbursement) continue;
-      return identity;
-    }
+  if (demoMode) {
+    const simulatedIdentity =
+      active.find((identity) => capability !== "disbursement" || ADAPTERS[identity].supportsDisbursement) ?? "yo";
+    return mockOf(simulatedIdentity);
   }
-  // Nothing configured (or configured-but-incapable), or demo mode is on —
-  // mock the first choice that *would* support this capability, so
-  // disbursement still simulates through Yo!'s mock even if Flutterwave is
-  // primary.
-  const fallbackIdentity = active.find((p) => capability !== "disbursement" || ADAPTERS[p].supportsDisbursement) ?? "yo";
-  return mockOf(fallbackIdentity);
+
+  for (const identity of active) {
+    const adapter = ADAPTERS[identity];
+    if (!(await adapter.isConfigured())) continue;
+    if (capability === "disbursement" && !adapter.supportsDisbursement) continue;
+    return identity;
+  }
+
+  throw new PaymentProviderError(
+    active[0] ?? "payments",
+    "payment_provider_not_configured",
+    capability === "disbursement"
+      ? "No live payout provider is configured for this destination. Your balance has not been changed."
+      : "No live collection provider is configured. Ask an admin to activate a provider with valid credentials.",
+  );
 }
 
 export async function paymentsIntegrationStatus() {
   const active = await getActiveProviders();
   const demoMode = await getPaymentsDemoMode();
-  const collectionProvider = await resolveProvider("collection");
-  const disbursementProvider = await resolveProvider("disbursement");
+  async function capabilityStatus(capability: "collection" | "disbursement") {
+    try {
+      const provider = await resolveProvider(capability);
+      return { provider, live: !provider.endsWith("_mock"), error: null };
+    } catch (error) {
+      return {
+        provider: null,
+        live: false,
+        error: error instanceof PaymentProviderError ? error.clientMessage : "Payment capability unavailable",
+      };
+    }
+  }
+  const [collection, disbursement] = await Promise.all([
+    capabilityStatus("collection"),
+    capabilityStatus("disbursement"),
+  ]);
   const providers = await Promise.all(
     (["yo", "flutterwave", "mtn", "airtel"] as PaymentProviderIdentity[]).map(async (identity) => ({
       key: identity,
@@ -112,13 +131,33 @@ export async function paymentsIntegrationStatus() {
     activeProviders: active,
     demoMode,
     providers,
-    collection: { provider: collectionProvider, live: !demoMode && !collectionProvider.endsWith("_mock") },
-    disbursement: { provider: disbursementProvider, live: !demoMode && !disbursementProvider.endsWith("_mock") },
+    collection,
+    disbursement,
     networks: ["mtn_momo", "airtel_money"],
   };
 }
 
 export class UnsupportedNetworkError extends Error {}
+
+/** Converts a reviewed provider error into the stable API shape consumed by
+ * every customer/rider payment surface. Raw upstream messages stay in the
+ * Worker logs and never cross this boundary. */
+export function paymentProviderErrorResponse(
+  err: unknown,
+  fallbackMessage: string,
+): { error: string; message: string } {
+  if (err instanceof PaymentProviderError) return { error: err.code, message: err.clientMessage };
+  return { error: "payment_request_failed", message: fallbackMessage };
+}
+
+/** Credential, account-activation, and request-validation failures are
+ * actionable configuration errors, not transient server failures. Returning
+ * 422 lets every deployed client (including older cached PWAs) display the
+ * reviewed message. Only connectivity/provider outages remain a 502. */
+export function paymentProviderHttpStatus(err: unknown): 422 | 502 {
+  if (err instanceof PaymentProviderError && err.code !== "payment_provider_unavailable") return 422;
+  return 502;
+}
 
 function resolveNetwork(msisdn: string): MobileMoneyNetwork {
   const network = detectMobileMoneyNetwork(msisdn);
@@ -196,11 +235,12 @@ export async function initiateDisbursement(input: InitiateInput): Promise<Initia
   return initiate("disbursement", input, "Tuma rider payout");
 }
 
-export type DbPaymentStatus = "pending" | "successful" | "failed";
+export type DbPaymentStatus = "pending" | "unknown" | "successful" | "failed";
 
 function toDbStatus(status: GatewayResult["status"]): DbPaymentStatus {
   if (status === "SUCCEEDED") return "successful";
   if (status === "FAILED") return "failed";
+  if (status === "INDETERMINATE") return "unknown";
   return "pending";
 }
 

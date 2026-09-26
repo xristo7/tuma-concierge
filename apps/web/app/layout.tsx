@@ -1,5 +1,22 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
+
+const THEME_INIT_SCRIPT = `
+(function () {
+  try {
+    var stored = localStorage.getItem("tuma-theme");
+    var theme;
+    if (stored === "light" || stored === "dark") {
+      theme = stored;
+    } else {
+      var hour = new Date().getHours();
+      theme = hour >= 6 && hour < 19 ? "light" : "dark";
+    }
+    document.documentElement.setAttribute("data-theme", theme);
+  } catch (e) {}
+})();
+`;
 
 export const metadata: Metadata = {
   title: "Tuma — Uganda's delivery & errands platform",
@@ -20,8 +37,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body className="min-h-dvh bg-cream text-ink">{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="min-h-dvh bg-cream text-ink">
+        <Script id="theme-init" strategy="beforeInteractive">
+          {THEME_INIT_SCRIPT}
+        </Script>
+        {children}
+      </body>
     </html>
   );
 }

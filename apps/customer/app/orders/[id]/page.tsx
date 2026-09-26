@@ -681,14 +681,14 @@ export default function OrderDetailPage() {
 
         {order.stage === "Approve" && <p className="text-sm text-ink-500">{t("order_waiting_start_delivery")}</p>}
 
-        {order.is_ride && order.stage === "Deliver" && (
+        {!!order.is_ride && order.stage === "Deliver" && (
           <p className="text-sm text-ink-500">
             {t("order_heading_to_pickup")}
             {order.eta_minutes ? ` — ~${order.eta_minutes} min` : ""}.
           </p>
         )}
 
-        {order.is_ride && order.stage === "Arrived" && (
+        {!!order.is_ride && order.stage === "Arrived" && (
           <p className="text-sm text-ink-500">{t("order_rider_here")}</p>
         )}
 

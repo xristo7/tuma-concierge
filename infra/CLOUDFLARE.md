@@ -1,6 +1,6 @@
 # Cloudflare (primary staging host)
 
-All three services now run on Cloudflare Workers. Render config (`render.yaml`) is kept
+The active services run on Cloudflare Workers. Render config (`render.yaml`) is kept
 for reference/rollback but is no longer the active deploy target.
 
 | Service | Type | URL |
@@ -9,6 +9,9 @@ for reference/rollback but is no longer the active deploy target.
 | `tuma-customer` | Worker (Next.js via OpenNext) | https://tuma-customer.doxalight-inc.workers.dev |
 | `tuma-rider` | Worker (Next.js via OpenNext) | https://tuma-rider.doxalight-inc.workers.dev |
 | `tuma-admin` | Worker (Next.js via OpenNext) | not yet deployed — `apps/admin`, same deploy flow as customer/rider |
+| `tuma-restaurant` | Worker (Next.js via OpenNext) | `restaurant.tumaffe.online` when deployed |
+| `tuma-merchant` | Worker (Next.js via OpenNext) | `merchant.tumaffe.online` when deployed |
+| `tuma-web` | Worker (Next.js via OpenNext) | `tumaffe.online` when deployed |
 
 **Database: Cloudflare D1** (`tuma-api`, id `26926e12-d2f4-4b40-8b1b-019f6c169e10`), bound
 natively to the `tuma-api` Worker as `env.DB` — no cross-provider HTTP hop. This is a
@@ -32,10 +35,13 @@ D1 binding is present, e.g. under plain `pnpm dev`) — see `TURSO_DATABASE_URL`
 # API (Hono → Worker)
 pnpm --filter api deploy          # wrangler deploy
 
-# Customer / Rider / Admin (Next.js → Worker via OpenNext)
+# Frontends (Next.js → Worker via OpenNext)
 pnpm --filter customer deploy     # opennextjs-cloudflare build && wrangler deploy
 pnpm --filter rider deploy
 pnpm --filter admin deploy        # not yet deployed — creates the tuma-admin Worker on first run
+pnpm --filter restaurant deploy
+pnpm --filter merchant deploy
+pnpm --filter web deploy
 ```
 
 `autoDeploy`-style CI isn't wired up yet — deploys are manual (`wrangler deploy`) until a
@@ -46,7 +52,8 @@ GitHub Actions workflow is added.
 - `apps/api/wrangler.jsonc` — `d1_databases` binding (`DB` → `tuma-api`), `vars` for CORS
   origins and MoMo sandbox settings. Secrets (`JWT_SECRET`, MoMo credentials) are set via
   `wrangler secret put <NAME>` — never committed, never put in `vars`.
-- `apps/customer/wrangler.jsonc`, `apps/rider/wrangler.jsonc`, `apps/admin/wrangler.jsonc` —
+- Frontend `wrangler.jsonc` files under `apps/customer`, `apps/rider`, `apps/admin`,
+  `apps/restaurant`, `apps/merchant`, and `apps/web` —
   static assets binding + `NEXT_PRIVATE_MINIMAL_MODE=1` (see gotcha below).
   `NEXT_PUBLIC_API_URL` is baked in at **build** time via `.env.production` in each app
   (safe to commit — it's a public value).

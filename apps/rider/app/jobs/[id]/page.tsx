@@ -1,6 +1,6 @@
 "use client";
 
-import type { OrderDetail } from "@tuma/shared";
+import type { MerchantPayment, OrderDetail } from "@tuma/shared";
 import { MapPin, MessageCircle, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -36,6 +36,11 @@ export default function JobDetailPage() {
   const [feeVoiceNote, setFeeVoiceNote] = useState<Blob | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [showMerchantPayment, setShowMerchantPayment] = useState(false);
+  const [outletCode, setOutletCode] = useState("");
+  const [merchantAmount, setMerchantAmount] = useState("");
+  const [receiptReference, setReceiptReference] = useState("");
+  const [merchantPayment, setMerchantPayment] = useState<MerchantPayment | null>(null);
 
   const load = useCallback(async () => {
     const res = await api.getOrder(orderId);
@@ -165,6 +170,61 @@ export default function JobDetailPage() {
       router.push("/");
     } catch (err) {
       setError(errorMessage(err));
+      setBusy(false);
+    }
+  }
+
+  async function requestMerchantPayment() {
+    const amount = Number(merchantAmount);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      setError("Enter the exact whole-UGX amount on the merchant's receipt.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      let location: GeolocationPosition | null = null;
+      if (typeof navigator !== "undefined" && navigator.geolocation) {
+        location = await new Promise<GeolocationPosition | null>((resolve) => {
+          navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), {
+            enableHighAccuracy: true,
+            timeout: 12_000,
+            maximumAge: 15_000,
+          });
+        });
+      }
+      if (!location && !receiptReference.trim()) {
+        throw new Error("Location was unavailable. Add the receipt number so the merchant can complete the fallback check.");
+      }
+      const result = await api.createMerchantPayment({
+        orderId,
+        outletCode: outletCode.trim(),
+        amount,
+        riderLat: location?.coords.latitude,
+        riderLng: location?.coords.longitude,
+        accuracyM: location?.coords.accuracy,
+        capturedAt: location ? new Date(location.timestamp).toISOString() : undefined,
+        evidenceMode: location ? "gps" : "merchant_reauth_receipt",
+        receiptReference: receiptReference.trim() || undefined,
+      }, `merchant-purchase:${orderId}:${crypto.randomUUID()}`);
+      setMerchantPayment(result.payment);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshMerchantPayment() {
+    if (!merchantPayment) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.merchantPayment(merchantPayment.id);
+      setMerchantPayment(result.payment);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
       setBusy(false);
     }
   }
@@ -457,6 +517,47 @@ export default function JobDetailPage() {
               </li>
             ))}
           </ul>
+        )}
+
+        {order.type === "shopping" && order.funds_model === "merchant_allocations_v1" && canDeliver && (
+          <div className="space-y-3 border-t border-[var(--border-faint)] pt-3">
+            <div>
+              <p className="text-sm font-semibold text-ink">Pay a Tuma merchant</p>
+              <p className="text-xs text-ink-500">The merchant must check and confirm the exact amount before you leave with the goods.</p>
+            </div>
+            {!showMerchantPayment && !merchantPayment && (
+              <button type="button" onClick={() => setShowMerchantPayment(true)} className="min-h-11 w-full rounded-full border border-gold px-4 text-sm font-bold text-gold">
+                Record merchant purchase
+              </button>
+            )}
+            {showMerchantPayment && !merchantPayment && (
+              <div className="space-y-2 rounded-xl border border-[var(--border-faint)] p-3">
+                <input value={outletCode} onChange={(e) => setOutletCode(e.target.value)} placeholder="Merchant outlet code" autoCapitalize="characters" className="min-h-11 w-full rounded-xl border border-[var(--border-faint)] bg-transparent px-3 text-sm" />
+                <input value={merchantAmount} onChange={(e) => setMerchantAmount(e.target.value.replace(/[^\d]/g, ""))} placeholder="Exact receipt amount (UGX)" inputMode="numeric" className="min-h-11 w-full rounded-xl border border-[var(--border-faint)] bg-transparent px-3 text-sm" />
+                <input value={receiptReference} onChange={(e) => setReceiptReference(e.target.value)} placeholder="Receipt number (recommended)" className="min-h-11 w-full rounded-xl border border-[var(--border-faint)] bg-transparent px-3 text-sm" />
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setShowMerchantPayment(false)} className="min-h-11 flex-1 rounded-full border border-[var(--border-faint)] px-3 text-sm font-bold text-ink">Cancel</button>
+                  <button type="button" disabled={busy || !outletCode.trim() || !merchantAmount} onClick={requestMerchantPayment} className="min-h-11 flex-[2] rounded-full bg-gold px-3 text-sm font-bold text-ink-gold disabled:opacity-60">{busy ? "Checking location…" : "Request confirmation"}</button>
+                </div>
+              </div>
+            )}
+            {merchantPayment && (
+              <div className="rounded-xl border border-gold/40 bg-gold/5 p-3">
+                <p className="text-xs text-ink-500">Show this payment code to the merchant</p>
+                <p className="mt-1 break-all font-mono text-sm font-bold text-ink">{merchantPayment.id}</p>
+                <p className="mt-1 text-sm font-semibold text-ink">{formatUgx(merchantPayment.amount)}</p>
+                <p className="mt-1 text-xs text-ink-500">Status: {merchantPayment.status.replaceAll("_", " ")}</p>
+                <div className="mt-3 flex gap-2">
+                  {merchantPayment.status === "awaiting_confirmation" && (
+                    <button type="button" disabled={busy} onClick={refreshMerchantPayment} className="min-h-10 flex-1 rounded-full border border-gold px-3 text-xs font-bold text-gold">{busy ? "Checking…" : "Check confirmation"}</button>
+                  )}
+                  {merchantPayment.status !== "awaiting_confirmation" && (
+                    <button type="button" onClick={() => { setMerchantPayment(null); setShowMerchantPayment(true); setOutletCode(""); setMerchantAmount(""); setReceiptReference(""); }} className="min-h-10 flex-1 rounded-full border border-gold px-3 text-xs font-bold text-gold">Add another merchant</button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {canDeliver && (

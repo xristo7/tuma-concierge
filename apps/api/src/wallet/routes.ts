@@ -5,7 +5,13 @@ import { db } from "../db/client.js";
 import { newId } from "../lib/ids.js";
 import { consume, tooManyRequests } from "../lib/ratelimit.js";
 import { getPlatformEnvironment, getWalletSettings } from "../lib/settings.js";
-import { checkPaymentStatus, initiateCollection, UnsupportedNetworkError } from "../payments/service.js";
+import {
+  checkPaymentStatus,
+  initiateCollection,
+  paymentProviderErrorResponse,
+  paymentProviderHttpStatus,
+  UnsupportedNetworkError,
+} from "../payments/service.js";
 import { appBaseUrl } from "../verify/service.js";
 import { creditWallet, getWalletCap, resolveCustomerByIdentifier, transferWallet } from "./service.js";
 
@@ -102,7 +108,10 @@ walletRoutes.post("/wallet/topup", requireAuth, requireRole("customer"), async (
       return c.json({ error: "unsupported_network", message: err.message }, 400);
     }
     console.error("Wallet top-up request failed:", err);
-    return c.json({ error: "payment_request_failed", message: "Couldn't start that top-up just now. Please try again." }, 502);
+    return c.json(
+      paymentProviderErrorResponse(err, "Couldn't start that top-up just now. Please try again."),
+      paymentProviderHttpStatus(err),
+    );
   }
 });
 

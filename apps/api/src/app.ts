@@ -5,6 +5,7 @@ import { adminRoutes } from "./admin/routes.js";
 import { callRoutes } from "./calls/routes.js";
 import { authRoutes } from "./auth/routes.js";
 import { locationRoutes } from "./locations/routes.js";
+import { merchantRoutes } from "./merchants/routes.js";
 import { orderRoutes } from "./orders/routes.js";
 import { paymentRoutes } from "./payments/routes.js";
 import { pushRoutes } from "./push/routes.js";
@@ -28,6 +29,7 @@ const devOrigins = [
   "http://localhost:3001",
   "http://localhost:3002", // apps/admin dev server
   "http://localhost:3003", // apps/restaurant dev server
+  "http://localhost:3005", // apps/merchant dev server
 ];
 
 const defaultOrigins = ["https://tuma-customer-staging.onrender.com", "https://tuma-rider-staging.onrender.com"];
@@ -189,6 +191,7 @@ app.route("/v1", callRoutes);
 app.route("/v1", settingsRoutes);
 app.route("/v1", walletRoutes);
 app.route("/v1", walletsRoutes);
+app.route("/v1", merchantRoutes);
 // adminRoutes' admin gate is scoped to /admin/* (see admin/routes.ts), so
 // mount order here is no longer load-bearing — it used to be registered as
 // "*" on this shared /v1 router, which meant anything mounted after it

@@ -1,5 +1,8 @@
 import {
+  ArrowRight,
   Bike,
+  CheckCircle2,
+  MapPin,
   Package,
   ShieldCheck,
   ShoppingCart,
@@ -10,6 +13,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { SiteFooter } from "../components/SiteFooter";
+import { ThemeModeToggle } from "../components/ThemeModeToggle";
 
 const CUSTOMER_APP_URL = "https://customer.tumaffe.online";
 const RIDER_APP_URL = "https://rider.tumaffe.online";
@@ -17,250 +22,190 @@ const RESTAURANT_APP_URL = "https://restaurant.tumaffe.online";
 
 const SERVICES = [
   {
-    title: "Book a Ride",
-    subtitle: "Get picked up, go anywhere in the city.",
+    title: "Ride",
+    body: "Request a trusted rider and move across town with live tracking.",
     icon: Bike,
-    gradient: "linear-gradient(135deg, #2FA36B 0%, #1B6B47 65%, #0E3A27 100%)",
   },
   {
-    title: "Order Food",
-    subtitle: "Browse restaurants near you and get it delivered hot.",
+    title: "Food",
+    body: "Order from nearby restaurants and keep the conversation in one place.",
     icon: UtensilsCrossed,
-    gradient: "linear-gradient(135deg, #E6B23D 0%, #C9A227 65%, #8A6E15 100%)",
   },
   {
-    title: "Shopping List",
-    subtitle: "Send a list — your rider shops it and brings it to you.",
+    title: "Shopping",
+    body: "Send a list, approve substitutions, and get essentials brought home.",
     icon: ShoppingCart,
-    gradient: "linear-gradient(135deg, #3D66A6 0%, #153A75 65%, #0C2245 100%)",
   },
   {
-    title: "Parcel Delivery",
-    subtitle: "Send or receive a package, anywhere in town.",
+    title: "Parcels",
+    body: "Move packages across the city with proof, chat, and rider updates.",
     icon: Package,
-    gradient: "linear-gradient(135deg, #A87B4C 0%, #7A5936 65%, #4A3620 100%)",
   },
 ];
 
+const STATS = [
+  { label: "Rides, food, errands", value: "4-in-1" },
+  { label: "Payment options", value: "MoMo + cash" },
+  { label: "Built for", value: "Uganda" },
+];
+
 const STEPS = [
-  {
-    n: "1",
-    title: "Tell us what you need",
-    body: "Book a ride, send a shopping list, order food, or drop off a parcel — right from the app.",
-  },
-  {
-    n: "2",
-    title: "Get matched with a verified rider",
-    body: "A nearby, ID-verified rider picks up your order and heads your way.",
-  },
-  {
-    n: "3",
-    title: "Track it live",
-    body: "Watch your rider on the map and chat with them the whole way, in English or Luganda.",
-  },
-  {
-    n: "4",
-    title: "Delivered, paid safely",
-    body: "Pay by mobile money or cash — funds are held safely in escrow until you confirm delivery.",
-  },
+  "Choose what you need",
+  "Match with a verified rider",
+  "Track, chat, and confirm",
 ];
 
 export default function Home() {
   return (
-    <div className="mx-auto max-w-5xl px-5 pb-16">
-      {/* Header */}
-      <header className="flex items-center justify-between py-6">
-        <Image src="/brand/tuma-logo-navy.png" alt="Tuma" width={110} height={28} className="h-7 w-auto dark:hidden" priority />
+    <main className="min-h-screen overflow-hidden bg-cream">
+      <section className="hero-shell relative min-h-[92vh] px-5 text-ink sm:px-8">
         <Image
-          src="/brand/tuma-logo-white.png"
-          alt="Tuma"
-          width={110}
-          height={28}
-          className="hidden h-7 w-auto dark:block"
+          src="/images/hero-rider.png"
+          alt="Tuma rider ready for delivery on a city street"
+          fill
+          className="object-cover object-[64%_center]"
           priority
+          sizes="100vw"
         />
-        <a
-          href={CUSTOMER_APP_URL}
-          className="rounded-full bg-gold px-5 py-2.5 text-sm font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] transition-opacity hover:opacity-90"
-        >
-          Open the app
-        </a>
-      </header>
+        <div className="hero-overlay absolute inset-0" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-[rgb(var(--color-cream))] to-transparent" />
 
-      {/* Hero */}
-      <section className="flex flex-col items-start gap-6 py-10 sm:py-16">
-        <span className="rounded-full bg-navy/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-navy dark:bg-navy/20">
-          Uganda's delivery &amp; errands platform
-        </span>
-        <h1 className="max-w-2xl text-4xl font-extrabold leading-tight text-ink sm:text-5xl">
-          Rides, food, shopping &amp; parcels — one app, verified riders.
-        </h1>
-        <p className="max-w-xl text-lg text-ink-500">
-          Fast. Reliable. Trusted. Tuma connects you with verified riders across your city so you can get
-          picked up, fed, stocked up, or delivered to — without the guesswork.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <a
-            href={CUSTOMER_APP_URL}
-            className="rounded-full bg-gold px-6 py-3.5 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] transition-opacity hover:opacity-90"
-          >
-            Open the app
-          </a>
-          <a
-            href={RIDER_APP_URL}
-            className="rounded-full border border-[var(--border-faint)] bg-[rgb(var(--surface-card))] px-6 py-3.5 text-base font-bold text-ink transition-colors hover:bg-[rgb(var(--surface-muted))]"
-          >
-            Become a rider
-          </a>
-        </div>
-      </section>
-
-      {/* Services */}
-      <section id="services" className="space-y-6 py-10">
-        <div>
-          <h2 className="text-2xl font-bold text-ink">Everything, in one app</h2>
-          <p className="mt-1 text-ink-500">Four ways to get things done, all with the same verified-rider network.</p>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {SERVICES.map((s) => (
-            <div
-              key={s.title}
-              className="relative flex h-40 flex-col justify-between overflow-hidden rounded-3xl p-5 shadow-lg"
-              style={{ background: s.gradient }}
-            >
-              <s.icon className="pointer-events-none absolute -bottom-6 -right-4 h-36 w-36 text-white/10" strokeWidth={1.25} aria-hidden />
-              <span className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-black/25 text-white">
-                <s.icon className="h-5 w-5" strokeWidth={2} aria-hidden />
-              </span>
-              <span className="relative">
-                <span className="block text-lg font-bold leading-tight text-white">{s.title}</span>
-                <span className="block text-sm text-white/75">{s.subtitle}</span>
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how-it-works" className="space-y-6 py-10">
-        <div>
-          <h2 className="text-2xl font-bold text-ink">How it works</h2>
-          <p className="mt-1 text-ink-500">From request to doorstep, in four simple steps.</p>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {STEPS.map((step) => (
-            <div key={step.n} className="card flex gap-4 !p-5">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold text-sm font-extrabold text-ink-gold">
-                {step.n}
-              </span>
-              <div>
-                <p className="font-bold text-ink">{step.title}</p>
-                <p className="mt-1 text-sm text-ink-500">{step.body}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Trust */}
-      <section className="space-y-6 py-10">
-        <div>
-          <h2 className="text-2xl font-bold text-ink">Why people trust Tuma</h2>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="card !p-5">
-            <ShieldCheck className="h-6 w-6 text-gold" strokeWidth={2} aria-hidden />
-            <p className="mt-3 font-bold text-ink">Verified riders</p>
-            <p className="mt-1 text-sm text-ink-500">Every rider is ID-checked before they can accept a single order.</p>
-          </div>
-          <div className="card !p-5">
-            <Wallet className="h-6 w-6 text-gold" strokeWidth={2} aria-hidden />
-            <p className="mt-3 font-bold text-ink">Escrow-protected payments</p>
-            <p className="mt-1 text-sm text-ink-500">Your money is held safely and only released once delivery is confirmed.</p>
-          </div>
-          <div className="card !p-5">
-            <Star className="h-6 w-6 text-gold" strokeWidth={2} aria-hidden />
-            <p className="mt-3 font-bold text-ink">Built for Uganda</p>
-            <p className="mt-1 text-sm text-ink-500">Mobile money, cash on delivery, and a Luganda-language app — made for how you already pay and speak.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Become a rider */}
-      <section id="riders" className="py-10">
-        <div className="card flex flex-col items-start gap-4 !p-8 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-ink">Earn as a Tuma rider</h2>
-            <p className="mt-2 max-w-md text-ink-500">
-              Set your own hours, claim jobs near you, and get paid straight to your mobile money wallet after
-              every delivery.
-            </p>
-          </div>
-          <a
-            href={RIDER_APP_URL}
-            className="shrink-0 rounded-full bg-gold px-6 py-3.5 text-base font-bold text-ink-gold shadow-[0_4px_12px_rgba(201,162,39,0.35)] transition-opacity hover:opacity-90"
-          >
-            Sign up to ride
-          </a>
-        </div>
-      </section>
-
-      {/* Restaurants */}
-      <section id="restaurants" className="py-10">
-        <div className="card flex flex-col items-start gap-4 !p-8 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-navy/10 text-navy dark:bg-navy/20">
-              <Store className="h-5 w-5" strokeWidth={2} aria-hidden />
-            </span>
-            <h2 className="mt-3 text-2xl font-bold text-ink">List your restaurant on Tuma</h2>
-            <p className="mt-2 max-w-md text-ink-500">
-              Reach hungry customers across your city and let Tuma's verified riders handle delivery for you.
-            </p>
-          </div>
-          <a
-            href={RESTAURANT_APP_URL}
-            className="shrink-0 rounded-full border border-[var(--border-faint)] bg-[rgb(var(--surface-muted))] px-6 py-3.5 text-base font-bold text-ink transition-colors hover:bg-[rgb(var(--surface-card))]"
-          >
-            Join as a restaurant
-          </a>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="mt-10 space-y-4 border-t border-[var(--border-faint)] pt-8 text-sm text-ink-500">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <Image src="/brand/tuma-logo-navy.png" alt="Tuma" width={90} height={24} className="h-6 w-auto dark:hidden" />
-          <Image src="/brand/tuma-logo-white.png" alt="Tuma" width={90} height={24} className="hidden h-6 w-auto dark:block" />
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            <Link href="#services" className="hover:text-ink">
+        <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between py-5">
+          <Image src="/brand/tuma-logo-navy.png" alt="Tuma" width={116} height={30} className="h-7 w-auto dark:hidden" priority />
+          <Image src="/brand/tuma-logo-white.png" alt="Tuma" width={116} height={30} className="hidden h-7 w-auto dark:block" priority />
+          <nav className="hidden items-center gap-7 text-sm font-semibold text-ink-500 md:flex">
+            <Link href="#services" className="transition hover:text-ink">
               Services
             </Link>
-            <Link href="#how-it-works" className="hover:text-ink">
+            <Link href="#how-it-works" className="transition hover:text-ink">
               How it works
             </Link>
-            <Link href="#riders" className="hover:text-ink">
-              Riders
+            <Link href="#partners" className="transition hover:text-ink">
+              Partners
             </Link>
-            <Link href="#restaurants" className="hover:text-ink">
-              Restaurants
-            </Link>
+          </nav>
+          <div className="flex items-center gap-2">
+            <a className="button button-light" href={CUSTOMER_APP_URL}>
+              Open app
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </a>
+            <ThemeModeToggle />
+          </div>
+        </header>
+
+        <div className="relative z-10 mx-auto flex max-w-7xl flex-col justify-center pb-28 pt-16 sm:pb-32 sm:pt-24 lg:min-h-[calc(92vh-80px)]">
+          <div className="hero-copy max-w-2xl">
+            <span className="hero-pill inline-flex items-center gap-2 border border-[var(--border-faint)] bg-[rgb(var(--surface-card))]/90 px-3 py-1.5 text-xs font-bold uppercase text-ink-500 shadow-[var(--shadow-card)] backdrop-blur">
+              <MapPin className="h-3.5 w-3.5 text-gold" aria-hidden />
+              Uganda's everyday movement app
+            </span>
+            <h1 className="mt-7 max-w-xl text-5xl font-black leading-[0.96] text-ink sm:text-6xl lg:text-7xl">
+              Get it done with Tuma.
+            </h1>
+            <p className="mt-5 max-w-xl text-xl font-semibold leading-tight text-ink sm:text-2xl">
+              Rides, food, shopping, and parcels with verified riders in one app.
+            </p>
+            <p className="mt-5 max-w-lg text-base leading-7 text-ink-500">
+              Tuma keeps the whole job visible: request, rider match, live updates, chat, and payment confirmation from pickup to doorstep.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <a href={CUSTOMER_APP_URL} className="button button-primary">
+                Start with Tuma
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </a>
+              <a href={RIDER_APP_URL} className="button button-ghost">
+                Become a rider
+              </a>
+            </div>
+          </div>
+
+          <div className="hero-stats mt-14 grid max-w-3xl grid-cols-1 overflow-hidden border border-[var(--border-faint)] bg-[rgb(var(--surface-card))]/88 shadow-[var(--shadow-card)] backdrop-blur-md sm:grid-cols-3">
+            {STATS.map((stat) => (
+              <div key={stat.label} className="border-[var(--border-faint)] px-5 py-4 sm:border-r sm:last:border-r-0">
+                <p className="text-2xl font-black text-ink">{stat.value}</p>
+                <p className="mt-1 text-sm font-semibold text-ink-500">{stat.label}</p>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
-          <a href="mailto:support@tumaffe.online" className="hover:text-ink">
-            support@tumaffe.online
-          </a>
-          <span className="hidden sm:inline">·</span>
-          <a href="tel:+256783335335" className="hover:text-ink">
-            0783 335 335
-          </a>
-          <span className="hidden sm:inline">·</span>
-          <a href="tel:+256756384715" className="hover:text-ink">
-            0756 384 715
-          </a>
+      </section>
+
+      <section id="services" className="mx-auto grid max-w-7xl grid-cols-1 gap-3 px-5 sm:grid-cols-2 sm:px-8 lg:grid-cols-4">
+        {SERVICES.map((service) => (
+          <article key={service.title} className="service-card">
+            <div className="flex h-12 w-12 items-center justify-center">
+              <service.icon className="h-5 w-5" aria-hidden />
+            </div>
+            <h2 className="mt-6 text-2xl font-black text-ink">{service.title}</h2>
+            <p className="mt-3 text-sm leading-6 text-ink-500">{service.body}</p>
+          </article>
+        ))}
+      </section>
+
+      <section id="how-it-works" className="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+        <div>
+          <p className="eyebrow">Simple by design</p>
+          <h2 className="mt-3 max-w-lg text-4xl font-black leading-tight text-ink sm:text-5xl">
+            One request becomes a completed delivery.
+          </h2>
         </div>
-        <p>© {new Date().getFullYear()} Tuma. All rights reserved.</p>
-      </footer>
-    </div>
+        <div className="grid gap-3">
+          {STEPS.map((step, index) => (
+            <div key={step} className="process-row">
+              <span>{index + 1}</span>
+              <p>{step}</p>
+              <CheckCircle2 className="h-5 w-5 text-green" aria-hidden />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="px-5 py-18 sm:px-8">
+        <div className="trust-panel card mx-auto grid max-w-7xl gap-10 !p-8 text-white lg:grid-cols-[1fr_1.1fr] lg:items-center lg:!p-14 xl:!p-16">
+          <div>
+            <p className="eyebrow text-gold">Trust built in</p>
+            <h2 className="mt-3 max-w-md text-4xl font-black leading-tight sm:text-5xl">
+              Designed for real errands, real riders, and real payments.
+            </h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="dark-card">
+              <ShieldCheck className="h-6 w-6 text-gold" aria-hidden />
+              <p>Verified riders</p>
+            </div>
+            <div className="dark-card">
+              <Wallet className="h-6 w-6 text-gold" aria-hidden />
+              <p>Escrow-aware payments</p>
+            </div>
+            <div className="dark-card">
+              <Star className="h-6 w-6 text-gold" aria-hidden />
+              <p>English and Luganda</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="partners" className="mx-auto grid max-w-7xl gap-3 px-5 py-20 sm:px-8 lg:grid-cols-2">
+        <article className="partner-panel bg-gold text-ink-gold">
+          <h2>Earn as a Tuma rider</h2>
+          <p>Claim nearby jobs, serve customers across town, and get paid through the channels riders already use.</p>
+          <a href={RIDER_APP_URL} className="button button-dark">
+            Sign up to ride
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </a>
+        </article>
+        <article className="partner-panel bg-[rgb(var(--surface-card))] text-ink">
+          <Store className="h-7 w-7 text-green" aria-hidden />
+          <h2>List your restaurant</h2>
+          <p>Bring your menu online, chat with customers, and let Tuma's rider network handle the handoff.</p>
+          <a href={RESTAURANT_APP_URL} className="button button-outline">
+            Join as a restaurant
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </a>
+        </article>
+      </section>
+
+      <SiteFooter />
+    </main>
   );
 }

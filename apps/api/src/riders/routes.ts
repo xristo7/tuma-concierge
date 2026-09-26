@@ -12,7 +12,14 @@ import { clientIp } from "../lib/ratelimit.js";
 import { getDeliverySettings, getMonetizationSettings, getPlatformEnvironment, getRiderReserveSettings } from "../lib/settings.js";
 import { currentVisibilityRadiusKm, orderMatchPoint } from "../orders/matching.js";
 import { redactOrders, toOpenJob } from "../orders/visibility.js";
-import { checkPaymentStatus, initiateCollection, initiateDisbursement, UnsupportedNetworkError } from "../payments/service.js";
+import {
+  checkPaymentStatus,
+  initiateCollection,
+  initiateDisbursement,
+  paymentProviderErrorResponse,
+  paymentProviderHttpStatus,
+  UnsupportedNetworkError,
+} from "../payments/service.js";
 import { isCashDepositOk } from "../lib/monetization.js";
 import { getRiderSubscriptionView, isSubscriptionCurrent, nextPaidThrough } from "./subscription.js";
 import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
@@ -460,7 +467,10 @@ riderRoutes.post("/riders/me/wallet/topup", requireAuth, requireRole("rider"), a
       return c.json({ error: "unsupported_network", message: err.message }, 400);
     }
     console.error("Rider wallet top-up request failed:", err);
-    return c.json({ error: "payment_request_failed", message: "Couldn't start that top-up just now. Please try again." }, 502);
+    return c.json(
+      paymentProviderErrorResponse(err, "Couldn't start that top-up just now. Please try again."),
+      paymentProviderHttpStatus(err),
+    );
   }
 });
 
@@ -892,7 +902,10 @@ riderRoutes.post("/riders/me/subscription/pay", requireAuth, requireRole("rider"
       return c.json({ error: "unsupported_network", message: err.message }, 400);
     }
     console.error("Subscription payment request failed:", err);
-    return c.json({ error: "payment_request_failed", message: "Couldn't reach mobile money just now. Please try again." }, 502);
+    return c.json(
+      paymentProviderErrorResponse(err, "Couldn't reach mobile money just now. Please try again."),
+      paymentProviderHttpStatus(err),
+    );
   }
 });
 

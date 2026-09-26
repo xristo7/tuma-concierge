@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import type { InArgs } from "@libsql/client";
-import { db } from "../db/client.js";
+import { db, executeBatch } from "../db/client.js";
 import { requireAuth, requireRole } from "../auth/middleware.js";
 import { haversineKm } from "../lib/geo.js";
 import { newId, newPin } from "../lib/ids.js";
@@ -20,11 +20,22 @@ import { notifyUser } from "../lib/webpush.js";
 import { currentVisibilityRadiusKm, orderMatchPoint, parseDbTimestamp } from "./matching.js";
 import { redactOrder } from "./visibility.js";
 import type { MatchingMode, MobileMoneyNetwork } from "@tuma/shared";
-import { initiateCollection, mobileMoneyNetworkLabel, UnsupportedNetworkError } from "../payments/service.js";
+import {
+  initiateCollection,
+  mobileMoneyNetworkLabel,
+  paymentProviderErrorResponse,
+  paymentProviderHttpStatus,
+  UnsupportedNetworkError,
+} from "../payments/service.js";
 import { getR2Bucket, uploadResponseHeaders } from "../storage/r2.js";
 import { appBaseUrl } from "../verify/service.js";
 import { payFromWallet } from "../wallet/service.js";
 import { isSubscriptionCurrent } from "../riders/subscription.js";
+import {
+  activateMerchantAllocationsForFundedOrder,
+  refundUnusedOrderPrincipal,
+  settleMerchantOrderFinancials,
+} from "../merchants/service.js";
 
 function paymentReturnUrl(orderId: string): string {
   return `${appBaseUrl("customer")}/orders/${orderId}?payment_return=1`;
@@ -557,6 +568,13 @@ async function assignRider(
   });
   if (result.rowsAffected === 0) return false;
 
+  if (order.funds_model === "merchant_allocations_v1") {
+    await db.execute({
+      sql: "INSERT OR IGNORE INTO rider_order_locks (rider_id, order_id, environment) VALUES (?, ?, ?)",
+      args: [riderId, id, String(order.environment)],
+    });
+  }
+
   // Anything the customer sent before a rider existed was stored with a null
   // rider_id, and every chat query since works off the customer/rider pair —
   // so without this those messages drop out of the conversation the moment
@@ -1035,6 +1053,7 @@ orderRoutes.post("/orders/:id/cancel", async (c) => {
   const nextStage = paid.rows.length > 0 ? "Match" : "Create";
 
   await touchOrder(id, { rider_id: null, stage: nextStage, matched_out_of_range: 0 });
+  await db.execute({ sql: "DELETE FROM rider_order_locks WHERE rider_id = ? AND order_id = ?", args: [user.sub, id] });
   await logEvent(id, nextStage, "Rider cancelled — order returned to the job pool", user.sub);
 
   return c.json({ order: await getOrder(id) });
@@ -1212,11 +1231,20 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
     if (!paymentId) return c.json({ error: "insufficient_wallet_balance" }, 409);
 
     await touchOrder(id, { stage: "Shop" });
+    await activateMerchantAllocationsForFundedOrder(id);
     await logEvent(id, "Fund", sharedSpend ? "Paid from a shared wallet — shopping started" : "Paid from wallet — shopping started", user.sub);
     return c.json({ order: await getOrder(id), payment: { id: paymentId, status: "successful", network: null } });
   }
 
   const paymentId = newId("pay");
+  await executeBatch([
+    {
+      sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, msisdn, amount, currency, status)
+            VALUES (?, ?, 'collection', 'unassigned', NULL, ?, ?, 'UGX', 'pending')`,
+      args: [paymentId, id, parsed.data.msisdn ?? null, amount],
+    },
+    { sql: "UPDATE orders SET stage = 'Fund', updated_at = datetime('now') WHERE id = ? AND stage = 'Match'", args: [id] },
+  ]);
   let providerRef: string;
   let network: MobileMoneyNetwork | null;
   let provider: string;
@@ -1235,23 +1263,57 @@ orderRoutes.post("/orders/:id/fund", async (c) => {
     provider = initiated.provider;
     redirectUrl = initiated.redirectUrl;
   } catch (err) {
+    await executeBatch([
+      { sql: "UPDATE payments SET status = 'failed', updated_at = datetime('now') WHERE id = ?", args: [paymentId] },
+      { sql: "UPDATE orders SET stage = 'Match', updated_at = datetime('now') WHERE id = ? AND stage = 'Fund'", args: [id] },
+    ]);
     if (err instanceof UnsupportedNetworkError) {
       return c.json({ error: "unsupported_network", message: err.message }, 400);
     }
     console.error("Escrow collection request failed:", err);
     return c.json(
-      { error: "payment_request_failed", message: "Couldn't reach mobile money just now. Please try again." },
-      502,
+      paymentProviderErrorResponse(err, "Couldn't reach mobile money just now. Please try again."),
+      paymentProviderHttpStatus(err),
     );
   }
 
-  await db.execute({
-    sql: `INSERT INTO payments (id, order_id, type, provider, provider_ref, msisdn, network, amount, currency, status)
-          VALUES (?, ?, 'collection', ?, ?, ?, ?, ?, 'UGX', 'pending')`,
-    args: [paymentId, id, provider, providerRef, parsed.data.msisdn ?? null, network, amount],
-  });
-
-  await touchOrder(id, { stage: "Fund" });
+  try {
+    await executeBatch([
+      {
+        sql: "UPDATE payments SET provider = ?, provider_ref = ?, network = ?, updated_at = datetime('now') WHERE id = ?",
+        args: [provider, providerRef, network, paymentId],
+      },
+      {
+        sql: `INSERT INTO provider_operations
+              (id, operation_type, business_type, business_id, provider, provider_ref,
+               idempotency_key, amount, environment, status, next_check_at)
+              VALUES (?, 'collection', 'payment', ?, ?, ?, ?, ?, ?, 'submitted', datetime('now', '+2 minutes'))`,
+        args: [newId("pop"), paymentId, provider, providerRef, `payment:${paymentId}:collection`, amount, order.environment],
+      },
+    ]);
+  } catch (error) {
+    // The provider already accepted this collection. Preserve the reference
+    // and reconciliation job with best-effort idempotent writes; never put
+    // the order back at Match, which would invite a duplicate charge.
+    console.error("Collection accepted by provider but atomic persistence failed", paymentId, providerRef, error);
+    const paymentSaved = await db.execute({
+      sql: "UPDATE payments SET provider = ?, provider_ref = ?, network = ?, updated_at = datetime('now') WHERE id = ?",
+      args: [provider, providerRef, network, paymentId],
+    }).then(() => true).catch(() => false);
+    const operationSaved = await db.execute({
+      sql: `INSERT OR IGNORE INTO provider_operations
+            (id, operation_type, business_type, business_id, provider, provider_ref,
+             idempotency_key, amount, environment, status, next_check_at)
+            VALUES (?, 'collection', 'payment', ?, ?, ?, ?, ?, ?, 'unknown', datetime('now', '+2 minutes'))`,
+      args: [newId("pop"), paymentId, provider, providerRef, `payment:${paymentId}:collection`, amount, String(order.environment)],
+    }).then(() => true).catch(() => false);
+    if (!paymentSaved || !operationSaved) {
+      return c.json({
+        error: "collection_status_uncertain",
+        message: "The payment request was submitted and may still complete. Do not retry it; support can reconcile this order.",
+      }, 502);
+    }
+  }
   await logEvent(
     id,
     "Fund",
@@ -1679,6 +1741,29 @@ orderRoutes.post("/orders/:id/deliver", async (c) => {
   const parsed = deliverSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return c.json({ error: "invalid_body", issues: parsed.error.issues }, 400);
 
+  if (order.type === "shopping" && order.funds_model === "merchant_allocations_v1") {
+    const allocation = await db.execute({
+      sql: `SELECT b.principal_funded, b.principal_allocated,
+                   (SELECT COUNT(*) FROM merchant_payments mp
+                    WHERE mp.order_id=b.order_id AND mp.status='awaiting_confirmation') AS awaiting
+            FROM order_budgets b WHERE b.order_id = ?`,
+      args: [id],
+    });
+    const budget = allocation.rows[0] as Row | undefined;
+    if (!budget || Number(budget.principal_allocated) <= 0) {
+      return c.json({
+        error: "merchant_purchase_required",
+        message: "Record at least one confirmed merchant purchase before starting delivery.",
+      }, 409);
+    }
+    if (Number(budget.awaiting) > 0) {
+      return c.json({
+        error: "merchant_confirmation_pending",
+        message: "A merchant payment is still waiting for the shop to confirm the amount.",
+      }, 409);
+    }
+  }
+
   const pin = (order.pin_code as string | null) ?? newPin();
   await touchOrder(id, {
     stage: "Deliver",
@@ -1843,25 +1928,34 @@ orderRoutes.post("/orders/:id/settle", async (c) => {
     // retroactively change what this order owes the rider.
     const feesRes = await db.execute({ sql: "SELECT * FROM order_fees WHERE order_id = ?", args: [id] });
     const feesRow = feesRes.rows[0] as Row | undefined;
-    payout = feesRow
-      ? riderPayout(released, {
-          serviceFee: Number(feesRow.service_fee) || 0,
-          processingFeeCustomer: Number(feesRow.processing_fee_customer) || 0,
-          processingFeeRider: Number(feesRow.processing_fee_rider) || 0,
-          deliveryCommission: Number(feesRow.delivery_commission) || 0,
-          totalSurcharge: (Number(feesRow.service_fee) || 0) + (Number(feesRow.processing_fee_customer) || 0),
-        })
-      : released;
+    if (order.funds_model === "merchant_allocations_v1") {
+      const deliveryFee = Number(order.delivery_fee ?? 0);
+      const deliveryCommission = Number(feesRow?.delivery_commission ?? 0);
+      const riderProcessing = Number(feesRow?.processing_fee_rider ?? 0);
+      payout = Math.max(0, deliveryFee - deliveryCommission - riderProcessing);
+      const refunded = await refundUnusedOrderPrincipal(id, user.sub);
+      await settleMerchantOrderFinancials({ orderId: id, actorId: user.sub, riderPayout: payout });
+      if (refunded > 0) {
+        await logEvent(id, "Settle", `${formatAmount(refunded)} unused shopping principal returned to the customer wallet`, user.sub);
+      }
+    } else {
+      payout = feesRow
+        ? riderPayout(released, {
+            serviceFee: Number(feesRow.service_fee) || 0,
+            processingFeeCustomer: Number(feesRow.processing_fee_customer) || 0,
+            processingFeeRider: Number(feesRow.processing_fee_rider) || 0,
+            deliveryCommission: Number(feesRow.delivery_commission) || 0,
+            totalSurcharge: (Number(feesRow.service_fee) || 0) + (Number(feesRow.processing_fee_customer) || 0),
+          })
+        : released;
 
-    if (payout > 0) {
-      // Credits the balance column matching this specific order's own
-      // environment — never "whatever's currently active" — so a sandbox
-      // order can never inflate a rider's real, withdrawable balance.
-      const balanceColumn = order.environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
-      await db.execute({
-        sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} + ?, updated_at = datetime('now') WHERE user_id = ?`,
-        args: [payout, order.rider_id as string],
-      });
+      if (payout > 0) {
+        const balanceColumn = order.environment === "sandbox" ? "wallet_balance_sandbox" : "wallet_balance";
+        await db.execute({
+          sql: `UPDATE riders SET ${balanceColumn} = ${balanceColumn} + ?, updated_at = datetime('now') WHERE user_id = ?`,
+          args: [payout, order.rider_id as string],
+        });
+      }
     }
     if (released < total) {
       await logEvent(

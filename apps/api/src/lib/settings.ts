@@ -80,6 +80,18 @@ const DEFAULTS = {
    * aggregator. "1" = demo mode on, anything else = off. See
    * ../payments/service.ts resolveProvider(). */
   payments_demo_mode: "0",
+  /** Merchant-funded shopping is deliberately dark-launched. Live traffic
+   * also requires a current regulated-custody approval; this flag alone can
+   * never bypass that gate. */
+  merchant_payments_enabled: "0",
+  /** Sandbox merchant allocations are on by default and always use the
+   * simulator. This is intentionally separate from live activation. */
+  merchant_sandbox_enabled: "1",
+  merchant_live_custody_approved: "0",
+  /** Operational circuit breaker. Reconciliation can set this automatically
+   * and an admin may only clear it after every merchant subledger matches. */
+  merchant_withdrawals_frozen: "0",
+  merchant_instant_fee_flat: "0",
   /** Wallet balance ceilings (UGX), tiered by verification the same way
    * mobile money itself limits unverified accounts — see
    * ../wallet/routes.ts. */

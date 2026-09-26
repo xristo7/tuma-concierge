@@ -1,6 +1,8 @@
 import type { AdminRole } from "./permissions.js";
 import type {
   ActivityLogEntry,
+  AdminMerchantSettlementAccount,
+  AdminMerchant,
   AdminCustomer,
   AdminOrderRow,
   AdminRider,
@@ -30,6 +32,20 @@ import type {
   ListSummary,
   MapsAdminSettings,
   MapsProviderIdentity,
+  MerchantBalance,
+  Merchant,
+  MerchantCategory,
+  MerchantDispute,
+  MerchantMember,
+  MerchantOutlet,
+  MerchantPaymentSummary,
+  MerchantTransaction,
+  MerchantCustodyApproval,
+  MerchantProviderOperation,
+  MerchantPayment,
+  MerchantReconciliationRow,
+  MerchantSettlement,
+  MerchantSettlementAccount,
   MatchingMode,
   NavMode,
   OrderDetail,
@@ -138,6 +154,27 @@ const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
   validation_error: "Some information is missing or invalid. Please check the form and try again.",
   invalid_input: "Some information is missing or invalid. Please check the form and try again.",
   network_error: "Couldn't connect. Please check your internet connection and try again.",
+  payment_provider_auth_failed:
+    "Flutterwave rejected the saved secret key. Ask an admin to re-enter the correct Flutterwave Secret key.",
+  payment_provider_account_not_ready:
+    "Flutterwave has not enabled this account for live payments. Check account activation and Uganda payment methods in Flutterwave.",
+  payment_provider_rejected: "Flutterwave rejected this payment request. Check the Flutterwave payment settings and try again.",
+  payment_provider_unavailable: "Flutterwave is temporarily unavailable. Please try again in a moment.",
+  payment_provider_not_configured:
+    "No live payment provider is configured for this action. Your balance has not been changed.",
+  merchant_custody_approval_required:
+    "Record an active regulated custody and safeguarding approval before enabling live merchant payments.",
+  merchant_withdrawals_frozen:
+    "Merchant withdrawals are temporarily paused while balances are reconciled.",
+  reconciliation_mismatch:
+    "Withdrawals cannot be resumed until every merchant balance matches the immutable ledger.",
+  merchant_not_active: "This merchant must be approved and active before requesting a settlement.",
+  merchant_amount_mismatch: "The amount you confirmed does not match the rider's payment request.",
+  merchant_purchase_required: "Record at least one confirmed merchant purchase before starting delivery.",
+  merchant_confirmation_pending: "A merchant payment is still waiting for the shop to confirm the amount.",
+  merchant_member_not_found: "That person must create a Tuma customer account with this email or phone before being added to the merchant team.",
+  owner_cannot_be_removed: "The merchant owner cannot be removed from the team.",
+  merchant_kyc_incomplete: "Registration, tax ID, owner ID and business registration document are required before activation.",
 };
 
 /** Turns any error from the API client into a message safe to show a user —
@@ -756,6 +793,172 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
         body: JSON.stringify(input),
       });
     },
+    async merchantBalance(merchantId: string) {
+      return request<{ balance: MerchantBalance; currency: "UGX"; environment: PlatformEnvironment }>(
+        `/v1/merchants/${merchantId}/balance`,
+      );
+    },
+    async merchantCategories() {
+      return request<{ categories: MerchantCategory[] }>("/v1/merchant-categories");
+    },
+    async applyAsMerchant(input: {
+      legalName: string;
+      displayName: string;
+      categoryId: string;
+      outletName: string;
+      phone?: string;
+      address?: string;
+      lat: number;
+      lng: number;
+    }) {
+      return request<{ merchant: Merchant; outlet: MerchantOutlet }>("/v1/merchants/apply", {
+        method: "POST",
+        body: JSON.stringify({ ...input, businessKind: "business" }),
+      });
+    },
+    async myMerchants() {
+      return request<{ merchants: Merchant[] }>("/v1/merchants/me");
+    },
+    async updateMerchant(merchantId: string, input: { legalName?: string; displayName?: string }) {
+      return request<{ merchant: Merchant }>(`/v1/merchants/${merchantId}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    },
+    async submitMerchantKyc(merchantId: string, input: { registrationNumber: string; taxId: string }) {
+      return request<{ kyc: { status: "in_review" } }>(`/v1/merchants/${merchantId}/kyc`, {
+        method: "POST",
+        body: JSON.stringify({ ...input, declarationAccepted: true }),
+      });
+    },
+    async uploadMerchantKycDocument(merchantId: string, type: "owner-id" | "business-registration", file: Blob) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await f(`${root}/v1/merchants/${merchantId}/kyc-documents/${type}`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: form,
+      });
+      return json<{ document: { type: string; uploaded: true } }>(res);
+    },
+    async merchantOutlets(merchantId: string) {
+      return request<{ outlets: MerchantOutlet[] }>(`/v1/merchants/${merchantId}/outlets`);
+    },
+    async createMerchantOutlet(merchantId: string, input: {
+      categoryId: string; name: string; phone?: string; address?: string; lat: number; lng: number;
+    }) {
+      return request<{ outlet: MerchantOutlet }>(`/v1/merchants/${merchantId}/outlets`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async updateMerchantOutlet(merchantId: string, outletId: string, input: Partial<{
+      name: string; phone: string | null; address: string | null; lat: number; lng: number;
+      status: "active" | "suspended" | "closed";
+    }>) {
+      return request<{ outlet: MerchantOutlet }>(`/v1/merchants/${merchantId}/outlets/${outletId}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    },
+    async merchantMembers(merchantId: string) {
+      return request<{ members: MerchantMember[] }>(`/v1/merchants/${merchantId}/members`);
+    },
+    async addMerchantMember(merchantId: string, input: {
+      identifier: string; role: "finance" | "manager" | "cashier"; outletId?: string | null;
+    }) {
+      return request<{ member: { userId: string; role: string; status: "active" } }>(`/v1/merchants/${merchantId}/members`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async removeMerchantMember(merchantId: string, userId: string) {
+      return request<{ ok: true }>(`/v1/merchants/${merchantId}/members/${userId}`, { method: "DELETE" });
+    },
+    async merchantTransactions(merchantId: string) {
+      return request<{ transactions: MerchantTransaction[] }>(`/v1/merchants/${merchantId}/transactions`);
+    },
+    async merchantPayments(merchantId: string) {
+      return request<{ payments: MerchantPaymentSummary[] }>(`/v1/merchants/${merchantId}/payments`);
+    },
+    async merchantSettlements(merchantId: string) {
+      return request<{ settlements: MerchantSettlement[] }>(`/v1/merchants/${merchantId}/settlements`);
+    },
+    async merchantDisputes(merchantId: string) {
+      return request<{ disputes: MerchantDispute[] }>(`/v1/merchants/${merchantId}/disputes`);
+    },
+    async createMerchantDispute(merchantId: string, merchantPaymentId: string, reason: string) {
+      return request<{ dispute: MerchantDispute }>(`/v1/merchants/${merchantId}/disputes`, {
+        method: "POST",
+        body: JSON.stringify({ merchantPaymentId, reason }),
+      });
+    },
+    async merchantSettlementAccounts(merchantId: string) {
+      return request<{ settlementAccounts: MerchantSettlementAccount[] }>(
+        `/v1/merchants/${merchantId}/settlement-accounts`,
+      );
+    },
+    async addMerchantSettlementAccount(merchantId: string, input: {
+      type: "momo" | "bank";
+      provider: string;
+      accountRef: string;
+      accountName?: string;
+      networkOrBank?: string;
+    }) {
+      return request<{ settlementAccount: { id: string; status: "pending_verification"; coolingHours: number } }>(
+        `/v1/merchants/${merchantId}/settlement-accounts`,
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    async quoteMerchantSettlement(merchantId: string, input: {
+      settlementAccountId: string;
+      amount: number;
+      mode: "instant" | "scheduled";
+    }) {
+      return request<{ quote: { id: string; amount: number; fee: number; totalDebit: number; currency: "UGX"; expiresInSeconds: number } }>(
+        `/v1/merchants/${merchantId}/settlement-quotes`,
+        { method: "POST", body: JSON.stringify(input) },
+      );
+    },
+    async createMerchantSettlement(merchantId: string, quoteId: string, idempotencyKey: string) {
+      return request<{ settlement: MerchantSettlement }>(`/v1/merchants/${merchantId}/settlements`, {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify({ quoteId }),
+      });
+    },
+    async refreshMerchantSettlement(merchantId: string, settlementId: string) {
+      return request<{ settlement: MerchantSettlement }>(
+        `/v1/merchants/${merchantId}/settlements/${settlementId}/refresh`,
+        { method: "POST" },
+      );
+    },
+    async createMerchantPayment(input: {
+      orderId: string;
+      outletCode: string;
+      amount: number;
+      riderLat?: number;
+      riderLng?: number;
+      accuracyM?: number;
+      capturedAt?: string;
+      evidenceMode?: "gps" | "dynamic_request" | "merchant_reauth_receipt";
+      receiptReference?: string;
+    }, idempotencyKey: string) {
+      return request<{ payment: MerchantPayment }>("/v1/merchant-payments", {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+        body: JSON.stringify(input),
+      });
+    },
+    async merchantPayment(id: string) {
+      return request<{ payment: MerchantPayment }>(`/v1/merchant-payments/${id}`);
+    },
+    async confirmMerchantPayment(id: string, amount: number) {
+      return request<{ payment: MerchantPayment }>(`/v1/merchant-payments/${id}/merchant-confirm`, {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+      });
+    },
 
     // Menu — see apps/api/src/restaurants/menu.ts.
     async myMenu() {
@@ -1203,6 +1406,70 @@ export function createApiClient({ baseUrl, fetchImpl, getToken, onUnauthorized }
      * its env-var fallback (if any). */
     async adminClearPaymentCredential(provider: PaymentProviderIdentity, field: string) {
       return request<{ ok: true }>(`/v1/admin/payments/credentials/${provider}/${field}`, { method: "DELETE" });
+    },
+    async adminMerchantCustody() {
+      return request<{ approvals: MerchantCustodyApproval[] }>("/v1/admin/merchant-custody");
+    },
+    async adminMerchants() {
+      return request<{ merchants: AdminMerchant[] }>("/v1/admin/merchants");
+    },
+    async adminSetMerchantStatus(id: string, status: Merchant["status"]) {
+      return request<{ merchant: Merchant }>(`/v1/admin/merchants/${id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      });
+    },
+    async adminMerchantKycDocumentBlob(id: string, type: "owner-id" | "business-registration") {
+      const res = await f(`${root}/v1/admin/merchants/${id}/kyc-documents/${type}`, { headers: authHeaders() });
+      if (!res.ok) throw new Error(`API ${res.status}: failed to load merchant KYC document`);
+      return res.blob();
+    },
+    async adminSetMerchantPaymentsEnabled(enabled: boolean) {
+      return request<{ enabled: boolean; environment: PlatformEnvironment }>("/v1/admin/merchant-payments/activation", {
+        method: "POST",
+        body: JSON.stringify({ enabled }),
+      });
+    },
+    async adminApproveMerchantCustody(input: {
+      custodyProvider: string;
+      payoutProvider: string;
+      safeguardingReference: string;
+      effectiveAt: string;
+      expiresAt?: string | null;
+    }) {
+      return request<{ approval: { id: string; status: "active" } }>("/v1/admin/merchant-custody", {
+        method: "POST",
+        body: JSON.stringify(input),
+      });
+    },
+    async adminRevokeMerchantCustody(id: string) {
+      return request<{ ok: true }>(`/v1/admin/merchant-custody/${id}/revoke`, { method: "POST" });
+    },
+    async adminMerchantSettlementAccounts(status?: "pending_verification" | "verified" | "disabled") {
+      const query = status ? `?status=${status}` : "";
+      return request<{ settlementAccounts: AdminMerchantSettlementAccount[] }>(
+        `/v1/admin/merchant-settlement-accounts${query}`,
+      );
+    },
+    async adminSetMerchantSettlementAccountStatus(id: string, status: "verified" | "disabled") {
+      return request<{ settlementAccount: { id: string; status: "verified" | "disabled" } }>(
+        `/v1/admin/merchant-settlement-accounts/${id}/status`,
+        { method: "POST", body: JSON.stringify({ status }) },
+      );
+    },
+    async adminMerchantReconciliation() {
+      return request<{
+        merchants: MerchantReconciliationRow[];
+        reconciled: boolean;
+        withdrawalsFrozen: boolean;
+        providerOperations: MerchantProviderOperation[];
+      }>("/v1/admin/merchant-reconciliation");
+    },
+    async adminSetMerchantWithdrawalsFrozen(frozen: boolean) {
+      return request<{ frozen: boolean }>("/v1/admin/merchant-reconciliation/freeze", {
+        method: "POST",
+        body: JSON.stringify({ frozen }),
+      });
     },
     async adminListCustomers(q?: string) {
       const qs = q ? `?q=${encodeURIComponent(q)}` : "";

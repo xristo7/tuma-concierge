@@ -2,10 +2,13 @@
 
 import {
   hasPermission,
+  type PlatformEnvironment,
   type PaymentCredentialFieldStatus,
   type PaymentProviderIdentity,
   type PaymentProviderInfo,
 } from "@tuma/shared";
+import { AlertTriangle } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SettingsPageShell, SettingsSaveBar } from "../../../components/SettingsPageShell";
 import { api, errorMessage } from "../../../lib/api";
@@ -18,6 +21,7 @@ export default function PaymentsSettingsPage() {
   const canManagePayments = hasPermission(user?.adminRole ?? null, "payments.manage");
   const [activeProviders, setActiveProviders] = useState<PaymentProviderIdentity[]>(["yo"]);
   const [paymentsDemoMode, setPaymentsDemoMode] = useState(false);
+  const [platformEnvironment, setPlatformEnvironment] = useState<PlatformEnvironment>("live");
   const [providerInfo, setProviderInfo] = useState<PaymentProviderInfo[]>([]);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -33,6 +37,7 @@ export default function PaymentsSettingsPage() {
       .then(([settingsRes, integrationsRes]) => {
         setActiveProviders(settingsRes.settings.paymentsActiveProviders);
         setPaymentsDemoMode(settingsRes.settings.paymentsDemoMode);
+        setPlatformEnvironment(settingsRes.settings.platformEnvironment);
         setProviderInfo(integrationsRes.integrations.mobileMoney.providers);
       })
       .catch((err) => setError(errorMessage(err)))
@@ -79,6 +84,23 @@ export default function PaymentsSettingsPage() {
   return (
     <SettingsPageShell title="Payments" loading={loading}>
       <form onSubmit={onSubmit} className="space-y-5">
+        {platformEnvironment === "sandbox" && (
+          <section className="rounded-xl border border-gold/50 bg-gold/10 p-3">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-gold" strokeWidth={2} aria-hidden />
+              <div className="min-w-0 space-y-1.5">
+                <p className="text-sm font-semibold text-ink">Live payments are blocked by Sandbox platform state</p>
+                <p className="text-xs text-ink-500">
+                  Turning Demo mode off is not enough while the whole platform is in Sandbox. Every payment will
+                  still use a simulator and no real Flutterwave checkout will open.
+                </p>
+                <Link href="/settings/platform" className="inline-block text-xs font-bold text-gold underline">
+                  Review Platform state
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
         <section className="home-card space-y-3">
           <p className="text-xs text-ink-500">
             Turn on one or both aggregators. With both on, the first is used until it has no working API keys,
@@ -104,7 +126,11 @@ export default function PaymentsSettingsPage() {
                     paymentsDemoMode ? "bg-gold/15 text-gold" : "bg-[rgb(var(--surface-muted))] text-ink-500"
                   }`}
                 >
-                  {paymentsDemoMode ? "On — payments simulated" : "Off — live"}
+                  {paymentsDemoMode
+                    ? "On — payments simulated"
+                    : platformEnvironment === "sandbox"
+                      ? "Off — Sandbox still simulates"
+                      : "Off — live"}
                 </span>
               </span>
               <span className="mt-0.5 block text-xs text-ink-500">

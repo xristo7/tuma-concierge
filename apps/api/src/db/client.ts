@@ -1,4 +1,4 @@
-import { createClient, type Client } from "@libsql/client/web";
+import { createClient, type Client, type InArgs } from "@libsql/client/web";
 
 /**
  * Primary DB is Cloudflare D1 (native Worker binding — no HTTP hop, no
@@ -26,7 +26,10 @@ type D1PreparedStatement = {
 
 export type D1Database = {
   prepare(query: string): D1PreparedStatement;
+  batch<T = Record<string, unknown>>(statements: D1PreparedStatement[]): Promise<D1Result<T>[]>;
 };
+
+export type DbStatement = { sql: string; args?: unknown[] };
 
 let d1Binding: D1Database | null = null;
 
@@ -82,3 +85,25 @@ export const db: Client = new Proxy({} as Client, {
     return typeof value === "function" ? value.bind(client()) : value;
   },
 });
+
+/**
+ * Execute a set of writes atomically. D1 guarantees that `batch` either
+ * commits every prepared statement or rolls the whole batch back; libSQL's
+ * write batch provides the same property for local development. Financial
+ * services use this instead of a sequence of independent `db.execute`
+ * calls so a crash can never leave only half of a ledger transaction.
+ */
+export async function executeBatch(statements: DbStatement[]): Promise<void> {
+  if (statements.length === 0) return;
+  if (d1Binding) {
+    const prepared = statements.map((statement) =>
+      d1Binding!.prepare(statement.sql).bind(...(statement.args ?? [])),
+    );
+    await d1Binding.batch(prepared);
+    return;
+  }
+  await client().batch(
+    statements.map((statement) => ({ sql: statement.sql, args: (statement.args ?? []) as InArgs })),
+    "write",
+  );
+}

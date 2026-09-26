@@ -12,6 +12,7 @@ import {
   getMatchingSettings,
   getMonetizationSettings,
   getNavMode,
+  getSetting,
   getPaymentsDemoMode,
   getPlatformEnvironment,
   getRiderReserveSettings,
@@ -53,7 +54,7 @@ import { paymentsIntegrationStatus } from "../payments/service.js";
 export const settingsRoutes = new Hono();
 
 async function fullSettings() {
-  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve, callsActiveProvider, mapsActiveProvider, navMode] =
+  const [delivery, matching, activeProviders, demoMode, wallet, voiceNoteMaxSeconds, monetization, platformEnvironment, riderReserve, callsActiveProvider, mapsActiveProvider, navMode, merchantPayments, merchantSandbox, merchantCustody, merchantFrozen] =
     await Promise.all([
       getDeliverySettings(),
       getMatchingSettings(),
@@ -67,6 +68,10 @@ async function fullSettings() {
       getActiveCallProvider(),
       getActiveMapsProvider(),
       getNavMode(),
+      getSetting("merchant_payments_enabled"),
+      getSetting("merchant_sandbox_enabled"),
+      getSetting("merchant_live_custody_approved"),
+      getSetting("merchant_withdrawals_frozen"),
     ]);
 
   // The active provider's own key/token, handed to every signed-in client
@@ -100,6 +105,9 @@ async function fullSettings() {
     ...matching,
     paymentsActiveProviders: activeProviders,
     paymentsDemoMode: demoMode,
+    merchantPaymentsEnabled: (platformEnvironment === "sandbox" ? merchantSandbox : merchantPayments) === "1",
+    merchantLiveCustodyApproved: merchantCustody === "1",
+    merchantWithdrawalsFrozen: merchantFrozen === "1",
     walletUnverifiedCap: wallet.unverifiedCap,
     walletVerifiedCap: wallet.verifiedCap,
     walletMaxTopup: wallet.maxTopup,
@@ -141,6 +149,7 @@ const updateSchema = z.object({
   maxAssignmentMinutes: z.number().int().positive().max(120).optional(),
   paymentsActiveProviders: z.array(z.enum(["yo", "flutterwave", "mtn", "airtel"])).min(1).max(4).optional(),
   paymentsDemoMode: z.boolean().optional(),
+  merchantPaymentsEnabled: z.boolean().optional(),
   walletUnverifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletVerifiedCap: z.number().int().positive().max(100_000_000).optional(),
   walletMaxTopup: z.number().int().positive().max(100_000_000).optional(),
@@ -168,6 +177,7 @@ const updateSchema = z.object({
 const PAYMENTS_FIELDS = [
   "paymentsActiveProviders",
   "paymentsDemoMode",
+  "merchantPaymentsEnabled",
   "walletUnverifiedCap",
   "walletVerifiedCap",
   "walletMaxTopup",
@@ -241,6 +251,19 @@ settingsRoutes.put(
     }
     if (parsed.data.paymentsDemoMode != null) {
       await setPaymentsDemoMode(parsed.data.paymentsDemoMode);
+    }
+    if (parsed.data.merchantPaymentsEnabled != null) {
+      if (parsed.data.merchantPaymentsEnabled && before.platformEnvironment === "live") {
+        const approved = await getSetting("merchant_live_custody_approved");
+        if (approved !== "1") {
+          return c.json({
+            error: "merchant_custody_approval_required",
+            message: "Record an active regulated custody and safeguarding approval before enabling live merchant payments.",
+          }, 409);
+        }
+      }
+      const key = before.platformEnvironment === "sandbox" ? "merchant_sandbox_enabled" : "merchant_payments_enabled";
+      await setSetting(key, parsed.data.merchantPaymentsEnabled ? "1" : "0");
     }
     if (parsed.data.walletUnverifiedCap != null) {
       await setSetting("wallet_unverified_cap", String(parsed.data.walletUnverifiedCap));

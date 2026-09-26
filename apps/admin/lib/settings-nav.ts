@@ -8,6 +8,7 @@ import {
   Map as MapIcon,
   Phone,
   Route,
+  Store,
   Settings as SettingsIcon,
   Wallet as WalletIcon,
 } from "lucide-react";
@@ -46,6 +47,13 @@ export const SETTINGS_LINKS: SettingsLink[] = [
     description: "Aggregators, demo mode, API credentials.",
     icon: CreditCard,
     show: (role) => hasPermission(role, "payments.manage"),
+  },
+  {
+    href: "/settings/merchant-payments",
+    label: "Merchant payments",
+    description: "Custody gate, payout verification and reconciliation.",
+    icon: Store,
+    show: (role) => hasPermission(role, "merchant_finance.manage"),
   },
   {
     href: "/settings/calls",
