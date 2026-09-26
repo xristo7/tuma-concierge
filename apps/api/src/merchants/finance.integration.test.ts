@@ -57,6 +57,45 @@ async function migrate(client: Client) {
   }
 }
 
+test("merchant onboarding exposes the approved taxonomy and excludes restaurants", async () => {
+  const client = createClient({ url: "file::memory:" });
+  await migrate(client);
+  try {
+    const active = await client.execute(
+      "SELECT name FROM merchant_categories WHERE active = 1 ORDER BY sort_order, name",
+    );
+    assert.deepEqual(
+      active.rows.map((row) => row.name),
+      [
+        "Supermarket",
+        "Retail Shop",
+        "Boutique",
+        "Convenience Store / Mini-Mart",
+        "Pharmacy & Health",
+        "Electronics & Appliances",
+        "Beauty & Cosmetics",
+        "Bakery & Confectionery",
+        "Butchery & Fresh Meat",
+        "Liquor, Wine & Spirits",
+        "Hardware & Home Improvement",
+        "Stationery & Bookstore",
+        "Furniture & Home Decor",
+        "Pet Store & Agrovet",
+        "Jewelry & Accessories",
+        "Auto Parts & Accessories",
+        "Florist & Gift Shop",
+      ],
+    );
+
+    const restaurant = await client.execute(
+      "SELECT active FROM merchant_categories WHERE id = 'mcat_restaurant'",
+    );
+    assert.equal(Number(restaurant.rows[0]?.active), 0);
+  } finally {
+    client.close();
+  }
+});
+
 test("merchant allocation preserves principal and cannot double-credit", async () => {
   const client = createClient({ url: "file::memory:" });
   await migrate(client);

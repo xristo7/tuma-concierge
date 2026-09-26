@@ -1,7 +1,7 @@
 # Tuma Merchant Payments and Order-Funds Plan
 
 Status: Living implementation artifact
-Version: 0.3
+Version: 0.4
 Decision date: 2026-09-26
 Owners: Tuma product, engineering, finance, operations, and compliance
 
@@ -16,7 +16,7 @@ It is deliberately written as both a product specification and a sequenced build
 1. Customer shopping money must originate from a real, successfully verified customer payment.
 2. The shopping principal is protected. Provider fees, taxes, Tuma revenue, commissions, and rider earnings must never silently reduce the amount available to buy the customer's goods.
 3. A rider does not own the shopping principal. The rider receives limited authority to allocate an order's shopping budget to verified merchants.
-4. Tuma will launch first with smartphone-equipped formal merchants: restaurants, registered retail shops, boutiques, pharmacies, and supermarkets. Informal market vendors move to a later Merchant Lite rollout.
+4. Tuma Merchant will onboard the approved retail categories listed in section 7.1. Restaurants remain in the dedicated Tuma Restaurant app. Informal market vendors move to a later Merchant Lite rollout.
 5. A merchant payment is primarily an internal allocation from an order balance to a merchant payable balance. It should not trigger a Mobile Money transfer for every purchase.
 6. Merchant withdrawals remain available, but merchants should be encouraged to batch settlements. Instant settlement may carry a disclosed fee; scheduled settlement may be free or subsidized.
 7. Rider withdrawals remain available for delivery earnings, reimbursements, tips, and bonuses. Shopping principal should increasingly bypass the rider wallet.
@@ -116,9 +116,31 @@ Multiple simultaneous orders are not part of the launch scope. Later, trusted ri
 
 ## 7. Merchant product
 
-The long-term product should be branded as **Tuma Merchant**. The current restaurant experience can eventually become a merchant category within the same platform rather than a separate financial system.
+The general retail product is branded as **Tuma Merchant**. Restaurants retain the dedicated **Tuma Restaurant** app and onboarding flow. Restaurant balances may use the shared merchant ledger internally, but Restaurant must not appear as a selectable category in Tuma Merchant.
 
 ### 7.1 Merchant capabilities
+
+The approved public onboarding categories, in display order, are:
+
+1. Supermarket
+2. Retail Shop
+3. Boutique
+4. Convenience Store / Mini-Mart
+5. Pharmacy & Health
+6. Electronics & Appliances
+7. Beauty & Cosmetics
+8. Bakery & Confectionery
+9. Butchery & Fresh Meat
+10. Liquor, Wine & Spirits
+11. Hardware & Home Improvement
+12. Stationery & Bookstore
+13. Furniture & Home Decor
+14. Pet Store & Agrovet
+15. Jewelry & Accessories
+16. Auto Parts & Accessories
+17. Florist & Gift Shop
+
+This taxonomy is the source of truth for new general-merchant applications. Internal finance categories and historical records must not be exposed automatically in onboarding.
 
 - Merchant onboarding and KYC.
 - Business/store profile and one or more locations.
