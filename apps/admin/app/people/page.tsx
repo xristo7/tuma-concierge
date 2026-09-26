@@ -1,21 +1,38 @@
 "use client";
 
-import { hasPermission, type AdminCustomer, type AdminRestaurant, type AdminRider, type RestaurantStatus } from "@tuma/shared";
+import {
+  hasPermission,
+  type AdminCustomer,
+  type AdminMerchant,
+  type AdminRestaurant,
+  type AdminRider,
+  type Merchant,
+  type RestaurantStatus,
+} from "@tuma/shared";
 import { ChevronRight, Filter, Search, ShieldCheck, ShieldQuestion, Store, Users as UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, errorMessage } from "../../lib/api";
 import { useAuth } from "../../lib/auth-context";
 
-type Tab = "riders" | "customers" | "restaurants";
+type Tab = "riders" | "customers" | "restaurants" | "merchants";
 type RiderFilter = "all" | "pending" | "verified";
 type RestaurantFilter = "all" | RestaurantStatus;
+type MerchantFilter = "all" | Merchant["status"];
 type DateRange = "all" | "today" | "week" | "month";
 
 const RESTAURANT_STATUS_LABEL: Record<RestaurantStatus, string> = {
   pending_approval: "Pending",
   active: "Active",
   suspended: "Suspended",
+};
+
+const MERCHANT_STATUS_LABEL: Record<Merchant["status"], string> = {
+  pending_approval: "Pending",
+  provisional: "Provisional",
+  active: "Active",
+  suspended: "Suspended",
+  rejected: "Rejected",
 };
 
 const DATE_RANGE_LABEL: Record<DateRange, string> = {
@@ -121,7 +138,9 @@ function DateRangeTabs({ value, onChange }: { value: DateRange; onChange: (v: Da
           type="button"
           onClick={() => onChange(r)}
           className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold ${
-            value === r ? "bg-ink text-white" : "bg-[rgb(var(--surface-muted))] text-ink-500"
+            value === r
+              ? "bg-gold text-ink-gold shadow-sm"
+              : "bg-[rgb(var(--surface-muted))] text-ink-500"
           }`}
         >
           {DATE_RANGE_LABEL[r]}
@@ -373,19 +392,124 @@ function RestaurantsTab() {
   );
 }
 
+function MerchantsTab() {
+  const { user } = useAuth();
+  const canManage = hasPermission(user?.adminRole ?? null, "merchants.manage");
+  const [merchants, setMerchants] = useState<AdminMerchant[]>([]);
+  const [filter, setFilter] = useState<MerchantFilter>("all");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api
+      .adminMerchants()
+      .then((res) => setMerchants(res.merchants))
+      .catch((err) => setError(errorMessage(err)));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function setStatus(id: string, status: Merchant["status"]) {
+    setBusyId(id);
+    setError(null);
+    try {
+      await api.adminSetMerchantStatus(id, status);
+      await load();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const filtered = merchants.filter((merchant) => filter === "all" || merchant.status === filter);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-ink-500">
+          {filtered.length} merchant{filtered.length === 1 ? "" : "s"}
+        </p>
+        <FilterDropdown
+          value={filter}
+          options={["all", "pending_approval", "provisional", "active", "suspended", "rejected"] as const}
+          labels={{ all: "All", ...MERCHANT_STATUS_LABEL }}
+          onChange={setFilter}
+        />
+      </div>
+
+      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</p>}
+      {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink-500">No merchants here.</p>}
+
+      <ul className="space-y-2.5">
+        {filtered.map((merchant) => (
+          <li key={merchant.id} className="home-card space-y-2 !rounded-2xl !px-3 !py-3">
+            <div className="flex items-center gap-3">
+              <Store className="h-5 w-5 shrink-0 text-ink-500" strokeWidth={1.75} aria-hidden />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-bold text-ink">{merchant.display_name}</span>
+                <span className="mt-0.5 block truncate text-xs text-ink-500">
+                  {merchant.legal_name} · {merchant.outlet_count} outlet{Number(merchant.outlet_count) === 1 ? "" : "s"}
+                </span>
+              </span>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  merchant.status === "active"
+                    ? "bg-green/15 text-green"
+                    : merchant.status === "suspended" || merchant.status === "rejected"
+                      ? "bg-red-100 text-red-700"
+                      : "bg-[rgb(var(--surface-muted))] text-ink-500"
+                }`}
+              >
+                {MERCHANT_STATUS_LABEL[merchant.status]}
+              </span>
+            </div>
+            {canManage && (
+              <div className="flex gap-2">
+                {merchant.status !== "active" && (
+                  <button
+                    onClick={() => setStatus(merchant.id, "active")}
+                    disabled={busyId === merchant.id}
+                    className="min-h-9 flex-1 rounded-full bg-gold px-3 text-xs font-bold text-ink-gold disabled:opacity-60"
+                  >
+                    Approve
+                  </button>
+                )}
+                {merchant.status !== "suspended" && (
+                  <button
+                    onClick={() => setStatus(merchant.id, "suspended")}
+                    disabled={busyId === merchant.id}
+                    className="min-h-9 flex-1 rounded-full border border-red-200 px-3 text-xs font-bold text-red-600 disabled:opacity-60"
+                  >
+                    Suspend
+                  </button>
+                )}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function SummaryStrip() {
   const [riders, setRiders] = useState<AdminRider[]>([]);
   const [customers, setCustomers] = useState<AdminCustomer[]>([]);
   const [restaurants, setRestaurants] = useState<AdminRestaurant[]>([]);
+  const [merchants, setMerchants] = useState<AdminMerchant[]>([]);
 
   useEffect(() => {
     api.adminListRiders().then((res) => setRiders(res.riders)).catch(() => {});
     api.adminListCustomers().then((res) => setCustomers(res.customers)).catch(() => {});
     api.adminListRestaurants().then((res) => setRestaurants(res.restaurants)).catch(() => {});
+    api.adminMerchants().then((res) => setMerchants(res.merchants)).catch(() => {});
   }, []);
 
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       <div className="home-card !py-3 text-center">
         <UsersIcon className="mx-auto h-4 w-4 text-gold" strokeWidth={1.75} aria-hidden />
         <p className="mt-1 text-lg font-bold text-ink">{riders.length}</p>
@@ -401,6 +525,11 @@ function SummaryStrip() {
         <p className="mt-1 text-lg font-bold text-ink">{restaurants.length}</p>
         <p className="text-[11px] text-ink-500">Restaurants</p>
       </div>
+      <div className="home-card !py-3 text-center">
+        <Store className="mx-auto h-4 w-4 text-gold" strokeWidth={1.75} aria-hidden />
+        <p className="mt-1 text-lg font-bold text-ink">{merchants.length}</p>
+        <p className="text-[11px] text-ink-500">Merchants</p>
+      </div>
     </div>
   );
 }
@@ -415,16 +544,16 @@ export default function UsersPage() {
 
       <SummaryStrip />
 
-      {tab !== "restaurants" && <DateRangeTabs value={dateRange} onChange={setDateRange} />}
+      {(tab === "riders" || tab === "customers") && <DateRangeTabs value={dateRange} onChange={setDateRange} />}
 
       <div className="flex rounded-full bg-[rgb(var(--surface-muted))] p-1">
-        {(["riders", "customers", "restaurants"] as const).map((t) => (
+        {(["riders", "customers", "restaurants", "merchants"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex-1 rounded-full py-2 text-sm font-semibold capitalize transition-colors ${
-              tab === t ? "bg-[rgb(var(--surface-card))] text-ink shadow-sm" : "text-ink-500"
+            className={`min-w-0 flex-1 rounded-full px-1 py-2 text-xs font-semibold capitalize transition-colors sm:text-sm ${
+              tab === t ? "bg-gold text-ink-gold shadow-sm" : "text-ink-500"
             }`}
           >
             {t}
@@ -436,8 +565,10 @@ export default function UsersPage() {
         <RidersTab dateRange={dateRange} />
       ) : tab === "customers" ? (
         <CustomersTab dateRange={dateRange} />
-      ) : (
+      ) : tab === "restaurants" ? (
         <RestaurantsTab />
+      ) : (
+        <MerchantsTab />
       )}
     </div>
   );

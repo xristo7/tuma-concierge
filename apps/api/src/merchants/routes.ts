@@ -927,6 +927,7 @@ merchantRoutes.get("/admin/merchants", requireAuth, requireRole("admin"), requir
           FROM merchants m
           LEFT JOIN merchant_kyc_cases k ON k.merchant_id = m.id
           LEFT JOIN merchant_balances b ON b.merchant_id = m.id AND b.environment = m.environment
+          WHERE NOT EXISTS (SELECT 1 FROM restaurants r WHERE r.merchant_id = m.id)
            ORDER BY m.created_at DESC`,
     args: [],
   });
