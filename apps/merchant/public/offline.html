@@ -16,7 +16,10 @@
   </style>
 </head>
 <body>
-  <img src="/brand/tuma-logo-navy.svg" alt="Tuma" />
+  <picture>
+    <source srcset="/brand/tuma-logo-white.png" media="(prefers-color-scheme: dark)" />
+    <img src="/brand/tuma-logo-navy.png" alt="Tuma" />
+  </picture>
   <h1>You’re offline</h1>
   <p>Reconnect to view current payments, balances, and settlement updates.</p>
   <button type="button" onclick="location.reload()">Try again</button>
