@@ -6,7 +6,7 @@
   "workers_dev": true,
   "routes": [
     { "pattern": "tumaffe.online", "custom_domain": true },
-    { "pattern": "www.tumaffe.online", "custom_domain": true }
+    { "pattern": "www.tumaffe.online/*", "zone_name": "tumaffe.online" }
   ],
   "assets": {
     "directory": ".open-next/assets",
