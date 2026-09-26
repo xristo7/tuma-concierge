@@ -14,6 +14,7 @@ type AuthState = {
   refreshMerchants: () => Promise<void>;
   login: (identifier: string, password: string) => Promise<void>;
   register: (input: { name: string; email?: string; phone?: string; password: string }) => Promise<void>;
+  setSession: (token: string, user: AuthUser) => void;
   logout: () => void;
 };
 
@@ -88,8 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const merchant = merchants.find((item) => item.id === selectedId) ?? merchants[0] ?? null;
-  const value = useMemo(() => ({ user, ready, merchants, merchant, merchantsReady, selectMerchant, refreshMerchants, login, register, logout }),
-    [user, ready, merchants, merchant, merchantsReady, selectMerchant, refreshMerchants, login, register, logout]);
+  const value = useMemo(() => ({ user, ready, merchants, merchant, merchantsReady, selectMerchant, refreshMerchants, login, register, setSession: persist, logout }),
+    [user, ready, merchants, merchant, merchantsReady, selectMerchant, refreshMerchants, login, register, persist, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
