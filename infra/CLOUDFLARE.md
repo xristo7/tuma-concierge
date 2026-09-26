@@ -5,7 +5,7 @@ for reference/rollback but is no longer the active deploy target.
 
 | Service | Type | URL |
 |---|---|---|
-| `tuma-api` | Worker (Hono) | https://tuma-api.doxalight-inc.workers.dev |
+| `tuma-api` | Worker (Hono) | https://api.tumaffe.online |
 | `tuma-customer` | Worker (Next.js via OpenNext) | https://tuma-customer.doxalight-inc.workers.dev |
 | `tuma-rider` | Worker (Next.js via OpenNext) | https://tuma-rider.doxalight-inc.workers.dev |
 | `tuma-admin` | Worker (Next.js via OpenNext) | not yet deployed — `apps/admin`, same deploy flow as customer/rider |
